@@ -1,0 +1,50 @@
+/* Rendered math (widget mode) */
+.cm-math-rendered {
+  cursor: pointer;
+}
+
+.cm-math-inline {
+  display: inline;
+  vertical-align: baseline;
+}
+
+/* Editing mode: raw LaTeX visible */
+.cm-math-editing {
+  background-color: color-mix(in srgb, var(--cursor-color) 5%, transparent);
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* Parse-error fallback */
+.cm-math-error {
+  color: #e53e3e;
+  text-decoration: underline wavy #e53e3e;
+}
+
+/* Display math: rendered block (cursor outside) */
+.cm-math-display {
+  display: block;
+  text-align: center;
+  padding: 0.25em 0;
+  overflow-x: auto;
+}
+
+/* Display math: live preview below source (cursor inside) */
+.cm-math-preview {
+  display: block;
+  text-align: center;
+  padding: 0.5em 0;
+  border-top: 1px dashed var(--border);
+  opacity: 0.6;
+}
+
+/* Force ALL KaTeX elements to inherit the editor's foreground color.
+   Uses 'inherit' to cascade from the CM6 editor's own color property. */
+.cm-math-rendered,
+.cm-math-rendered .katex,
+.cm-math-rendered .katex *,
+.cm-math-preview .katex,
+.cm-math-preview .katex * {
+  color: inherit !important;
+}

@@ -1,0 +1,22 @@
+/* Math widgets. Styling kept minimal — we inherit colors, font, and
+ * background from the VS Code theme via the CM6 theme in theme.ts. */
+
+.cm-tex-math-inline {
+  /* KaTeX output is display: inline-block by default, which suits CM6
+   * inline decorations. No additional framing. */
+}
+
+.cm-tex-math-display {
+  display: block;
+  text-align: center;
+  padding: 0.5em 0;
+}
+
+/* Parse errors: show the raw LaTeX in a subtle error state so the user
+ * can spot which delimiter pair has invalid content. */
+.cm-tex-math-error {
+  color: var(--vscode-errorForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-style: italic;
+  opacity: 0.8;
+}
