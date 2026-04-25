@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { ChalkTexEditorProvider } from './chalk-tex-editor-provider';
+import { ChalkEditorProvider } from './chalk-editor-provider';
+import { texProfile } from './languages/tex';
 import { buildWithWorkshop } from './workshop-bridge';
 import { diagnoseThemeResolution } from './theme-reader';
 
@@ -8,8 +9,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
-      ChalkTexEditorProvider.viewType,
-      new ChalkTexEditorProvider(context),
+      texProfile.viewType,
+      new ChalkEditorProvider(context, texProfile),
       {
         webviewOptions: {
           // CM6 state survives tab switches (undo, cursor, scroll).

@@ -1,34 +1,13 @@
 import * as vscode from 'vscode';
-import { existsSync, readFileSync, readdirSync } from 'fs';
-import * as path from 'path';
 import { getWebviewHtml, generateNonce } from './webview-html';
 import { readThemeColors } from './theme-reader';
+import type { LanguageProfile } from './languages/types';
 
-const WEBVIEW_ALLOWED_COMMANDS = new Set(['chalk.build']);
-
-function loadHSnipsRaw(): string | null {
-  // Check user-configured path first, then default locations.
-  const config = vscode.workspace.getConfiguration('hsnips');
-  const customPath = config.get<string>('hsnipsPath');
-
-  const searchDirs = [
-    customPath,
-    path.join(process.env.HOME || '', '.config', 'hsnips'),
-  ].filter(Boolean) as string[];
-
-  for (const dir of searchDirs) {
-    const filePath = path.join(dir, 'latex.hsnips');
-    if (existsSync(filePath)) {
-      return readFileSync(filePath, 'utf8');
-    }
-  }
-  return null;
-}
-
-export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
-  public static readonly viewType = 'chalk.texEditor';
-
-  constructor(private readonly context: vscode.ExtensionContext) {}
+export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly profile: LanguageProfile,
+  ) {}
 
   public async resolveCustomTextEditor(
     document: vscode.TextDocument,
@@ -78,10 +57,11 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
           webviewPanel.webview.postMessage({
             type: 'init',
             text: document.getText(),
+            language: this.profile.id,
           });
           void postThemeColors();
 
-          const hsnipsRaw = loadHSnipsRaw();
+          const hsnipsRaw = this.profile.loadHsnips();
           if (hsnipsRaw) {
             webviewPanel.webview.postMessage({
               type: 'hsnips',
@@ -123,7 +103,7 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
           // regression where this handler turns into an arbitrary-command
           // executor for anyone who can post a message.
           if (typeof msg.id !== 'string') return;
-          if (!WEBVIEW_ALLOWED_COMMANDS.has(msg.id)) return;
+          if (!this.profile.allowedWebviewCommands.has(msg.id)) return;
           await vscode.commands.executeCommand(msg.id);
           return;
         }

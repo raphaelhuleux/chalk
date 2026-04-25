@@ -1,6 +1,6 @@
 import { EditorView } from '@codemirror/view';
 import { Transaction } from '@codemirror/state';
-import { createEditor } from './editor/setup';
+import { createEditor, type Language } from './editor/setup';
 import type { EditorActions } from './editor/keymap';
 import { setVsCodeApi, sendEdit, sendReady } from './api';
 import { parseHSnips } from './editor/hsnips-parser';
@@ -45,7 +45,7 @@ type ThemeColors = Partial<{
 }>;
 
 type ExtensionMessage =
-  | { type: 'init'; text: string }
+  | { type: 'init'; text: string; language: Language }
   | { type: 'update'; text: string }
   | { type: 'theme-colors'; colors: ThemeColors }
   | { type: 'hsnips'; content: string };
@@ -85,7 +85,7 @@ function handleMessage(msg: ExtensionMessage): void {
         view.destroy();
         view = null;
       }
-      view = createEditor(root, msg.text, actions);
+      view = createEditor(root, msg.text, actions, msg.language);
       return;
     }
     case 'update': {

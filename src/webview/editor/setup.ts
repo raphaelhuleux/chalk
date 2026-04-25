@@ -36,6 +36,8 @@ import { texHighlightStyle } from './syntax-highlight';
 import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
 import { latexCompletionExtension } from './latex-completions';
 
+export type Language = 'tex' | 'md';
+
 /**
  * Builds the full extensions array for a CM6 editor instance.
  *
@@ -94,6 +96,7 @@ export function buildExtensions(actions: EditorActions) {
 export function createEditorState(
   content: string,
   actions: EditorActions,
+  _language: Language,
 ): EditorState {
   return EditorState.create({
     doc: content,
@@ -105,8 +108,9 @@ export function createEditor(
   parent: HTMLElement,
   content: string,
   actions: EditorActions,
+  language: Language,
 ): EditorView {
-  const state = createEditorState(content, actions);
+  const state = createEditorState(content, actions, language);
   const view = new EditorView({ state, parent });
   view.focus();
   return view;
