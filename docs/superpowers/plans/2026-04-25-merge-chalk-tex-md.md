@@ -18,7 +18,59 @@
 
 ## Phase 0: Pre-merge cleanup of chalk-tex
 
-Before merging, remove debug noise and dead code so we don't carry it into the merged codebase. The tex extension must keep working unchanged after this phase.
+Before merging, remove debug noise and dead code so we don't carry it into the merged codebase. The tex extension must keep working unchanged after this phase. The build is **currently broken** at the TypeScript level (two pre-existing errors); Task 0.0 fixes both.
+
+### Task 0.0: Fix pre-existing TypeScript errors
+
+**Files:**
+- Modify: `src/webview/editor/latex-completions.ts:263`
+- Modify: `src/webview/editor/setup.ts:99-114` (the entire `buildAllExtensions` block)
+
+Two errors block `npx tsc --noEmit`:
+1. `latex-completions.ts:263` — `Cannot find name 'suffix'`. The `\end{` completion branch references an undeclared `suffix` variable. The intent: in `\end{` mode, just insert the env name; close the brace if not already there.
+2. `setup.ts:113` — `Type 'Extension' must have a '[Symbol.iterator]()' method`. `hsnipsExtension()` returns a typed `Extension` (a union including non-iterable shapes), so `...hsnips` fails type-check. Fix: drop the spread — CM6 accepts nested arrays of extensions and recursively flattens them. While there, also delete the debug `testListener`.
+
+- [ ] **Step 1: Fix `latex-completions.ts:263`**
+
+In the `\end{` branch (lines 262-264), replace:
+```ts
+          if (!isBegin) {
+            return { label: e, type: 'keyword', apply: e + suffix };
+          }
+```
+with:
+```ts
+          if (!isBegin) {
+            return { label: e, type: 'keyword', apply: hasClosingBrace ? e : e + '}' };
+          }
+```
+
+`hasClosingBrace` is already declared at line 251 in the same function scope.
+
+- [ ] **Step 2: Fix `setup.ts:113` and delete the debug testListener**
+
+Replace the entire `buildAllExtensions` function (lines 99-114) with:
+```ts
+/**
+ * Wraps buildExtensions and appends HyperSnips support.
+ */
+export function buildAllExtensions(actions: EditorActions) {
+  const base = buildExtensions(actions);
+  return [...base, hsnipsExtension()];
+}
+```
+
+(No spread on `hsnipsExtension()`. Tests in Phase 0.5 collapse this further.)
+
+- [ ] **Step 3: Verify both fixes compile**
+
+Run: `npx tsc --noEmit`
+Expected: clean output, no errors.
+
+- [ ] **Step 4: Verify build still produces bundles**
+
+Run: `npm run build`
+Expected: clean. `dist/extension.js` and `dist/webview.js` exist.
 
 ### Task 0.1: Remove debug `console.log` statements from the hsnips path
 
@@ -215,7 +267,7 @@ Line 49: change `keymap.of(chalkKeymap(actions))` to `keymap.of(chalkKeymap())`.
 
 - [ ] **Step 1: Delete `buildAllExtensions` and inline the hsnips append**
 
-Replace lines 47-97 (both functions) with a single `buildExtensions` that always includes hsnips:
+Replace the entire body of `setup.ts` (after the imports section) with a single `buildExtensions` that always includes hsnips and the LaTeX autocomplete extension. Note the `hsnipsKeymap` precedes `indentWithTab` — Tab must reach hsnips' tab-stop nav before falling through to indent. And `hsnipsExtension()` is a single nested-array extension (CM6 flattens it), no spread needed.
 
 ```ts
 /**
@@ -227,9 +279,13 @@ Replace lines 47-97 (both functions) with a single `buildExtensions` that always
  *     (there is no live-preview for prose; only math widgets)
  *   - no `previewCompartment` wrapper (math is always on; use VS Code's
  *     "Reopen With → Text Editor" if you want raw LaTeX)
+ *   - `latexCompletionExtension()` provides \begin{...} and \command
+ *     autocomplete. Tex-only — markdown will not get this in Phase 7.
  */
 export function buildExtensions(actions: EditorActions) {
   return [
+    keymap.of(hsnipsKeymap),
+    keymap.of([{ key: 'Tab', run: acceptCompletion }]),
     keymap.of(chalkKeymap()),
 
     keymap.of([indentWithTab]),
@@ -252,7 +308,8 @@ export function buildExtensions(actions: EditorActions) {
     syntaxHighlighting(texHighlightStyle),
 
     texMathPlugin(),
-    ...hsnipsExtension(),
+    hsnipsExtension(),
+    latexCompletionExtension(),
 
     EditorView.lineWrapping,
 
@@ -267,6 +324,13 @@ export function buildExtensions(actions: EditorActions) {
     themeCompartment.of(vsCodeTheme()),
   ];
 }
+```
+
+Imports must include (already present in setup.ts as of Task 0.0; just confirm):
+```ts
+import { acceptCompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
+import { latexCompletionExtension } from './latex-completions';
 ```
 
 - [ ] **Step 2: Update `createEditorState` to call new function**
@@ -1331,9 +1395,9 @@ to:
 import { texMathPlugin, isInMathContextTex } from './tex-math';
 ```
 
-In `buildExtensions`, replace `...hsnipsExtension(),` with:
+In `buildExtensions`, replace `hsnipsExtension(),` with:
 ```ts
-...hsnipsExtension({ isInMathContext: isInMathContextTex }),
+hsnipsExtension({ isInMathContext: isInMathContextTex }),
 ```
 
 ### Task 4.4: Build and smoke test snippets
@@ -1786,7 +1850,7 @@ export const themeCompartment = new Compartment();
 
 - [ ] **Step 1: Refactor the imports section**
 
-Replace the imports (lines 1-35) with:
+Replace the entire imports section with:
 
 ```ts
 import { EditorState } from '@codemirror/state';
@@ -1811,6 +1875,7 @@ import {
   syntaxHighlighting,
 } from '@codemirror/language';
 import {
+  acceptCompletion,
   closeBrackets,
   closeBracketsKeymap,
 } from '@codemirror/autocomplete';
@@ -1824,10 +1889,11 @@ import { Strikethrough, TaskList } from '@lezer/markdown';
 
 import { themeCompartment, previewCompartment, vsCodeTheme } from './theme';
 import { chalkKeymap, EditorActions } from './keymap';
-import { hsnipsExtension } from './hsnips-plugin';
+import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
 
 import { texMathPlugin, isInMathContextTex } from './tex-math';
 import { texHighlightStyle } from './tex-syntax-highlight';
+import { latexCompletionExtension } from './latex-completions';
 
 import { mathPlugin, mathSyntax, isInMathContextMd } from './md-math-plugin';
 import { livePreviewPlugin } from './md-live-preview';
@@ -1847,7 +1913,10 @@ export function buildExtensions(
   language: Language,
 ): Array<unknown> {
   const shared = [
+    keymap.of(hsnipsKeymap),
+    keymap.of([{ key: 'Tab', run: acceptCompletion }]),
     keymap.of(chalkKeymap()),
+
     keymap.of([indentWithTab]),
     keymap.of(closeBracketsKeymap),
     keymap.of(historyKeymap),
@@ -1880,17 +1949,19 @@ export function buildExtensions(
       StreamLanguage.define(stex),
       syntaxHighlighting(texHighlightStyle),
       texMathPlugin(),
-      ...hsnipsExtension({ isInMathContext: isInMathContextTex }),
+      hsnipsExtension({ isInMathContext: isInMathContextTex }),
+      latexCompletionExtension(),
       placeholder('% Start typing LaTeX…'),
     ];
   }
 
-  // language === 'md'
+  // language === 'md' — note: no latexCompletionExtension; markdown
+  // doesn't get LaTeX env/command autocomplete.
   return [
     ...shared,
     markdown({ extensions: [mathSyntax, Strikethrough, TaskList] }),
     previewCompartment.of([mathPlugin(), livePreviewPlugin()]),
-    ...hsnipsExtension({ isInMathContext: isInMathContextMd }),
+    hsnipsExtension({ isInMathContext: isInMathContextMd }),
     placeholder('Start typing…'),
   ];
 }

@@ -96,3 +96,10 @@ dist/
 
 # VS Code extension packaging artifact
 *.vsix
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+test/fixtures/aux/

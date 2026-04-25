@@ -1,7 +1,7 @@
 {
-  "name": "chalk-tex",
-  "displayName": "Chalk-TeX",
-  "description": "Live math preview for LaTeX files, rendered inline via KaTeX.",
+  "name": "chalk",
+  "displayName": "Chalk",
+  "description": "Live-preview editor for LaTeX (.tex) and Markdown (.md) files with first-class math support, running inside VS Code.",
   "version": "0.1.0",
   "publisher": "raphaelhuleux",
   "license": "MIT",
@@ -13,22 +13,22 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "chalk-tex.texEditor",
-        "displayName": "Chalk-TeX",
+        "viewType": "chalk.texEditor",
+        "displayName": "Chalk",
         "selector": [{ "filenamePattern": "*.tex" }],
         "priority": "default"
       }
     ],
     "commands": [
       {
-        "command": "chalk-tex.build",
+        "command": "chalk.build",
         "title": "Build (LaTeX Workshop)",
-        "category": "Chalk-TeX"
+        "category": "Chalk"
       },
       {
-        "command": "chalk-tex.diagnoseTheme",
+        "command": "chalk.diagnoseTheme",
         "title": "Diagnose Theme Resolution",
-        "category": "Chalk-TeX"
+        "category": "Chalk"
       }
     ],
     "keybindings": [
@@ -39,10 +39,10 @@
         "when": "resourceExtname == .tex"
       },
       {
-        "command": "chalk-tex.build",
+        "command": "chalk.build",
         "key": "cmd+alt+b",
         "mac": "cmd+alt+b",
-        "when": "activeCustomEditorId == 'chalk-tex.texEditor'"
+        "when": "activeCustomEditorId == 'chalk.texEditor'"
       }
     ]
   },

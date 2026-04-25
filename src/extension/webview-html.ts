@@ -18,7 +18,7 @@ export function generateNonce(): string {
 /**
  * Builds the HTML shell served inside the webview.
  *
- * Unlike its Chalk-for-Markdown sibling, chalk-tex doesn't inject any
+ * Unlike its Chalk-for-Markdown sibling, the tex editor doesn't inject any
  * per-scope theme colors — no headings, no syntax-specific tokens are
  * rendered inline, only math widgets that inherit the editor's foreground.
  *
@@ -55,7 +55,7 @@ export function getWebviewHtml(
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <link rel="stylesheet" href="${styleUri}">
-  <title>Chalk-TeX</title>
+  <title>Chalk</title>
 </head>
 <body>
   <div id="editor-root"></div>

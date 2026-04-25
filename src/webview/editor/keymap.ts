@@ -12,7 +12,7 @@ export interface EditorActions {
 }
 
 /**
- * Chalk-TeX keybindings that need to fire from inside the CM6-owned part
+ * Chalk keybindings that need to fire from inside the CM6-owned part
  * of the webview. VS Code keybindings with `when: activeCustomEditorId ==
  * …` also exist in package.json for gutters/scrollbars where CM6 doesn't
  * see the event — CM6 returning `true` from `run` stops propagation so
@@ -23,7 +23,7 @@ export function chalkKeymap(): KeyBinding[] {
     {
       key: 'Mod-Alt-b',
       run: () => {
-        sendCommand('chalk-tex.build');
+        sendCommand('chalk.build');
         return true;
       },
     },

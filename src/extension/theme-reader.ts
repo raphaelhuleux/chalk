@@ -116,7 +116,7 @@ export async function readThemeColors(): Promise<ThemeColors | null> {
  * Same work as `readThemeColors`, but also returns the intermediate
  * values useful for debugging a mismatch: theme label, resolved file
  * path, raw token-color count, and per-field which candidate scope
- * actually matched. Surfaced via the `chalk-tex.diagnoseTheme` command.
+ * actually matched. Surfaced via the `chalk.diagnoseTheme` command.
  */
 export interface ThemeDiagnostics {
   themeLabel: string | null;

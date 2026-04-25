@@ -52,7 +52,7 @@ type ExtensionMessage =
 
 /**
  * Inject theme colors as CSS custom properties on <html>. Our
- * HighlightStyle references `var(--chalk-tex-syntax-*, <fallback>)`, so
+ * HighlightStyle references `var(--chalk-syntax-*, <fallback>)`, so
  * when a property is set the themed color takes over; when it's unset
  * (theme read failed, field null) the baked-in hex fallback applies.
  */
@@ -62,14 +62,14 @@ function applyThemeColors(colors: ThemeColors): void {
     if (value) root.style.setProperty(key, value);
     else root.style.removeProperty(key);
   };
-  set('--chalk-tex-syntax-keyword', colors.keyword);
-  set('--chalk-tex-syntax-tag', colors.tagName);
-  set('--chalk-tex-syntax-comment', colors.comment);
-  set('--chalk-tex-syntax-number', colors.number);
-  set('--chalk-tex-syntax-atom', colors.atom);
-  set('--chalk-tex-syntax-bracket', colors.bracket);
-  set('--chalk-tex-syntax-special-variable', colors.specialVariable);
-  set('--chalk-tex-syntax-invalid', colors.invalid);
+  set('--chalk-syntax-keyword', colors.keyword);
+  set('--chalk-syntax-tag', colors.tagName);
+  set('--chalk-syntax-comment', colors.comment);
+  set('--chalk-syntax-number', colors.number);
+  set('--chalk-syntax-atom', colors.atom);
+  set('--chalk-syntax-bracket', colors.bracket);
+  set('--chalk-syntax-special-variable', colors.specialVariable);
+  set('--chalk-syntax-invalid', colors.invalid);
 }
 
 function handleMessage(msg: ExtensionMessage): void {

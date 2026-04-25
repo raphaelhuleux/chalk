@@ -5,7 +5,7 @@ import { Compartment, Extension } from '@codemirror/state';
  * Theme compartment — kept for future runtime theme swaps, even though
  * the current mapping derives entirely from VS Code CSS variables and
  * does not need to switch. No preview compartment: the math plugin is
- * always on in chalk-tex (use VS Code's Reopen With → Text Editor to see
+ * always on in Chalk (use VS Code's Reopen With → Text Editor to see
  * raw LaTeX).
  */
 export const themeCompartment = new Compartment();

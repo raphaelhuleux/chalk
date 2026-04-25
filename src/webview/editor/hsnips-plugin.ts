@@ -5,7 +5,7 @@
  * only), replaces the trigger text with the snippet body, and manages
  * tab-stop navigation ($1, $2, …, $0).
  *
- * Math context: uses Chalk-TeX's `scanMathRegions` to decide whether
+ * Math context: uses the tex editor's `scanMathRegions` to decide whether
  * the cursor is inside a math region, so `context math(context)`
  * filters work correctly.
  */

@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 const WORKSHOP_EXTENSION_ID = 'James-Yu.latex-workshop';
 
 /**
- * Runs `latex-workshop.build` for the currently active Chalk-TeX document.
+ * Runs `latex-workshop.build` for the currently active Chalk document.
  *
  * Why the dance: LaTeX Workshop's root-file detection reads
  * `vscode.window.activeTextEditor.document`, which is `undefined` whenever
@@ -19,7 +19,7 @@ export async function buildWithWorkshop(): Promise<void> {
   const workshop = vscode.extensions.getExtension(WORKSHOP_EXTENSION_ID);
   if (!workshop) {
     vscode.window.showErrorMessage(
-      'Chalk-TeX: LaTeX Workshop is not installed. Install James-Yu.latex-workshop to use Build.',
+      'Chalk: LaTeX Workshop is not installed. Install James-Yu.latex-workshop to use Build.',
     );
     return;
   }
@@ -30,7 +30,7 @@ export async function buildWithWorkshop(): Promise<void> {
   const uri = getActiveChalkTexUri();
   if (!uri) {
     vscode.window.showErrorMessage(
-      'Chalk-TeX: no active .tex document to build.',
+      'Chalk: no active .tex document to build.',
     );
     return;
   }
@@ -54,7 +54,7 @@ function getActiveChalkTexUri(): vscode.Uri | null {
   const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
   if (
     tab?.input instanceof vscode.TabInputCustom &&
-    tab.input.viewType === 'chalk-tex.texEditor'
+    tab.input.viewType === 'chalk.texEditor'
   ) {
     return tab.input.uri;
   }

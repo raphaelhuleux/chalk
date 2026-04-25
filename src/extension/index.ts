@@ -4,7 +4,7 @@ import { buildWithWorkshop } from './workshop-bridge';
 import { diagnoseThemeResolution } from './theme-reader';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const diagChannel = vscode.window.createOutputChannel('Chalk-TeX');
+  const diagChannel = vscode.window.createOutputChannel('Chalk');
 
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
@@ -18,8 +18,8 @@ export function activate(context: vscode.ExtensionContext): void {
         supportsMultipleEditorsPerDocument: false,
       },
     ),
-    vscode.commands.registerCommand('chalk-tex.build', buildWithWorkshop),
-    vscode.commands.registerCommand('chalk-tex.diagnoseTheme', async () => {
+    vscode.commands.registerCommand('chalk.build', buildWithWorkshop),
+    vscode.commands.registerCommand('chalk.diagnoseTheme', async () => {
       const diag = await diagnoseThemeResolution();
       diagChannel.clear();
       diagChannel.appendLine(JSON.stringify(diag, null, 2));
@@ -30,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Cmd+: is handled at the keybinding level in package.json — bound to
   // VS Code's built-in `workbench.action.reopenWithEditor`, which opens
-  // a picker for flipping between Chalk-TeX and the text editor.
+  // a picker for flipping between Chalk and the text editor.
 }
 
 export function deactivate(): void {

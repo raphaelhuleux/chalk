@@ -4,7 +4,7 @@ import * as path from 'path';
 import { getWebviewHtml, generateNonce } from './webview-html';
 import { readThemeColors } from './theme-reader';
 
-const WEBVIEW_ALLOWED_COMMANDS = new Set(['chalk-tex.build']);
+const WEBVIEW_ALLOWED_COMMANDS = new Set(['chalk.build']);
 
 function loadHSnipsRaw(): string | null {
   // Check user-configured path first, then default locations.
@@ -26,7 +26,7 @@ function loadHSnipsRaw(): string | null {
 }
 
 export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
-  public static readonly viewType = 'chalk-tex.texEditor';
+  public static readonly viewType = 'chalk.texEditor';
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -118,7 +118,7 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
           return;
         }
         case 'command': {
-          // Whitelist: only commands explicitly owned by Chalk-TeX can be
+          // Whitelist: only commands explicitly owned by Chalk can be
           // dispatched from the webview. Prevents an accidental future
           // regression where this handler turns into an arbitrary-command
           // executor for anyone who can post a message.

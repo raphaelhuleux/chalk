@@ -7,7 +7,7 @@ import { tags as t } from '@lezer/highlight';
  * `@codemirror/language`'s `StreamLanguage` adapter maps automatically
  * to `@lezer/highlight` tags. We only style the tags here.
  *
- * Colors come from CSS custom properties (`--chalk-tex-syntax-*`) that
+ * Colors come from CSS custom properties (`--chalk-syntax-*`) that
  * the extension host sets by reading the active VS Code theme's JSON
  * `tokenColors` and posting them to the webview (see
  * [src/extension/theme-reader.ts]). When that pipeline can't find a
@@ -17,38 +17,38 @@ import { tags as t } from '@lezer/highlight';
  */
 export const texHighlightStyle = HighlightStyle.define([
   // \documentclass, \section, \begin, …
-  { tag: t.keyword, color: 'var(--chalk-tex-syntax-keyword, #569cd6)' },
+  { tag: t.keyword, color: 'var(--chalk-syntax-keyword, #569cd6)' },
 
   // Environment names and labels inside \begin{…}, \label{…}
-  { tag: t.tagName, color: 'var(--chalk-tex-syntax-tag, #4ec9b0)' },
+  { tag: t.tagName, color: 'var(--chalk-syntax-tag, #4ec9b0)' },
 
   // %-line comments
   {
     tag: t.comment,
-    color: 'var(--chalk-tex-syntax-comment, #6a9955)',
+    color: 'var(--chalk-syntax-comment, #6a9955)',
     fontStyle: 'italic',
   },
 
-  { tag: t.number, color: 'var(--chalk-tex-syntax-number, #b5cea8)' },
+  { tag: t.number, color: 'var(--chalk-syntax-number, #b5cea8)' },
 
-  { tag: t.atom, color: 'var(--chalk-tex-syntax-atom, #c586c0)' },
+  { tag: t.atom, color: 'var(--chalk-syntax-atom, #c586c0)' },
 
   // { } [ ]
   {
     tag: t.bracket,
-    color: 'var(--chalk-tex-syntax-bracket, var(--vscode-editor-foreground))',
+    color: 'var(--chalk-syntax-bracket, var(--vscode-editor-foreground))',
   },
 
   // stex emits "variableName.special" for a small set of tokens
   {
     tag: t.special(t.variableName),
-    color: 'var(--chalk-tex-syntax-special-variable, #dcdcaa)',
+    color: 'var(--chalk-syntax-special-variable, #dcdcaa)',
   },
 
   // Malformed constructs flagged by stex
   {
     tag: t.invalid,
-    color: 'var(--chalk-tex-syntax-invalid, var(--vscode-errorForeground, #f48771))',
+    color: 'var(--chalk-syntax-invalid, var(--vscode-errorForeground, #f48771))',
     textDecoration: 'underline wavy',
   },
 ]);
