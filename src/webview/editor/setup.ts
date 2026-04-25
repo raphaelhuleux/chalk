@@ -31,7 +31,7 @@ import {
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { themeCompartment, vsCodeTheme } from './theme';
 import { chalkKeymap, EditorActions } from './keymap';
-import { texMathPlugin } from './tex-math';
+import { texMathPlugin, isInMathContextTex } from './tex-math';
 import { texHighlightStyle } from './syntax-highlight';
 import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
 import { latexCompletionExtension } from './latex-completions';
@@ -76,7 +76,7 @@ export function buildExtensions(actions: EditorActions) {
     syntaxHighlighting(texHighlightStyle),
 
     texMathPlugin(),
-    hsnipsExtension(),
+    hsnipsExtension({ isInMathContext: isInMathContextTex }),
     latexCompletionExtension(),
 
     EditorView.lineWrapping,

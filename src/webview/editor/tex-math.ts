@@ -381,3 +381,18 @@ export function texMathPlugin(): Extension {
     ],
   });
 }
+
+/**
+ * Returns true when `pos` lies within any math region of the document.
+ * Used by the hsnips engine to gate `context math(context)` snippet
+ * filters; tex passes this function as the `isInMathContext` callback.
+ *
+ * O(n) in document length per call — same scanner the math widget pass
+ * already runs. Future optimization: lift `scanMathRegions` into a
+ * StateField shared by both consumers.
+ */
+export function isInMathContextTex(state: EditorState, pos: number): boolean {
+  const doc = state.doc.toString();
+  const regions = scanMathRegions(doc);
+  return regions.some((r) => pos >= r.from && pos <= r.to);
+}

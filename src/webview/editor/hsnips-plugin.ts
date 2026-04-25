@@ -5,9 +5,9 @@
  * only), replaces the trigger text with the snippet body, and manages
  * tab-stop navigation ($1, $2, …, $0).
  *
- * Math context: uses the tex editor's `scanMathRegions` to decide whether
- * the cursor is inside a math region, so `context math(context)`
- * filters work correctly.
+ * Math context: accepts an `isInMathContext` callback via `HsnipsOptions`
+ * so the engine is language-agnostic. Tex passes `isInMathContextTex`;
+ * markdown will pass a lezer-tree query in Phase 6.
  */
 
 import {
@@ -28,7 +28,6 @@ import {
   Transaction,
 } from '@codemirror/state';
 import type { HSnippet } from './hsnips-parser';
-import { scanMathRegions } from './tex-math';
 
 // ── Snippet data ────────────────────────────────────────────────────
 
@@ -95,23 +94,18 @@ const sessionDecorations = EditorView.decorations.compute(
   },
 );
 
-// ── Math context helper ─────────────────────────────────────────────
-
-function isCursorInMath(state: EditorState, pos: number): boolean {
-  const doc = state.doc.toString();
-  const regions = scanMathRegions(doc);
-  return regions.some((r) => pos >= r.from && pos <= r.to);
-}
+// ── Context filter ──────────────────────────────────────────────────
 
 function passesContextFilter(
   snippet: HSnippet,
   state: EditorState,
   pos: number,
+  isInMathContext: (state: EditorState, pos: number) => boolean,
 ): boolean {
   if (!snippet.contextFilter) return true;
   // Support the standard `math(context)` filter from .hsnips files.
   if (snippet.contextFilter.includes('math')) {
-    return isCursorInMath(state, pos);
+    return isInMathContext(state, pos);
   }
   // Unknown context filters: skip the snippet to be safe.
   return false;
@@ -129,6 +123,7 @@ interface MatchResult {
 function findMatch(
   state: EditorState,
   snippets: HSnippet[],
+  isInMathContext: (state: EditorState, pos: number) => boolean,
 ): MatchResult | null {
   const pos = state.selection.main.head;
   const line = state.doc.lineAt(pos);
@@ -138,7 +133,7 @@ function findMatch(
 
   for (const snippet of snippets) {
     if (!snippet.automatic) continue;
-    if (!passesContextFilter(snippet, state, pos)) continue;
+    if (!passesContextFilter(snippet, state, pos, isInMathContext)) continue;
 
     if (snippet.trigger) {
       const trigger = snippet.trigger;
@@ -291,6 +286,8 @@ function processBody(
 
 // ── Expansion ───────────────────────────────────────────────────────
 
+let isExpanding = false;
+
 function expandSnippet(view: EditorView, match: MatchResult): boolean {
   isExpanding = true;
   const { text, tabStops } = processBody(
@@ -327,34 +324,36 @@ function expandSnippet(view: EditorView, match: MatchResult): boolean {
 
 // ── Auto-expand on document change ──────────────────────────────────
 
-let isExpanding = false;
+function autoExpandFor(
+  isInMathContext: (state: EditorState, pos: number) => boolean,
+) {
+  return EditorView.updateListener.of((update: ViewUpdate) => {
+    if (!update.docChanged) return;
+    if (isExpanding) return;
 
-const autoExpand = EditorView.updateListener.of((update: ViewUpdate) => {
-  if (!update.docChanged) return;
-  if (isExpanding) return;
-
-  // Detect single-character insertions (keystrokes).
-  let isKeystroke = false;
-  update.transactions.forEach((tr) => {
-    tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
-      if (inserted.length >= 1) isKeystroke = true;
+    // Detect single-character insertions (keystrokes).
+    let isKeystroke = false;
+    update.transactions.forEach((tr) => {
+      tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
+        if (inserted.length >= 1) isKeystroke = true;
+      });
     });
+
+    if (!isKeystroke) return;
+
+    const snippets = update.state.field(snippetsField);
+    if (snippets.length === 0) {
+      return;
+    }
+
+    const match = findMatch(update.state, snippets, isInMathContext);
+    if (match) {
+      // Use requestAnimationFrame to dispatch after the current update
+      // completes — keeps undo grouping tight.
+      requestAnimationFrame(() => expandSnippet(update.view, match));
+    }
   });
-
-  if (!isKeystroke) return;
-
-  const snippets = update.state.field(snippetsField);
-  if (snippets.length === 0) {
-    return;
-  }
-
-  const match = findMatch(update.state, snippets);
-  if (match) {
-    // Use queueMicrotask to dispatch after the current update completes
-    // but before the next frame — keeps undo grouping tight.
-    queueMicrotask(() => expandSnippet(update.view, match));
-  }
-});
+}
 
 // ── Tab / Shift-Tab keymap ──────────────────────────────────────────
 
@@ -428,12 +427,20 @@ const hsnipsTheme = EditorView.baseTheme({
 
 // ── Public extension ────────────────────────────────────────────────
 
-export function hsnipsExtension(): Extension {
+export interface HsnipsOptions {
+  /** Returns true when `pos` lies inside a math region in `state`. The
+   *  hsnips engine uses this to evaluate the `math(context)` filter from
+   *  .hsnips files. Tex passes `isInMathContextTex` from `tex-math.ts`;
+   *  md passes a lezer-tree query for `InlineMath`/`DisplayMath` nodes. */
+  isInMathContext: (state: EditorState, pos: number) => boolean;
+}
+
+export function hsnipsExtension(opts: HsnipsOptions): Extension {
   return [
     snippetsField,
     sessionField,
     sessionDecorations,
-    autoExpand,
+    autoExpandFor(opts.isInMathContext),
     hsnipsTheme,
   ];
 }
