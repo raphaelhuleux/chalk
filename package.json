@@ -17,6 +17,12 @@
         "displayName": "Chalk",
         "selector": [{ "filenamePattern": "*.tex" }],
         "priority": "default"
+      },
+      {
+        "viewType": "chalk.markdownEditor",
+        "displayName": "Chalk",
+        "selector": [{ "filenamePattern": "*.md" }],
+        "priority": "default"
       }
     ],
     "commands": [
@@ -36,7 +42,7 @@
         "command": "workbench.action.reopenWithEditor",
         "key": "cmd+shift+;",
         "mac": "cmd+shift+;",
-        "when": "resourceExtname == .tex"
+        "when": "resourceExtname == .tex || resourceExtname == .md"
       },
       {
         "command": "chalk.build",

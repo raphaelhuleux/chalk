@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getWebviewHtml, generateNonce } from './webview-html';
 import { readThemeColors } from './theme-reader';
+import { getMarkdownHeadingColors } from './markdown-heading-colors';
 import type { LanguageProfile } from './languages/types';
 
 export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
@@ -50,6 +51,12 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
       webviewPanel.webview.postMessage({ type: 'theme-colors', colors });
     };
 
+    const postHeadingColors = (): void => {
+      if (this.profile.id !== 'md') return;
+      const colors = getMarkdownHeadingColors();
+      webviewPanel.webview.postMessage({ type: 'heading-colors', colors });
+    };
+
     const messageSub = webviewPanel.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.type) {
         case 'ready': {
@@ -60,6 +67,7 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
             language: this.profile.id,
           });
           void postThemeColors();
+          postHeadingColors();
 
           const hsnipsRaw = this.profile.loadHsnips();
           if (hsnipsRaw) {
@@ -126,7 +134,10 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
     });
 
     const themeSub = vscode.window.onDidChangeActiveColorTheme(() => {
-      if (webviewReady) void postThemeColors();
+      if (webviewReady) {
+        void postThemeColors();
+        postHeadingColors();
+      }
     });
 
     webviewPanel.onDidDispose(() => {

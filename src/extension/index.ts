@@ -1,37 +1,49 @@
 import * as vscode from 'vscode';
 import { ChalkEditorProvider } from './chalk-editor-provider';
-import { texProfile } from './languages/tex';
 import { buildWithWorkshop } from './workshop-bridge';
 import { diagnoseThemeResolution } from './theme-reader';
+import { texProfile } from './languages/tex';
+import { markdownProfile } from './languages/markdown';
 
 export function activate(context: vscode.ExtensionContext): void {
   const diagChannel = vscode.window.createOutputChannel('Chalk');
+
+  const editorOptions = {
+    webviewOptions: {
+      // CM6 state survives tab switches (undo, cursor, scroll).
+      retainContextWhenHidden: true,
+    },
+    supportsMultipleEditorsPerDocument: false,
+  };
 
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
       texProfile.viewType,
       new ChalkEditorProvider(context, texProfile),
-      {
-        webviewOptions: {
-          // CM6 state survives tab switches (undo, cursor, scroll).
-          retainContextWhenHidden: true,
-        },
-        supportsMultipleEditorsPerDocument: false,
-      },
+      editorOptions,
+    ),
+    vscode.window.registerCustomEditorProvider(
+      markdownProfile.viewType,
+      new ChalkEditorProvider(context, markdownProfile),
+      editorOptions,
     ),
     vscode.commands.registerCommand('chalk.build', buildWithWorkshop),
     vscode.commands.registerCommand('chalk.diagnoseTheme', async () => {
-      const diag = await diagnoseThemeResolution(texProfile.themeScopeCandidates);
+      // Pick the profile that matches the currently-focused custom editor;
+      // fall back to tex.
+      const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+      const profile =
+        tab?.input instanceof vscode.TabInputCustom &&
+        tab.input.viewType === markdownProfile.viewType
+          ? markdownProfile
+          : texProfile;
+      const diag = await diagnoseThemeResolution(profile.themeScopeCandidates);
       diagChannel.clear();
       diagChannel.appendLine(JSON.stringify(diag, null, 2));
       diagChannel.show(true);
     }),
     diagChannel,
   );
-
-  // Cmd+: is handled at the keybinding level in package.json — bound to
-  // VS Code's built-in `workbench.action.reopenWithEditor`, which opens
-  // a picker for flipping between Chalk and the text editor.
 }
 
 export function deactivate(): void {

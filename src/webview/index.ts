@@ -44,10 +44,13 @@ type ThemeColors = Partial<{
   invalid: string | null;
 }>;
 
+type HeadingColors = Partial<Record<1 | 2 | 3 | 4 | 5 | 6, string>>;
+
 type ExtensionMessage =
   | { type: 'init'; text: string; language: Language }
   | { type: 'update'; text: string }
   | { type: 'theme-colors'; colors: ThemeColors }
+  | { type: 'heading-colors'; colors: HeadingColors }
   | { type: 'hsnips'; content: string };
 
 /**
@@ -105,6 +108,15 @@ function handleMessage(msg: ExtensionMessage): void {
     }
     case 'theme-colors': {
       applyThemeColors(msg.colors);
+      return;
+    }
+    case 'heading-colors': {
+      const root = document.documentElement;
+      for (const level of [1, 2, 3, 4, 5, 6] as const) {
+        const c = msg.colors[level];
+        if (c) root.style.setProperty(`--chalk-heading-${level}`, c);
+        else root.style.removeProperty(`--chalk-heading-${level}`);
+      }
       return;
     }
     case 'hsnips': {
