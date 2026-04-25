@@ -27,6 +27,13 @@ export function vsCodeTheme(): Extension {
       fontFamily: 'var(--vscode-editor-font-family)',
       fontSize: 'var(--vscode-editor-font-size)',
     },
+    // CM6 draws a 1px dotted outline on the editor when focused (a11y
+    // default). The webview already takes the full viewport, the cursor
+    // blink indicates focus, and VS Code's panel-focus ring lives one
+    // level up — so the inner outline is redundant and visually noisy.
+    '&.cm-focused': {
+      outline: 'none',
+    },
     '.cm-content': {
       caretColor: 'var(--vscode-editorCursor-foreground)',
       fontFamily: 'var(--vscode-editor-font-family)',
