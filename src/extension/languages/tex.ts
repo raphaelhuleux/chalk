@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { LanguageProfile } from './types';
+import type { ThemeColors } from '../theme-reader';
 
-const TEX_SCOPE_CANDIDATES: Record<string, string[]> = {
+const TEX_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
   keyword: [
     'support.function.be.latex',
     'keyword.control.preamble.latex',

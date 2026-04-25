@@ -21,7 +21,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('chalk.build', buildWithWorkshop),
     vscode.commands.registerCommand('chalk.diagnoseTheme', async () => {
-      const diag = await diagnoseThemeResolution();
+      const diag = await diagnoseThemeResolution(texProfile.themeScopeCandidates);
       diagChannel.clear();
       diagChannel.appendLine(JSON.stringify(diag, null, 2));
       diagChannel.show(true);

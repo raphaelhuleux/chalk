@@ -18,78 +18,7 @@ export interface ThemeColors {
   invalid: string | null;
 }
 
-/**
- * For each CM5 token type the stex mode emits, an ordered list of
- * TextMate scopes to try against the theme's `tokenColors`. Most
- * specific first. The first hit wins.
- *
- * These scopes are tuned to what LaTeX grammars (Workshop's and
- * VS Code's built-in LaTeX mode) typically emit. Adjust if a popular
- * theme consistently produces the wrong color for a given token.
- */
-const SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
-  // \documentclass, \section, \begin, … (stex tokenizes all commands
-  // as a single "keyword" category, so we pick whichever generic scope
-  // the theme styles most meaningfully).
-  keyword: [
-    'support.function.be.latex',
-    'keyword.control.preamble.latex',
-    'support.function.general.latex',
-    'keyword.control.latex',
-    'support.function.latex',
-    'entity.name.function.latex',
-    'keyword.control',
-    'support.function',
-    'entity.name.function',
-    'keyword',
-  ],
-  // Environment and label names inside \begin{…}, \label{…}.
-  tagName: [
-    'entity.name.function.environment.latex',
-    'support.class.latex',
-    'entity.name.type.environment.latex',
-    'entity.name.function.latex',
-    'entity.name.type.latex',
-    'entity.name.type',
-    'support.class',
-    'entity.name.tag',
-    'entity.name',
-    'variable.parameter',
-  ],
-  comment: [
-    'comment.line.percentage.latex',
-    'comment.line.percentage',
-    'comment.line',
-    'comment',
-  ],
-  number: [
-    'constant.numeric.latex',
-    'constant.numeric',
-    'constant',
-  ],
-  atom: [
-    'constant.character.latex',
-    'constant.character',
-    'constant.language',
-    'constant.other',
-    'constant',
-  ],
-  bracket: [
-    'punctuation.definition.arguments.begin.latex',
-    'punctuation.definition.arguments',
-    'punctuation.definition',
-    'punctuation.section',
-    'punctuation',
-  ],
-  specialVariable: [
-    'variable.parameter.function.latex',
-    'variable.parameter.latex',
-    'variable.parameter',
-    'variable.other',
-    'variable',
-  ],
-  invalid: ['invalid.illegal', 'invalid.deprecated', 'invalid'],
-};
+type ScopeCandidates = Record<keyof ThemeColors, string[]>;
 
 interface RawTokenColor {
   scope?: string | string[];
@@ -107,8 +36,10 @@ interface RawTheme {
  * CM6 tag set, returns null if any step fails (caller falls back to
  * the hex defaults baked into the HighlightStyle).
  */
-export async function readThemeColors(): Promise<ThemeColors | null> {
-  const diag = await diagnoseThemeResolution();
+export async function readThemeColors(
+  scopes: ScopeCandidates,
+): Promise<ThemeColors | null> {
+  const diag = await diagnoseThemeResolution(scopes);
   return diag.colors;
 }
 
@@ -127,7 +58,9 @@ export interface ThemeDiagnostics {
   error?: string;
 }
 
-export async function diagnoseThemeResolution(): Promise<ThemeDiagnostics> {
+export async function diagnoseThemeResolution(
+  scopes: ScopeCandidates,
+): Promise<ThemeDiagnostics> {
   const diag: ThemeDiagnostics = {
     themeLabel: null,
     themePath: null,
@@ -146,7 +79,7 @@ export async function diagnoseThemeResolution(): Promise<ThemeDiagnostics> {
 
     const tokens = await loadMergedTokenColors(diag.themePath);
     diag.tokenColorCount = tokens.length;
-    const { colors, matched } = resolveAllWithProvenance(tokens);
+    const { colors, matched } = resolveAllWithProvenance(tokens, scopes);
     diag.colors = colors;
     diag.matchedScopes = matched;
     return diag;
@@ -228,16 +161,19 @@ function stripJsonc(text: string): string {
  * return the first color the theme matches. Also records which scope
  * produced the match (useful for diagnostics).
  */
-function resolveAllWithProvenance(tokens: RawTokenColor[]): {
+function resolveAllWithProvenance(
+  tokens: RawTokenColor[],
+  scopes: ScopeCandidates,
+): {
   colors: ThemeColors;
   matched: Partial<Record<keyof ThemeColors, string | null>>;
 } {
   const colors: Partial<ThemeColors> = {};
   const matched: Partial<Record<keyof ThemeColors, string | null>> = {};
-  for (const key of Object.keys(SCOPE_CANDIDATES) as (keyof ThemeColors)[]) {
+  for (const key of Object.keys(scopes) as (keyof ThemeColors)[]) {
     colors[key] = null;
     matched[key] = null;
-    for (const scope of SCOPE_CANDIDATES[key]) {
+    for (const scope of scopes[key]) {
       const color = resolveScopeColor(scope, tokens);
       if (color) {
         colors[key] = color;

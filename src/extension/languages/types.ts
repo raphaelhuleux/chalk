@@ -1,3 +1,5 @@
+import type { ThemeColors } from '../theme-reader';
+
 /**
  * Per-language data passed into ChalkEditorProvider. Captures everything
  * the host shell needs to know that depends on the file type — viewType
@@ -24,7 +26,7 @@ export interface LanguageProfile {
    *  to look up colors in the active theme's tokenColors. Empty for languages
    *  that don't drive a syntax HighlightStyle (md uses lezer-markdown's
    *  built-in highlighting + a separate heading-color path). */
-  themeScopeCandidates: Record<string, string[]>;
+  themeScopeCandidates: Record<keyof ThemeColors, string[]>;
 
   /** Read all hsnips files relevant to this language and return their raw
    *  text concatenated. Returns null if none exist. Called once per editor

@@ -45,7 +45,7 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
     };
 
     const postThemeColors = async (): Promise<void> => {
-      const colors = await readThemeColors();
+      const colors = await readThemeColors(this.profile.themeScopeCandidates);
       if (!colors) return;
       webviewPanel.webview.postMessage({ type: 'theme-colors', colors });
     };
