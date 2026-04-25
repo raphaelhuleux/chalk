@@ -19,12 +19,30 @@
         "priority": "default"
       }
     ],
+    "commands": [
+      {
+        "command": "chalk-tex.build",
+        "title": "Build (LaTeX Workshop)",
+        "category": "Chalk-TeX"
+      },
+      {
+        "command": "chalk-tex.diagnoseTheme",
+        "title": "Diagnose Theme Resolution",
+        "category": "Chalk-TeX"
+      }
+    ],
     "keybindings": [
       {
         "command": "workbench.action.reopenWithEditor",
         "key": "cmd+shift+;",
         "mac": "cmd+shift+;",
         "when": "resourceExtname == .tex"
+      },
+      {
+        "command": "chalk-tex.build",
+        "key": "cmd+alt+b",
+        "mac": "cmd+alt+b",
+        "when": "activeCustomEditorId == 'chalk-tex.texEditor'"
       }
     ]
   },

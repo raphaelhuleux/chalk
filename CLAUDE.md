@@ -26,7 +26,10 @@ Not yet installed as a `.vsix`; smoke test pending.
 
 Extension host (Node) ↔ webview (Chromium sandbox) via `postMessage`:
 - `extension → webview`: `init({text})`, `update({text})`
-- `webview → extension`: `edit({text})`, `open-external({url})`
+- `webview → extension`: `edit({text})`, `open-external({url})`, `command({id})`
+
+The `command` message is whitelisted (`WEBVIEW_ALLOWED_COMMANDS`) to avoid
+turning into an arbitrary-command dispatcher. Currently: `chalk-tex.build`.
 
 Sync strategy: eager full-text replace. `isApplyingOwnEdit` flag prevents
 `edit → WorkspaceEdit → onDidChangeTextDocument → update → edit` loops.
@@ -34,6 +37,14 @@ Sync strategy: eager full-text replace. `isApplyingOwnEdit` flag prevents
 Activation: `.tex` files open in Chalk-TeX by default (`priority: "default"`
 on the `customEditors` contribution). `Cmd+:` uses VS Code's built-in
 *Reopen Editor With…* picker — no custom keybinding machinery.
+
+LaTeX Workshop bridge: `chalk-tex.build` (`Cmd+Alt+B`) in
+[src/extension/workshop-bridge.ts](src/extension/workshop-bridge.ts).
+**Currently non-functional** — see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+The bridge opens the doc in a native side-column editor with
+`preserveFocus: true` intending to populate `activeTextEditor`, but
+Workshop's build still fails to resolve the root. Code left in place as
+a starting point for future debugging.
 
 ## Core logic — the one genuinely new piece
 
@@ -46,9 +57,12 @@ string and returns non-overlapping math regions. Handles:
 - `%` line comments (skipped)
 - `\$` literal dollar and any other `\x` escape
 
-The ViewPlugin scans only visible ranges on every update, cursor-aware:
-regions containing the cursor keep their raw source visible; everything
-else renders as a `MathWidget` that calls `KaTeXCache.render()`.
+Exposed as a `StateField` (not a `ViewPlugin`): CM6 forbids block replace
+decorations from view plugins, and display math needs `block: true`.
+The field re-scans the whole doc on each transaction (cheap — O(n) walker +
+KaTeX cache), cursor-aware: regions containing the cursor keep their raw
+source visible; everything else renders as a `MathWidget` that calls
+`KaTeXCache.render()`.
 
 ## Guardrails
 
@@ -57,9 +71,14 @@ else renders as a `MathWidget` that calls `KaTeXCache.render()`.
 - Do not add LaTeX compilation, bibliography, or any feature
   [LaTeX Workshop](https://github.com/James-Yu/LaTeX-Workshop) already
   provides. Chalk-TeX sits *alongside* Workshop.
-- Theme-token reading (the heading-color path in Chalk) does not apply
-  here. If a theme-aware math styling decision comes up later, add it
-  deliberately — don't port code across just because it's there.
+- Theme-token reading: only for syntax-highlight colors (see
+  [src/extension/theme-reader.ts](src/extension/theme-reader.ts)).
+  The extension host parses the active theme's JSON `tokenColors`,
+  resolves prefix matches against a curated list of LaTeX scopes,
+  posts `--chalk-tex-syntax-*` CSS vars to the webview, and re-posts
+  on `onDidChangeActiveColorTheme`. Hex fallbacks live in
+  [syntax-highlight.ts](src/webview/editor/syntax-highlight.ts). Do
+  not expand this pipeline to math rendering without a concrete need.
 
 ## Build & install
 

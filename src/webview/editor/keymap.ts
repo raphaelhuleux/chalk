@@ -1,4 +1,5 @@
 import { KeyBinding } from '@codemirror/view';
+import { sendCommand } from '../api';
 
 /**
  * Callbacks from the editor host (webview bootstrap). Chalk used to own
@@ -11,11 +12,20 @@ export interface EditorActions {
 }
 
 /**
- * Chalk-specific keybindings. Currently empty — VS Code owns all the
- * keybindings we care about (Cmd+S, Cmd+N, Cmd+:, Ctrl+Tab, etc.). Kept
- * as a slot so new Chalk-specific bindings can be added without reshaping
- * setup.ts.
+ * Chalk-TeX keybindings that need to fire from inside the CM6-owned part
+ * of the webview. VS Code keybindings with `when: activeCustomEditorId ==
+ * …` also exist in package.json for gutters/scrollbars where CM6 doesn't
+ * see the event — CM6 returning `true` from `run` stops propagation so
+ * the two paths don't double-fire.
  */
 export function chalkKeymap(_actions: EditorActions): KeyBinding[] {
-  return [];
+  return [
+    {
+      key: 'Mod-Alt-b',
+      run: () => {
+        sendCommand('chalk-tex.build');
+        return true;
+      },
+    },
+  ];
 }

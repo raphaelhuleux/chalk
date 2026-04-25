@@ -1,7 +1,11 @@
 import * as vscode from 'vscode';
 import { ChalkTexEditorProvider } from './chalk-tex-editor-provider';
+import { buildWithWorkshop } from './workshop-bridge';
+import { diagnoseThemeResolution } from './theme-reader';
 
 export function activate(context: vscode.ExtensionContext): void {
+  const diagChannel = vscode.window.createOutputChannel('Chalk-TeX');
+
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
       ChalkTexEditorProvider.viewType,
@@ -14,6 +18,14 @@ export function activate(context: vscode.ExtensionContext): void {
         supportsMultipleEditorsPerDocument: false,
       },
     ),
+    vscode.commands.registerCommand('chalk-tex.build', buildWithWorkshop),
+    vscode.commands.registerCommand('chalk-tex.diagnoseTheme', async () => {
+      const diag = await diagnoseThemeResolution();
+      diagChannel.clear();
+      diagChannel.appendLine(JSON.stringify(diag, null, 2));
+      diagChannel.show(true);
+    }),
+    diagChannel,
   );
 
   // Cmd+: is handled at the keybinding level in package.json — bound to

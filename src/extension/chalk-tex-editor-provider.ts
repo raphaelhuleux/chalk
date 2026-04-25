@@ -1,5 +1,29 @@
 import * as vscode from 'vscode';
+import { existsSync, readFileSync, readdirSync } from 'fs';
+import * as path from 'path';
 import { getWebviewHtml, generateNonce } from './webview-html';
+import { readThemeColors } from './theme-reader';
+
+const WEBVIEW_ALLOWED_COMMANDS = new Set(['chalk-tex.build']);
+
+function loadHSnipsRaw(): string | null {
+  // Check user-configured path first, then default locations.
+  const config = vscode.workspace.getConfiguration('hsnips');
+  const customPath = config.get<string>('hsnipsPath');
+
+  const searchDirs = [
+    customPath,
+    path.join(process.env.HOME || '', '.config', 'hsnips'),
+  ].filter(Boolean) as string[];
+
+  for (const dir of searchDirs) {
+    const filePath = path.join(dir, 'latex.hsnips');
+    if (existsSync(filePath)) {
+      return readFileSync(filePath, 'utf8');
+    }
+  }
+  return null;
+}
 
 export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
   public static readonly viewType = 'chalk-tex.texEditor';
@@ -41,6 +65,12 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
       webviewPanel.webview.postMessage({ type: 'update', text });
     };
 
+    const postThemeColors = async (): Promise<void> => {
+      const colors = await readThemeColors();
+      if (!colors) return;
+      webviewPanel.webview.postMessage({ type: 'theme-colors', colors });
+    };
+
     const messageSub = webviewPanel.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.type) {
         case 'ready': {
@@ -49,6 +79,21 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
             type: 'init',
             text: document.getText(),
           });
+          void postThemeColors();
+
+          // Send HyperSnips data to webview for expansion.
+          const hsnipsRaw = loadHSnipsRaw();
+          console.log('[chalk-tex ext] hsnips raw loaded:', hsnipsRaw ? `${hsnipsRaw.length} chars` : 'null');
+          if (hsnipsRaw) {
+            webviewPanel.webview.postMessage({
+              type: 'hsnips',
+              content: hsnipsRaw,
+            });
+            console.log('[chalk-tex ext] hsnips message sent to webview');
+          } else {
+            console.log('[chalk-tex ext] No hsnips file found');
+          }
+
           if (pendingUpdate !== null) {
             webviewPanel.webview.postMessage({
               type: 'update',
@@ -77,6 +122,16 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
           void vscode.env.openExternal(vscode.Uri.parse(msg.url));
           return;
         }
+        case 'command': {
+          // Whitelist: only commands explicitly owned by Chalk-TeX can be
+          // dispatched from the webview. Prevents an accidental future
+          // regression where this handler turns into an arbitrary-command
+          // executor for anyone who can post a message.
+          if (typeof msg.id !== 'string') return;
+          if (!WEBVIEW_ALLOWED_COMMANDS.has(msg.id)) return;
+          await vscode.commands.executeCommand(msg.id);
+          return;
+        }
       }
     });
 
@@ -95,10 +150,15 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
       }
     });
 
+    const themeSub = vscode.window.onDidChangeActiveColorTheme(() => {
+      if (webviewReady) void postThemeColors();
+    });
+
     webviewPanel.onDidDispose(() => {
       messageSub.dispose();
       changeSub.dispose();
       viewStateSub.dispose();
+      themeSub.dispose();
     });
   }
 }

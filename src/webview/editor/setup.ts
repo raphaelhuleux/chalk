@@ -17,10 +17,12 @@ import {
   bracketMatching,
   indentUnit,
   StreamLanguage,
+  syntaxHighlighting,
 } from '@codemirror/language';
 import {
   closeBrackets,
   closeBracketsKeymap,
+  acceptCompletion,
 } from '@codemirror/autocomplete';
 import {
   searchKeymap,
@@ -30,6 +32,9 @@ import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { themeCompartment, vsCodeTheme } from './theme';
 import { chalkKeymap, EditorActions } from './keymap';
 import { texMathPlugin } from './tex-math';
+import { texHighlightStyle } from './syntax-highlight';
+import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
+import { latexCompletionExtension } from './latex-completions';
 
 /**
  * Builds the full extensions array for a CM6 editor instance.
@@ -43,6 +48,12 @@ import { texMathPlugin } from './tex-math';
  */
 export function buildExtensions(actions: EditorActions) {
   return [
+    // HyperSnips Tab/Shift-Tab must come before indentWithTab.
+    keymap.of(hsnipsKeymap),
+
+    // Tab accepts autocomplete when dropdown is open.
+    keymap.of([{ key: 'Tab', run: acceptCompletion }]),
+
     keymap.of(chalkKeymap(actions)),
 
     keymap.of([indentWithTab]),
@@ -63,6 +74,7 @@ export function buildExtensions(actions: EditorActions) {
 
     // LaTeX syntax highlighting via CM6's legacy-modes stream language.
     StreamLanguage.define(stex),
+    syntaxHighlighting(texHighlightStyle),
 
     // Live math preview.
     texMathPlugin(),
@@ -70,6 +82,9 @@ export function buildExtensions(actions: EditorActions) {
     EditorView.lineWrapping,
 
     placeholder('% Start typing LaTeX…'),
+
+    // LaTeX environment & command autocompletion.
+    latexCompletionExtension(),
 
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -81,13 +96,30 @@ export function buildExtensions(actions: EditorActions) {
   ];
 }
 
+/**
+ * Wraps buildExtensions and appends HyperSnips support.
+ */
+export function buildAllExtensions(actions: EditorActions) {
+  const base = buildExtensions(actions);
+  const hsnips = hsnipsExtension();
+
+  // Standalone test listener to verify update listeners work at all.
+  const testListener = EditorView.updateListener.of((update) => {
+    if (update.docChanged) {
+      console.log('[hsnips-test] docChanged fired!');
+    }
+  });
+
+  return [...base, ...hsnips, testListener];
+}
+
 export function createEditorState(
   content: string,
   actions: EditorActions,
 ): EditorState {
   return EditorState.create({
     doc: content,
-    extensions: buildExtensions(actions),
+    extensions: buildAllExtensions(actions),
   });
 }
 

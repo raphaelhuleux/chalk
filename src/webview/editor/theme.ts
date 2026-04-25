@@ -32,10 +32,16 @@ export function vsCodeTheme(): Extension {
     '&.cm-focused .cm-cursor': {
       borderLeftColor: 'var(--vscode-editorCursor-foreground)',
     },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-      {
-        backgroundColor: 'var(--vscode-editor-selectionBackground)',
-      },
+    // CM6's drawSelection() extension renders selection as absolutely-
+    // positioned divs in a z-index:-1 layer, always behind the text.
+    // We only need to recolor those divs — do NOT target `::selection`
+    // here. CM6 deliberately transparents the browser's native
+    // ::selection (via a Prec.highest rule) so the layered version is
+    // the only one you see. Re-enabling ::selection would paint an
+    // opaque overlay on top of text.
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+      backgroundColor: 'var(--vscode-editor-selectionBackground)',
+    },
     '.cm-activeLine': {
       backgroundColor: 'var(--vscode-editor-lineHighlightBackground)',
     },

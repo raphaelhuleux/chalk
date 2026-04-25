@@ -1,6 +1,19 @@
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
+// KaTeX doesn't implement \label (it has no cross-reference machinery), so
+// `\label{eq:foo}` inside an otherwise valid equation throws ParseError and
+// blocks the whole render. Defining \label as a function-form macro that
+// calls consumeArgs(1) silently swallows the {…} argument; an empty-string
+// macro definition would leave the group on the input stream and render the
+// label name as literal text.
+const KATEX_MACROS = {
+  '\\label': (ctx: { consumeArgs: (n: number) => unknown }) => {
+    ctx.consumeArgs(1);
+    return '';
+  },
+};
+
 /**
  * LRU cache for KaTeX render results.
  *
@@ -38,6 +51,7 @@ export class KaTeXCache {
       const html = katex.renderToString(latex, {
         displayMode,
         throwOnError: true,
+        macros: KATEX_MACROS,
       });
 
       // Evict oldest entry if at capacity

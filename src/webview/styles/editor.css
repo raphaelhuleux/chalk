@@ -20,3 +20,30 @@
   font-style: italic;
   opacity: 0.8;
 }
+
+/* Live preview shown below display math while the cursor is inside
+ * the source. Subdued (opacity + dashed border) so it reads as a
+ * preview, not as primary content. */
+.cm-tex-math-preview {
+  display: block;
+  text-align: center;
+  padding: 0.5em 0;
+  margin-top: 0.25em;
+  border-top: 1px dashed var(--vscode-editorWidget-border, var(--vscode-editor-foreground));
+  opacity: 0.75;
+}
+
+/* CM6 transparent-izes the browser's native ::selection only inside
+ * `.cm-line`. Block-replace widgets live OUTSIDE `.cm-line`, so the
+ * browser paints its native (opaque) selection on top of our math
+ * widgets while CM6's layered selection stays correctly behind. Extend
+ * the transparency to our widgets and their descendants (KaTeX output
+ * is deeply nested spans). */
+.cm-tex-math-display ::selection,
+.cm-tex-math-display::selection,
+.cm-tex-math-inline ::selection,
+.cm-tex-math-inline::selection,
+.cm-tex-math-preview ::selection,
+.cm-tex-math-preview::selection {
+  background-color: transparent !important;
+}

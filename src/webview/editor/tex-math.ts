@@ -2,11 +2,14 @@ import {
   Decoration,
   DecorationSet,
   EditorView,
-  ViewPlugin,
-  ViewUpdate,
   WidgetType,
 } from '@codemirror/view';
-import { Extension, RangeSetBuilder } from '@codemirror/state';
+import {
+  EditorState,
+  Extension,
+  RangeSetBuilder,
+  StateField,
+} from '@codemirror/state';
 import { KaTeXCache } from '../utils/katex-cache';
 
 export interface MathRegion {
@@ -238,64 +241,143 @@ class MathWidget extends WidgetType {
 }
 
 /**
- * Build decorations for math regions in the current viewport. A region
- * renders as a MathWidget unless the cursor sits inside it, in which case
- * we leave the raw LaTeX visible for editing.
+ * Live preview shown *below* a display-math block when the cursor is
+ * inside it. Source stays visible above; this widget renders the
+ * current LaTeX so the user sees the rendered form while editing.
+ *
+ * `lastValidHtml` is used as the displayed HTML when KaTeX returns
+ * null on the current source (typically a mid-keystroke invalid
+ * state). This prevents the preview from flickering to "error" and
+ * back as the user types.
+ */
+class MathPreviewWidget extends WidgetType {
+  constructor(
+    private readonly content: string,
+    private readonly lastValidHtml: string,
+    private readonly cache: KaTeXCache,
+  ) {
+    super();
+  }
+
+  eq(other: MathPreviewWidget): boolean {
+    return (
+      this.content === other.content &&
+      this.lastValidHtml === other.lastValidHtml
+    );
+  }
+
+  toDOM(): HTMLElement {
+    const host = document.createElement('div');
+    host.className = 'cm-tex-math-preview';
+    host.setAttribute('contenteditable', 'false');
+    const html = this.cache.render(this.content, true);
+    host.innerHTML = html ?? this.lastValidHtml;
+    return host;
+  }
+
+  ignoreEvent(): boolean {
+    // Preview is read-only; ignore all events so clicks/keys reach the
+    // source above, which is where the cursor lives.
+    return true;
+  }
+}
+
+/**
+ * LRU of last successfully rendered HTML per source string. Bounded to
+ * avoid unbounded growth across long sessions; size 100 covers any
+ * realistic editing burst on a single document.
+ */
+const MAX_LAST_VALID = 100;
+const lastValidRenders = new Map<string, string>();
+
+function rememberValidRender(content: string, html: string): void {
+  lastValidRenders.delete(content);
+  lastValidRenders.set(content, html);
+  if (lastValidRenders.size > MAX_LAST_VALID) {
+    const oldest = lastValidRenders.keys().next().value;
+    if (oldest !== undefined) lastValidRenders.delete(oldest);
+  }
+}
+
+/**
+ * Build decorations for all math regions in the document. A region renders
+ * as a MathWidget unless the cursor sits inside it, in which case we leave
+ * the raw LaTeX visible for editing.
+ *
+ * Runs over the whole document (not just the viewport) because CM6 requires
+ * block decorations to be provided via a StateField, which doesn't have
+ * access to the view's visibleRanges. `scanMathRegions` is O(n) and the
+ * KaTeX results are cached, so re-scanning on every transaction is cheap.
  */
 function buildDecorations(
-  view: EditorView,
+  state: EditorState,
   cache: KaTeXCache,
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  const cursor = view.state.selection.main.head;
+  const cursor = state.selection.main.head;
+  const regions = scanMathRegions(state.doc.toString());
 
-  for (const { from, to } of view.visibleRanges) {
-    const chunk = view.state.doc.sliceString(from, to);
-    const regions = scanMathRegions(chunk, from);
-    for (const r of regions) {
-      // Cursor inside (inclusive of the closing delimiter) → show raw.
-      if (cursor >= r.from && cursor <= r.to) continue;
-      builder.add(
-        r.from,
-        r.to,
-        Decoration.replace({
-          widget: new MathWidget(r.content, r.display, cache),
-          block: r.display,
-        }),
-      );
+  for (const r of regions) {
+    const cursorInside = cursor >= r.from && cursor <= r.to;
+
+    if (cursorInside) {
+      // Source stays visible. For display math, drop a live preview
+      // widget right after the closing delimiter so the user sees the
+      // rendered form while editing. Inline math gets no preview —
+      // an inline render below the source would shove surrounding
+      // text around on every keystroke.
+      if (r.display) {
+        const html = cache.render(r.content, true);
+        if (html) rememberValidRender(r.content, html);
+        const lastValid = html ?? lastValidRenders.get(r.content) ?? '';
+        builder.add(
+          r.to,
+          r.to,
+          Decoration.widget({
+            widget: new MathPreviewWidget(r.content, lastValid, cache),
+            block: true,
+            side: 1,
+          }),
+        );
+      }
+      continue;
     }
+
+    // Cursor outside: replace the entire region with a rendered widget.
+    builder.add(
+      r.from,
+      r.to,
+      Decoration.replace({
+        widget: new MathWidget(r.content, r.display, cache),
+        block: r.display,
+      }),
+    );
   }
 
   return builder.finish();
 }
 
+/**
+ * CM6 enforces that block replace decorations may only be supplied by a
+ * StateField, not a ViewPlugin (block geometry feeds the viewport
+ * measurement pass, which runs before view plugins). So we use a StateField
+ * even for inline math — a single field that owns both kinds keeps the
+ * pass-order and atomicRanges story simple.
+ */
 export function texMathPlugin(): Extension {
   const cache = new KaTeXCache();
 
-  return ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet;
-
-      constructor(view: EditorView) {
-        this.decorations = buildDecorations(view, cache);
-      }
-
-      update(update: ViewUpdate) {
-        if (
-          update.docChanged ||
-          update.viewportChanged ||
-          update.selectionSet
-        ) {
-          this.decorations = buildDecorations(update.view, cache);
-        }
-      }
+  return StateField.define<DecorationSet>({
+    create(state) {
+      return buildDecorations(state, cache);
     },
-    {
-      decorations: (v) => v.decorations,
-      provide: (plugin) =>
-        EditorView.atomicRanges.of((view) => {
-          return view.plugin(plugin)?.decorations ?? Decoration.none;
-        }),
+    update(decos, tr) {
+      if (!tr.docChanged && !tr.selection) return decos;
+      return buildDecorations(tr.state, cache);
     },
-  );
+    provide: (field) => [
+      EditorView.decorations.from(field),
+      EditorView.atomicRanges.of((view) => view.state.field(field)),
+    ],
+  });
 }
