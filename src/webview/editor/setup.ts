@@ -1,4 +1,4 @@
-import { EditorState } from '@codemirror/state';
+import { EditorState, Extension } from '@codemirror/state';
 import {
   EditorView,
   keymap,
@@ -20,38 +20,36 @@ import {
   syntaxHighlighting,
 } from '@codemirror/language';
 import {
+  acceptCompletion,
   closeBrackets,
   closeBracketsKeymap,
-  acceptCompletion,
 } from '@codemirror/autocomplete';
 import {
   searchKeymap,
   highlightSelectionMatches,
 } from '@codemirror/search';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
-import { themeCompartment, vsCodeTheme } from './theme';
+import { markdown } from '@codemirror/lang-markdown';
+import { Strikethrough, TaskList } from '@lezer/markdown';
+
+import { themeCompartment, previewCompartment, vsCodeTheme } from './theme';
 import { chalkKeymap, EditorActions } from './keymap';
+import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
+
 import { texMathPlugin, isInMathContextTex } from './tex-math';
 import { texHighlightStyle } from './tex-syntax-highlight';
-import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
 import { latexCompletionExtension } from './latex-completions';
+
+import { mathPlugin, mathSyntax, isInMathContextMd } from './md-math-plugin';
+import { livePreviewPlugin } from './md-live-preview';
 
 export type Language = 'tex' | 'md';
 
-/**
- * Builds the full extensions array for a CM6 editor instance.
- *
- * vs. chalk-md:
- *   - `stex` stream language replaces `markdown(…)` for syntax highlighting
- *   - `texMathPlugin()` replaces `mathPlugin()` + `livePreviewPlugin()`
- *     (there is no live-preview for prose; only math widgets)
- *   - no `previewCompartment` wrapper (math is always on; use VS Code's
- *     "Reopen With → Text Editor" if you want raw LaTeX)
- *   - `latexCompletionExtension()` provides \begin{...} and \command
- *     autocomplete. Tex-only — markdown will not get this in Phase 7.
- */
-export function buildExtensions(actions: EditorActions) {
-  return [
+export function buildExtensions(
+  actions: EditorActions,
+  language: Language,
+): Extension[] {
+  const shared = [
     keymap.of(hsnipsKeymap),
     keymap.of([{ key: 'Tab', run: acceptCompletion }]),
     keymap.of(chalkKeymap()),
@@ -71,17 +69,7 @@ export function buildExtensions(actions: EditorActions) {
     highlightSelectionMatches(),
 
     indentUnit.of('    '),
-
-    StreamLanguage.define(stex),
-    syntaxHighlighting(texHighlightStyle),
-
-    texMathPlugin(),
-    hsnipsExtension({ isInMathContext: isInMathContextTex }),
-    latexCompletionExtension(),
-
     EditorView.lineWrapping,
-
-    placeholder('% Start typing LaTeX…'),
 
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -91,16 +79,38 @@ export function buildExtensions(actions: EditorActions) {
 
     themeCompartment.of(vsCodeTheme()),
   ];
+
+  if (language === 'tex') {
+    return [
+      ...shared,
+      StreamLanguage.define(stex),
+      syntaxHighlighting(texHighlightStyle),
+      texMathPlugin(),
+      hsnipsExtension({ isInMathContext: isInMathContextTex }),
+      latexCompletionExtension(),
+      placeholder('% Start typing LaTeX…'),
+    ];
+  }
+
+  // language === 'md' — note: no latexCompletionExtension; markdown
+  // doesn't get LaTeX env/command autocomplete.
+  return [
+    ...shared,
+    markdown({ extensions: [mathSyntax, Strikethrough, TaskList] }),
+    previewCompartment.of([mathPlugin(), livePreviewPlugin()]),
+    hsnipsExtension({ isInMathContext: isInMathContextMd }),
+    placeholder('Start typing…'),
+  ];
 }
 
 export function createEditorState(
   content: string,
   actions: EditorActions,
-  _language: Language,
+  language: Language,
 ): EditorState {
   return EditorState.create({
     doc: content,
-    extensions: buildExtensions(actions),
+    extensions: buildExtensions(actions, language),
   });
 }
 
