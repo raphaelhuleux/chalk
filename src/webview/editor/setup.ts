@@ -45,16 +45,14 @@ import { latexCompletionExtension } from './latex-completions';
  *     (there is no live-preview for prose; only math widgets)
  *   - no `previewCompartment` wrapper (math is always on; use VS Code's
  *     "Reopen With → Text Editor" if you want raw LaTeX)
+ *   - `latexCompletionExtension()` provides \begin{...} and \command
+ *     autocomplete. Tex-only — markdown will not get this in Phase 7.
  */
 export function buildExtensions(actions: EditorActions) {
   return [
-    // HyperSnips Tab/Shift-Tab must come before indentWithTab.
     keymap.of(hsnipsKeymap),
-
-    // Tab accepts autocomplete when dropdown is open.
     keymap.of([{ key: 'Tab', run: acceptCompletion }]),
-
-    keymap.of(chalkKeymap(actions)),
+    keymap.of(chalkKeymap()),
 
     keymap.of([indentWithTab]),
     keymap.of(closeBracketsKeymap),
@@ -72,19 +70,16 @@ export function buildExtensions(actions: EditorActions) {
 
     indentUnit.of('    '),
 
-    // LaTeX syntax highlighting via CM6's legacy-modes stream language.
     StreamLanguage.define(stex),
     syntaxHighlighting(texHighlightStyle),
 
-    // Live math preview.
     texMathPlugin(),
+    hsnipsExtension(),
+    latexCompletionExtension(),
 
     EditorView.lineWrapping,
 
     placeholder('% Start typing LaTeX…'),
-
-    // LaTeX environment & command autocompletion.
-    latexCompletionExtension(),
 
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -96,30 +91,13 @@ export function buildExtensions(actions: EditorActions) {
   ];
 }
 
-/**
- * Wraps buildExtensions and appends HyperSnips support.
- */
-export function buildAllExtensions(actions: EditorActions) {
-  const base = buildExtensions(actions);
-  const hsnips = hsnipsExtension();
-
-  // Standalone test listener to verify update listeners work at all.
-  const testListener = EditorView.updateListener.of((update) => {
-    if (update.docChanged) {
-      console.log('[hsnips-test] docChanged fired!');
-    }
-  });
-
-  return [...base, ...hsnips, testListener];
-}
-
 export function createEditorState(
   content: string,
   actions: EditorActions,
 ): EditorState {
   return EditorState.create({
     doc: content,
-    extensions: buildAllExtensions(actions),
+    extensions: buildExtensions(actions),
   });
 }
 

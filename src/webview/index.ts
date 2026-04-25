@@ -108,14 +108,11 @@ function handleMessage(msg: ExtensionMessage): void {
       return;
     }
     case 'hsnips': {
-      console.log('[chalk-tex] Received hsnips message, view exists:', !!view);
       if (!view) return;
       const snippets = parseHSnips(msg.content);
-      console.log('[chalk-tex] Parsed', snippets.length, 'snippets');
       view.dispatch({
         effects: [setSnippets.of(snippets)],
       });
-      console.log('[chalk-tex] Snippets loaded into state field');
       return;
     }
   }

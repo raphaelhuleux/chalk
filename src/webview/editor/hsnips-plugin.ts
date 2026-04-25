@@ -17,7 +17,6 @@ import {
   Decoration,
   DecorationSet,
   WidgetType,
-  keymap,
   KeyBinding,
 } from '@codemirror/view';
 import {
@@ -26,18 +25,12 @@ import {
   StateEffect,
   Compartment,
   Extension,
-  Facet,
   Transaction,
 } from '@codemirror/state';
 import type { HSnippet } from './hsnips-parser';
 import { scanMathRegions } from './tex-math';
 
-// ── Snippet data facet ──────────────────────────────────────────────
-
-/** Provide snippets to the plugin via this facet. */
-export const hsnippetsFacet = Facet.define<HSnippet[], HSnippet[]>({
-  combine: (inputs) => inputs.flat(),
-});
+// ── Snippet data ────────────────────────────────────────────────────
 
 /** Effect to update snippets at runtime. */
 export const setSnippets = StateEffect.define<HSnippet[]>();
@@ -217,33 +210,20 @@ function processBody(
   insertPos: number,
   groups: string[],
 ): ProcessedSnippet {
-  // Replace regex capture groups: $1, $2, etc. in the body
-  // (these are regex match groups, not tab stops).
-  let processed = body;
-  if (groups.length > 0) {
-    for (let i = groups.length - 1; i >= 0; i--) {
-      // Only replace match groups, not tab-stop placeholders.
-      // Match groups from regex triggers appear as bare text in the
-      // generator output, not as $N placeholders. But in the raw
-      // .hsnips body they may reference match groups via backtick JS.
-      // Since we skip JS blocks, regex groups in the body are not
-      // directly supported. This is a known limitation.
-    }
-  }
+  void groups; // regex group substitution intentionally not supported (JS blocks discarded)
 
-  // Parse tab stops: $0, $1, $2, …, ${1:default}, ${2:default}, etc.
   const tabStops: TabStop[] = [];
   let text = '';
   let offset = insertPos;
   let i = 0;
 
-  while (i < processed.length) {
-    if (processed[i] === '$' && i + 1 < processed.length) {
+  while (i < body.length) {
+    if (body[i] === '$' && i + 1 < body.length) {
       // ${N:default} form
-      if (processed[i + 1] === '{') {
-        const closeIdx = processed.indexOf('}', i + 2);
+      if (body[i + 1] === '{') {
+        const closeIdx = body.indexOf('}', i + 2);
         if (closeIdx !== -1) {
-          const inner = processed.slice(i + 2, closeIdx);
+          const inner = body.slice(i + 2, closeIdx);
           const colonIdx = inner.indexOf(':');
           let index: number;
           let defaultText = '';
@@ -269,31 +249,31 @@ function processBody(
         }
       }
       // $N form (single digit)
-      if (/[0-9]/.test(processed[i + 1])) {
-        const index = parseInt(processed[i + 1], 10);
+      if (/[0-9]/.test(body[i + 1])) {
+        const index = parseInt(body[i + 1], 10);
         tabStops.push({ from: offset, to: offset, index });
         i += 2;
         continue;
       }
       // Not a tab stop — literal $
-      text += processed[i];
+      text += body[i];
       offset++;
       i++;
-    } else if (processed[i] === '\\' && i + 1 < processed.length) {
+    } else if (body[i] === '\\' && i + 1 < body.length) {
       // Snippet escape sequences: \$ → $, \} → }, \\ → \
       // Everything else (e.g. \frac, \alpha) passes through as-is.
-      const next = processed[i + 1];
+      const next = body[i + 1];
       if (next === '$' || next === '}' || next === '{' || next === '\\') {
         text += next;
         offset += 1;
         i += 2;
       } else {
-        text += processed[i] + next;
+        text += body[i] + next;
         offset += 2;
         i += 2;
       }
     } else {
-      text += processed[i];
+      text += body[i];
       offset++;
       i++;
     }
@@ -357,11 +337,7 @@ const autoExpand = EditorView.updateListener.of((update: ViewUpdate) => {
   let isKeystroke = false;
   update.transactions.forEach((tr) => {
     tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
-      const str = inserted.sliceString(0);
-      console.log('[hsnips] change inserted:', JSON.stringify(str), 'length:', str.length);
-      if (str.length >= 1) {
-        isKeystroke = true;
-      }
+      if (inserted.length >= 1) isKeystroke = true;
     });
   });
 
@@ -457,7 +433,6 @@ export function hsnipsExtension(): Extension {
     snippetsField,
     sessionField,
     sessionDecorations,
-    keymap.of(hsnipsKeymap),
     autoExpand,
     hsnipsTheme,
   ];

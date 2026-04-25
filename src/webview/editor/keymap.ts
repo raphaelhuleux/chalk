@@ -18,7 +18,7 @@ export interface EditorActions {
  * see the event — CM6 returning `true` from `run` stops propagation so
  * the two paths don't double-fire.
  */
-export function chalkKeymap(_actions: EditorActions): KeyBinding[] {
+export function chalkKeymap(): KeyBinding[] {
   return [
     {
       key: 'Mod-Alt-b',

@@ -81,17 +81,12 @@ export class ChalkTexEditorProvider implements vscode.CustomTextEditorProvider {
           });
           void postThemeColors();
 
-          // Send HyperSnips data to webview for expansion.
           const hsnipsRaw = loadHSnipsRaw();
-          console.log('[chalk-tex ext] hsnips raw loaded:', hsnipsRaw ? `${hsnipsRaw.length} chars` : 'null');
           if (hsnipsRaw) {
             webviewPanel.webview.postMessage({
               type: 'hsnips',
               content: hsnipsRaw,
             });
-            console.log('[chalk-tex ext] hsnips message sent to webview');
-          } else {
-            console.log('[chalk-tex ext] No hsnips file found');
           }
 
           if (pendingUpdate !== null) {

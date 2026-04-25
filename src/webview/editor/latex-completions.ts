@@ -260,7 +260,7 @@ function latexCompletions(context: CompletionContext): CompletionResult | null {
         .filter(e => e.startsWith(prefix))
         .map(e => {
           if (!isBegin) {
-            return { label: e, type: 'keyword', apply: e + suffix };
+            return { label: e, type: 'keyword', apply: hasClosingBrace ? e : e + '}' };
           }
           const boilerplate = ENV_BOILERPLATE[e];
           if (boilerplate) {
