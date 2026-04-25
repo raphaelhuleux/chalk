@@ -73,3 +73,28 @@ doesn't always trigger cleanly — Workshop short-circuits the chain with
 **Scope note:** Automatic build-on-save is explicitly **out of scope**
 for this issue. Only manual build (palette or keystroke) needs to
 work.
+
+## TODO: Windows support
+
+Currently developed and smoke-tested on macOS only. Two known
+portability bugs to fix before publishing to the marketplace:
+
+1. **`process.env.HOME` is undefined on Windows**
+   ([src/extension/languages/tex.ts:73](src/extension/languages/tex.ts#L73)).
+   The hsnips lookup silently fails on Windows because `HOME` doesn't
+   exist there — Windows uses `USERPROFILE`. Replace with
+   `os.homedir()` from Node's `os` module, which resolves correctly on
+   all three platforms.
+
+2. **Keybindings declare `cmd` as the cross-platform default**
+   ([package.json:34-47](package.json#L34-L47)). The `key` field is
+   the default for all platforms and `mac` overrides it on Mac. Both
+   bindings currently set `key` to `cmd+…`, so on Windows/Linux `cmd`
+   resolves to the Windows/Super key, which conflicts with the OS.
+   Change `key` to `ctrl+alt+b` and `ctrl+shift+;`; keep the existing
+   `mac` overrides.
+
+After these fixes, smoke-test the packaged `.vsix` on a Windows VM
+before claiming cross-platform support in the marketplace listing —
+custom-editor extensions occasionally hit unexpected Chromium webview
+differences that aren't predictable from source review.

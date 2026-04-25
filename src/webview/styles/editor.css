@@ -47,3 +47,80 @@
 .cm-tex-math-preview::selection {
   background-color: transparent !important;
 }
+
+/* ----------------------------------------------------------------------
+   Markdown live-preview rules (imported from chalk-md)
+   ---------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   Headings
+   -------------------------------------------------------------------------- */
+
+/* Headings: bold + colored per-level from the active VS Code theme.
+ *
+ * The --chalk-heading-N variables are injected by the extension host after
+ * it reads the active theme's JSON (src/extension/theme-tokens.ts) and finds
+ * the foreground for scopes matching "heading.N.markdown".
+ *
+ * The fallback chain covers:
+ *   - built-in themes (Dark+, Light+) whose JSON we can't load
+ *   - themes that use `include:` inheritance (not followed)
+ *   - themes that don't color headings per-level
+ * Falls back to the VS Code link accent, which is always defined. */
+.cm-h1, .cm-h2, .cm-h3 { font-weight: 700; }
+.cm-h4, .cm-h5, .cm-h6 { font-weight: 600; }
+.cm-h1 { color: var(--chalk-heading-1, var(--vscode-textLink-foreground)); }
+.cm-h2 { color: var(--chalk-heading-2, var(--vscode-textLink-foreground)); }
+.cm-h3 { color: var(--chalk-heading-3, var(--vscode-textLink-foreground)); }
+.cm-h4 { color: var(--chalk-heading-4, var(--vscode-textLink-foreground)); }
+.cm-h5 { color: var(--chalk-heading-5, var(--vscode-textLink-foreground)); }
+.cm-h6 { color: var(--chalk-heading-6, var(--vscode-textLink-foreground)); }
+
+/* --------------------------------------------------------------------------
+   Inline formatting
+   -------------------------------------------------------------------------- */
+
+.cm-live-bold { font-weight: 700; }
+.cm-live-italic { font-style: italic; }
+.cm-live-bold-italic { font-weight: 700; font-style: italic; }
+.cm-live-strikethrough { text-decoration: line-through; }
+
+.cm-live-code {
+  background: var(--syntax-code-bg);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 0.9em;
+}
+
+.cm-live-link {
+  color: var(--syntax-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Horizontal rule
+   -------------------------------------------------------------------------- */
+
+.cm-live-hr {
+  display: block;
+  border: none;
+  border-top: 1px solid var(--divider);
+  margin: 1em 0;
+  height: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Blockquote (P1)
+   -------------------------------------------------------------------------- */
+
+.cm-live-blockquote {
+  border-left: 3px solid var(--syntax-markup);
+  padding-left: 1em;
+  opacity: 0.85;
+}
+
+.cm-live-quote-mark {
+  opacity: 0.3;
+}
