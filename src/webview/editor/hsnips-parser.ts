@@ -17,6 +17,8 @@ export interface HSnippet {
   automatic: boolean;
   inword: boolean;
   wordboundary: boolean;
+  /** `b` flag — only match when the trigger starts at column 0. */
+  beginofline: boolean;
   /** Context filter source (e.g. `math(context)`). We evaluate it
    *  with a simple `math` helper rather than arbitrary eval. */
   contextFilter?: string;
@@ -143,6 +145,7 @@ export function parseHSnips(content: string): HSnippet[] {
       automatic: flags.includes('A'),
       inword: flags.includes('i'),
       wordboundary: flags.includes('w'),
+      beginofline: flags.includes('b'),
       contextFilter: context,
       priority,
     });

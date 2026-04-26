@@ -318,7 +318,10 @@ function buildDecorations(
   const regions = scanMathRegions(state.doc.toString());
 
   for (const r of regions) {
-    const cursorInside = cursor >= r.from && cursor <= r.to;
+    // r.to is one past the closing delimiter (see MathRegion), so the
+    // cursor is "inside" only when strictly less than r.to. Otherwise
+    // the cursor sitting just past `$` would falsely reveal raw source.
+    const cursorInside = cursor >= r.from && cursor < r.to;
 
     if (cursorInside) {
       // Source stays visible. For display math, drop a live preview
@@ -394,5 +397,5 @@ export function texMathPlugin(): Extension {
 export function isInMathContextTex(state: EditorState, pos: number): boolean {
   const doc = state.doc.toString();
   const regions = scanMathRegions(doc);
-  return regions.some((r) => pos >= r.from && pos <= r.to);
+  return regions.some((r) => pos >= r.from && pos < r.to);
 }

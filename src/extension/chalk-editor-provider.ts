@@ -32,7 +32,9 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
     // Sync-loop prevention. See Chalk's CLAUDE.md for the full reasoning —
     // the short version is that our own WorkspaceEdit fires
     // onDidChangeTextDocument, which we must ignore to avoid a ping-pong.
-    let isApplyingOwnEdit = false;
+    // A depth counter (not a boolean) so overlapping edits don't drop the
+    // guard early; try/finally so a rejected applyEdit doesn't strand it.
+    let applyEditDepth = 0;
 
     let webviewReady = false;
     let pendingUpdate: string | null = null;
@@ -89,15 +91,18 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
         case 'edit': {
           if (typeof msg.text !== 'string') return;
           if (msg.text === document.getText()) return;
-          isApplyingOwnEdit = true;
           const edit = new vscode.WorkspaceEdit();
           edit.replace(
             document.uri,
             new vscode.Range(0, 0, document.lineCount, 0),
             msg.text,
           );
-          await vscode.workspace.applyEdit(edit);
-          isApplyingOwnEdit = false;
+          applyEditDepth++;
+          try {
+            await vscode.workspace.applyEdit(edit);
+          } finally {
+            applyEditDepth--;
+          }
           return;
         }
         case 'open-external': {
@@ -110,7 +115,7 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
 
     const changeSub = vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.document.uri.toString() !== document.uri.toString()) return;
-      if (isApplyingOwnEdit) return;
+      if (applyEditDepth > 0) return;
       postUpdate(e.document.getText());
     });
 

@@ -21,7 +21,6 @@ import {
   StateField,
   StateEffect,
   Extension,
-  Transaction,
 } from '@codemirror/state';
 import type { HSnippet } from './hsnips-parser';
 
@@ -133,6 +132,8 @@ function findMatch(
 
     if (snippet.trigger) {
       const trigger = snippet.trigger;
+      // `b` flag: trigger must sit at column 0.
+      if (snippet.beginofline && col !== trigger.length) continue;
 
       if (snippet.inword) {
         if (textUpToCursor.endsWith(trigger)) {
@@ -175,6 +176,8 @@ function findMatch(
     } else if (snippet.regexp) {
       const m = snippet.regexp.exec(textUpToCursor);
       if (m) {
+        // `b` flag: regex match must start at column 0.
+        if (snippet.beginofline && m.index !== 0) continue;
         const matchStart = line.from + m.index;
         return {
           snippet,
@@ -303,18 +306,22 @@ function expandSnippet(view: EditorView, match: MatchResult): boolean {
     );
   }
 
-  view.dispatch({
-    changes: { from: match.from, to: match.to, insert: text },
-    effects,
-    selection:
-      tabStops.length > 0
-        ? { anchor: tabStops[0].from, head: tabStops[0].to }
-        : { anchor: match.from + text.length },
-    // Group with previous keystroke so Cmd+Z undoes the whole expansion.
-    annotations: [Transaction.addToHistory.of(true)],
-  });
-
-  isExpanding = false;
+  try {
+    view.dispatch({
+      changes: { from: match.from, to: match.to, insert: text },
+      effects,
+      selection:
+        tabStops.length > 0
+          ? { anchor: tabStops[0].from, head: tabStops[0].to }
+          : { anchor: match.from + text.length },
+      // Tag with the same userEvent CM6 uses for typing so the history
+      // extension groups this expansion with the trigger keystroke and
+      // a single Cmd+Z undoes both.
+      userEvent: 'input.type',
+    });
+  } finally {
+    isExpanding = false;
+  }
   return true;
 }
 
@@ -344,9 +351,10 @@ function autoExpandFor(
 
     const match = findMatch(update.state, snippets, isInMathContext);
     if (match) {
-      // Use requestAnimationFrame to dispatch after the current update
-      // completes — keeps undo grouping tight.
-      requestAnimationFrame(() => expandSnippet(update.view, match));
+      // Synchronous dispatch (not rAF) so the expansion lands in the
+      // same history group as the keystroke — see expandSnippet.
+      // Re-entry into this listener is blocked by `isExpanding`.
+      expandSnippet(update.view, match);
     }
   });
 }

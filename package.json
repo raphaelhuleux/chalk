@@ -35,7 +35,7 @@
     "keybindings": [
       {
         "command": "workbench.action.reopenWithEditor",
-        "key": "cmd+shift+;",
+        "key": "ctrl+shift+;",
         "mac": "cmd+shift+;",
         "when": "resourceExtname == .tex || resourceExtname == .md"
       }
