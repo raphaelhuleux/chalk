@@ -10,9 +10,11 @@ docs/
 esbuild.config.js
 tsconfig.json
 vitest.config.ts
-.eslintrc.json
+.eslintrc.cjs
 .gitignore
 CLAUDE.md
 **/*.ts
-**/*.map
+# Source maps must stay excluded even though we re-include dist/ below.
+# Listed AFTER !dist/** so the trailing rule wins for *.map specifically.
 !dist/**
+**/*.map

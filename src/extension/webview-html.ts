@@ -1,26 +1,17 @@
 import * as vscode from 'vscode';
+import { randomBytes } from 'crypto';
 
 /**
- * Cryptographically-unimportant but unique-per-load string used in the CSP
- * to authorize exactly one inline script tag per HTML document. Matches the
- * recommendation in the VS Code Webview API guide.
+ * Unique-per-load nonce used in the CSP to authorize exactly one inline
+ * script tag per HTML document. Generated with crypto.randomBytes
+ * (predictability matters even for nonces — defense in depth).
  */
 export function generateNonce(): string {
-  const chars =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  return randomBytes(16).toString('hex');
 }
 
 /**
  * Builds the HTML shell served inside the webview.
- *
- * Unlike its Chalk-for-Markdown sibling, the tex editor doesn't inject any
- * per-scope theme colors — no headings, no syntax-specific tokens are
- * rendered inline, only math widgets that inherit the editor's foreground.
  *
  * CSP notes:
  *   - default-src 'none' — deny everything by default.

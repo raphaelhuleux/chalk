@@ -1,7 +1,8 @@
 const esbuild = require('esbuild');
 
 const isWatch = process.argv.includes('--watch');
-const isProd = process.env.NODE_ENV === 'production';
+const isProd =
+  process.env.NODE_ENV === 'production' || process.argv.includes('--prod');
 
 const common = {
   bundle: true,

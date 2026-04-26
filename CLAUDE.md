@@ -36,7 +36,7 @@ both `priority: "default"`. `Cmd+Shift+;` reopens with VS Code's picker.
 [src/extension/languages/](src/extension/languages/) holds one
 `LanguageProfile` per file type:
 
-- `tex.ts` — viewType, build command, latex.hsnips loader, tex scope candidates
+- `tex.ts` — viewType, latex.hsnips loader, tex scope candidates
 - `markdown.ts` — viewType, no commands, latex+markdown hsnips loader, empty scopes (md uses heading-color channel separately)
 
 The provider class is generic over the profile. The webview's [setup.ts](src/webview/editor/setup.ts) branches on the `language` field in the init message: `tex` arm uses `stex` + `texMathPlugin` + tex syntax highlight + `latexCompletionExtension`; `md` arm uses `markdown(...)` + `mathPlugin` + `livePreviewPlugin` in a preview compartment.
