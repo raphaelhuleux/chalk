@@ -12,7 +12,7 @@ Supported math environments (with starred variants): `equation`, `align`, `gathe
 
 **Markdown (`.md`)** — bold/italic/strikethrough/code/link decorations, heading colors derived from the active VS Code theme, horizontal rules, blockquotes, and inline+display math.
 
-**Snippets (both)** — reads `~/.config/hsnips/latex.hsnips` (and `markdown.hsnips` for `.md`) using a self-contained CM6 port of the HyperSnips file format. Inline JS blocks (\`\`…\`\`) are parsed but discarded; only static-body snippets are supported. The `draivin.vscode-hsnips` extension is **not** required.
+**Snippets (both)** — ships with a curated `latex.hsnips` for math typing (`fr` → `\frac{}{}`, `sr` → `^{2}`, `cb` → `^{3}`, etc.). Override or extend by dropping your own `~/.config/hsnips/latex.hsnips` (and optionally `markdown.hsnips`) — your file replaces the bundled default. The engine is a self-contained CM6 port of the HyperSnips file format; inline JS blocks (\`\`…\`\`) are parsed but discarded, only static-body snippets are supported. The `draivin.vscode-hsnips` extension is **not** required.
 
 ## What it deliberately doesn't do
 

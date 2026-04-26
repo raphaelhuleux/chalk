@@ -18,6 +18,12 @@ const extensionConfig = {
   format: 'cjs',
   target: 'node16',
   external: ['vscode'],
+  loader: {
+    // Bundle .hsnips assets as inlined strings — read at build time,
+    // embedded as string literals. Default snippets ship with the
+    // extension; user files in ~/.config/hsnips override.
+    '.hsnips': 'text',
+  },
 };
 
 const webviewConfig = {

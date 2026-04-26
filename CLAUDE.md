@@ -45,7 +45,9 @@ The shared hsnips engine ([hsnips-plugin.ts](src/webview/editor/hsnips-plugin.ts
 
 ## Hsnips
 
-Standalone implementation of the HyperSnips file format (no dependency on the `draivin.vscode-hsnips` extension). The engine is fully self-contained in CM6 — VS Code's native snippet machinery doesn't run inside custom-editor webviews. Inline JS blocks (\`\`…\`\`) in `.hsnips` files are parsed but discarded; only static-body snippets are supported. Reads from `hsnips.hsnipsPath` setting first, then `~/.config/hsnips`.
+Standalone implementation of the HyperSnips file format (no dependency on the `draivin.vscode-hsnips` extension). The engine is fully self-contained in CM6 — VS Code's native snippet machinery doesn't run inside custom-editor webviews. Inline JS blocks (\`\`…\`\`) in `.hsnips` files are parsed but discarded; only static-body snippets are supported.
+
+Resolution order: (1) `hsnips.hsnipsPath` setting, (2) `~/.config/hsnips/`, (3) the bundled default at [assets/latex.hsnips](assets/latex.hsnips). User files fully override; we don't merge. The default is embedded as a string literal at build time via esbuild's `text` loader (see [esbuild.config.js](esbuild.config.js)) — the .vsix doesn't carry an extra file, the bundle just grows by the snippet file's size (~23KB).
 
 ## Guardrails
 

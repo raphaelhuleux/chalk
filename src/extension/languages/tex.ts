@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { LanguageProfile } from './types';
 import type { ThemeColors } from '../theme-reader';
+import bundledLatexHsnips from '../../../assets/latex.hsnips';
 
 const TEX_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
   keyword: [
@@ -61,9 +62,18 @@ const TEX_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
 };
 
 /**
- * Loads `latex.hsnips` from the user's HyperSnips directory. Checks the
- * `hsnips.hsnipsPath` setting first (compatible with the real HyperSnips
- * extension), then falls back to ~/.config/hsnips.
+ * Loads `latex.hsnips` for the tex editor. Resolution order:
+ *   1. `hsnips.hsnipsPath` setting (compatible with the real HyperSnips
+ *      extension's setting, so users with that extension installed get
+ *      the same snippets here automatically).
+ *   2. `~/.config/hsnips/latex.hsnips`.
+ *   3. The default `assets/latex.hsnips` bundled with this extension —
+ *      a curated set of math snippets so users without an existing
+ *      hsnips setup get sensible defaults out of the box.
+ *
+ * The user's file fully overrides the bundled default; we don't merge.
+ * Anyone who wants to extend rather than replace can copy
+ * `assets/latex.hsnips` to `~/.config/hsnips/` and edit from there.
  */
 function loadLatexHsnips(): string | null {
   const config = vscode.workspace.getConfiguration('hsnips');
@@ -79,7 +89,8 @@ function loadLatexHsnips(): string | null {
       return readFileSync(filePath, 'utf8');
     }
   }
-  return null;
+
+  return bundledLatexHsnips;
 }
 
 export const texProfile: LanguageProfile = {

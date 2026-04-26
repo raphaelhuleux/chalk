@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { LanguageProfile } from './types';
 import type { ThemeColors } from '../theme-reader';
+import bundledLatexHsnips from '../../../assets/latex.hsnips';
 
 const MD_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
   keyword: [],
@@ -16,9 +17,12 @@ const MD_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
 };
 
 /**
- * Loads hsnips for markdown editing. Always tries `latex.hsnips` (because
- * markdown's `$…$` regions use the same LaTeX math snippets) and
- * additionally `markdown.hsnips` if it exists. Returns concatenated text.
+ * Loads hsnips for markdown editing. Resolution order:
+ *   1. User dir (`hsnips.hsnipsPath` setting OR `~/.config/hsnips/`):
+ *      tries `latex.hsnips` AND `markdown.hsnips`, concatenates both if
+ *      present. The first directory with at least one file wins.
+ *   2. Falls back to the bundled `assets/latex.hsnips` so markdown's
+ *      `$…$` regions still get math snippets out of the box.
  */
 function loadMarkdownHsnips(): string | null {
   const config = vscode.workspace.getConfiguration('hsnips');
@@ -38,7 +42,9 @@ function loadMarkdownHsnips(): string | null {
     }
     if (parts.length > 0) break;
   }
-  return parts.length > 0 ? parts.join('\n') : null;
+
+  if (parts.length > 0) return parts.join('\n');
+  return bundledLatexHsnips;
 }
 
 export const markdownProfile: LanguageProfile = {
