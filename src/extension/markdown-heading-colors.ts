@@ -1,75 +1,43 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
+import {
+  findThemeFilePath,
+  loadMergedTokenColors,
+  type RawTokenColor,
+} from './theme-reader';
 
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 export type HeadingColors = Partial<Record<HeadingLevel, string>>;
 
-interface TokenColorRule {
-  scope?: string | string[];
-  settings?: { foreground?: string };
-}
-
-interface ThemeJson {
-  include?: string;
-  tokenColors?: TokenColorRule[];
-}
-
 /**
  * Best-effort extraction of the active theme's markdown heading colors.
- * Returns an empty object when the theme is built-in (Dark+/Light+ are
- * not addressable on disk), uses `include:` (not followed), or has no
- * matching rules. Callers should provide CSS-var fallbacks.
+ * Async + include-chain aware (delegates to theme-reader's resolver),
+ * so themes like Catppuccin and Tokyo Night that put their token colors
+ * in an `include`d base file are handled correctly. Returns an empty
+ * object for built-in themes (Dark+/Light+ have no on-disk path) or
+ * themes with no matching rules — callers provide CSS-var fallbacks.
  */
-export function getMarkdownHeadingColors(): HeadingColors {
+export async function getMarkdownHeadingColors(): Promise<HeadingColors> {
   const themeName = vscode.workspace
     .getConfiguration('workbench')
     .get<string>('colorTheme');
   if (!themeName) return {};
 
-  const themePath = findThemePath(themeName);
+  const themePath = findThemeFilePath(themeName);
   if (!themePath) return {};
 
-  const theme = loadThemeJson(themePath);
-  if (!theme?.tokenColors) return {};
+  const tokens = await loadMergedTokenColors(themePath);
+  if (tokens.length === 0) return {};
 
   const result: HeadingColors = {};
   for (const level of [1, 2, 3, 4, 5, 6] as const) {
-    const color = findHeadingColor(theme.tokenColors, level);
+    const color = findHeadingColor(tokens, level);
     if (color) result[level] = color;
   }
   return result;
 }
 
-function findThemePath(themeLabel: string): string | null {
-  for (const ext of vscode.extensions.all) {
-    const themes = ext.packageJSON?.contributes?.themes as
-      | Array<{ label?: string; id?: string; path: string }>
-      | undefined;
-    if (!Array.isArray(themes)) continue;
-    for (const theme of themes) {
-      if (theme.label === themeLabel || theme.id === themeLabel) {
-        return path.join(ext.extensionPath, theme.path);
-      }
-    }
-  }
-  return null;
-}
-
-function loadThemeJson(themePath: string): ThemeJson | null {
-  try {
-    const raw = fs.readFileSync(themePath, 'utf8');
-    const stripped = raw
-      .replace(/\/\/.*$/gm, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    return JSON.parse(stripped) as ThemeJson;
-  } catch {
-    return null;
-  }
-}
-
 function findHeadingColor(
-  rules: TokenColorRule[],
+  rules: RawTokenColor[],
   level: HeadingLevel,
 ): string | undefined {
   const target = `heading.${level}.markdown`;

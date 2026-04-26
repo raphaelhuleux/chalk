@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
 import type { LanguageProfile } from './types';
 import type { ThemeColors } from '../theme-reader';
+import { userHsnipsDirs } from '../hsnips-paths';
 import bundledLatexHsnips from '../../../assets/latex.hsnips';
 
 const TEX_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
@@ -76,20 +76,12 @@ const TEX_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
  * `assets/latex.hsnips` to `~/.config/hsnips/` and edit from there.
  */
 function loadLatexHsnips(): string | null {
-  const config = vscode.workspace.getConfiguration('hsnips');
-  const customPath = config.get<string>('hsnipsPath');
-  const searchDirs = [
-    customPath,
-    path.join(process.env.HOME || '', '.config', 'hsnips'),
-  ].filter(Boolean) as string[];
-
-  for (const dir of searchDirs) {
+  for (const dir of userHsnipsDirs()) {
     const filePath = path.join(dir, 'latex.hsnips');
     if (existsSync(filePath)) {
       return readFileSync(filePath, 'utf8');
     }
   }
-
   return bundledLatexHsnips;
 }
 

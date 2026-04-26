@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
 import type { LanguageProfile } from './types';
 import type { ThemeColors } from '../theme-reader';
+import { userHsnipsDirs } from '../hsnips-paths';
 import bundledLatexHsnips from '../../../assets/latex.hsnips';
 
 const MD_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
@@ -25,15 +25,8 @@ const MD_SCOPE_CANDIDATES: Record<keyof ThemeColors, string[]> = {
  *      `$…$` regions still get math snippets out of the box.
  */
 function loadMarkdownHsnips(): string | null {
-  const config = vscode.workspace.getConfiguration('hsnips');
-  const customPath = config.get<string>('hsnipsPath');
-  const searchDirs = [
-    customPath,
-    path.join(process.env.HOME || '', '.config', 'hsnips'),
-  ].filter(Boolean) as string[];
-
   const parts: string[] = [];
-  for (const dir of searchDirs) {
+  for (const dir of userHsnipsDirs()) {
     for (const fname of ['latex.hsnips', 'markdown.hsnips']) {
       const filePath = path.join(dir, fname);
       if (existsSync(filePath)) {
@@ -42,7 +35,6 @@ function loadMarkdownHsnips(): string | null {
     }
     if (parts.length > 0) break;
   }
-
   if (parts.length > 0) return parts.join('\n');
   return bundledLatexHsnips;
 }

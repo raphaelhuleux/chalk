@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { getWebviewHtml, generateNonce } from './webview-html';
 import { readThemeColors } from './theme-reader';
 import { getMarkdownHeadingColors } from './markdown-heading-colors';
+import { userHsnipsDirs } from './hsnips-paths';
 import type { LanguageProfile } from './languages/types';
 
 export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
@@ -53,10 +54,16 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
       webviewPanel.webview.postMessage({ type: 'theme-colors', colors });
     };
 
-    const postHeadingColors = (): void => {
+    const postHeadingColors = async (): Promise<void> => {
       if (this.profile.id !== 'md') return;
-      const colors = getMarkdownHeadingColors();
+      const colors = await getMarkdownHeadingColors();
       webviewPanel.webview.postMessage({ type: 'heading-colors', colors });
+    };
+
+    const postHsnips = (): void => {
+      const content = this.profile.loadHsnips();
+      if (content === null) return;
+      webviewPanel.webview.postMessage({ type: 'hsnips', content });
     };
 
     const messageSub = webviewPanel.webview.onDidReceiveMessage(async (msg) => {
@@ -69,15 +76,8 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
             language: this.profile.id,
           });
           void postThemeColors();
-          postHeadingColors();
-
-          const hsnipsRaw = this.profile.loadHsnips();
-          if (hsnipsRaw) {
-            webviewPanel.webview.postMessage({
-              type: 'hsnips',
-              content: hsnipsRaw,
-            });
-          }
+          void postHeadingColors();
+          postHsnips();
 
           if (pendingUpdate !== null) {
             webviewPanel.webview.postMessage({
@@ -131,8 +131,42 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
     const themeSub = vscode.window.onDidChangeActiveColorTheme(() => {
       if (webviewReady) {
         void postThemeColors();
-        postHeadingColors();
+        void postHeadingColors();
       }
+    });
+
+    // Per-token color overrides under workbench.colorCustomizations and
+    // editor.tokenColorCustomizations don't fire onDidChangeActiveColorTheme;
+    // they fire onDidChangeConfiguration. Without this listener, custom
+    // overrides wouldn't reach the webview until the panel was reopened.
+    const configSub = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (!webviewReady) return;
+      if (
+        e.affectsConfiguration('workbench.colorTheme') ||
+        e.affectsConfiguration('workbench.colorCustomizations') ||
+        e.affectsConfiguration('editor.tokenColorCustomizations')
+      ) {
+        void postThemeColors();
+        void postHeadingColors();
+      }
+      if (e.affectsConfiguration('hsnips.hsnipsPath')) {
+        postHsnips();
+      }
+    });
+
+    // Hot-reload hsnips when the user edits ~/.config/hsnips/*.hsnips
+    // (or whatever hsnips.hsnipsPath points at) while the editor is open.
+    const hsnipsWatchers = userHsnipsDirs().map((dir) => {
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(vscode.Uri.file(dir), '*.hsnips'),
+      );
+      const reload = (): void => {
+        if (webviewReady) postHsnips();
+      };
+      watcher.onDidChange(reload);
+      watcher.onDidCreate(reload);
+      watcher.onDidDelete(reload);
+      return watcher;
     });
 
     webviewPanel.onDidDispose(() => {
@@ -140,6 +174,8 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
       changeSub.dispose();
       viewStateSub.dispose();
       themeSub.dispose();
+      configSub.dispose();
+      for (const w of hsnipsWatchers) w.dispose();
     });
   }
 }

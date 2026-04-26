@@ -20,7 +20,7 @@ export interface ThemeColors {
 
 type ScopeCandidates = Record<keyof ThemeColors, string[]>;
 
-interface RawTokenColor {
+export interface RawTokenColor {
   scope?: string | string[];
   settings?: { foreground?: string; fontStyle?: string };
 }
@@ -93,7 +93,7 @@ export async function diagnoseThemeResolution(
  * Find the filesystem path of the active theme's JSON definition by
  * iterating all installed extensions' `contributes.themes` entries.
  */
-function findThemeFilePath(themeLabel: string): string | null {
+export function findThemeFilePath(themeLabel: string): string | null {
   for (const ext of vscode.extensions.all) {
     const themes = ext.packageJSON?.contributes?.themes as
       | { label: string; id?: string; path: string }[]
@@ -113,7 +113,7 @@ function findThemeFilePath(themeLabel: string): string | null {
  * tokenColors with later entries overriding earlier ones (CSS-style
  * cascade). Depth-capped at 4 to avoid pathological loops.
  */
-async function loadMergedTokenColors(
+export async function loadMergedTokenColors(
   themePath: string,
   depth = 0,
 ): Promise<RawTokenColor[]> {
@@ -203,10 +203,10 @@ export function resolveScopeColor(
   let bestScore = -1;
   const targetSegments = targetScope.split('.');
 
-  tokens.forEach((t, index) => {
+  for (const t of tokens) {
     const scopes = normalizeScopes(t.scope);
     const foreground = t.settings?.foreground;
-    if (!foreground) return;
+    if (!foreground) continue;
     for (const s of scopes) {
       const score = prefixScore(s, targetSegments);
       // `>=` so later entries with the same score take precedence.
@@ -215,8 +215,7 @@ export function resolveScopeColor(
         bestColor = foreground;
       }
     }
-    void index;
-  });
+  }
 
   return bestColor;
 }
