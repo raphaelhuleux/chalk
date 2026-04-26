@@ -26,7 +26,7 @@ export class KaTeXCache {
   private cache: Map<string, string>;
   private maxSize: number;
 
-  constructor(maxSize: number = 500) {
+  constructor(maxSize = 500) {
     this.cache = new Map();
     this.maxSize = maxSize;
   }

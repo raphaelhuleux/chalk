@@ -12,18 +12,14 @@
 
 import {
   EditorView,
-  ViewPlugin,
   ViewUpdate,
   Decoration,
-  DecorationSet,
-  WidgetType,
   KeyBinding,
 } from '@codemirror/view';
 import {
   EditorState,
   StateField,
   StateEffect,
-  Compartment,
   Extension,
   Transaction,
 } from '@codemirror/state';

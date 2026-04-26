@@ -8,8 +8,7 @@ import {
   CompletionResult,
   Completion,
 } from '@codemirror/autocomplete';
-import { Extension, Transaction } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { Extension } from '@codemirror/state';
 
 // ── Environment names ───────────────────────────────────────────────
 

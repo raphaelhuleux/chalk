@@ -1,8 +1,8 @@
 # Known issues
 
-## LaTeX Workshop `build` command does not work from inside Chalk-TeX
+## LaTeX Workshop `build` command does not work from inside Chalk's tex editor
 
-**Desired behavior:** With a `.tex` file open in the Chalk-TeX custom editor,
+**Desired behavior:** With a `.tex` file open in Chalk's tex editor,
 running *LaTeX Workshop: Build LaTeX project* from the Command Palette
 (`Cmd+Shift+P`) should compile the file exactly as it would in VS Code's
 native text editor. Automatic build-on-save is **not** required; manual
@@ -20,7 +20,7 @@ paths in order:
 2. `findRootSelf()` — reads `\documentclass` from the same
 3. `findRootInWorkspace()` — fallback scan of the workspace folder
 
-A VS Code `CustomTextEditorProvider` (which Chalk-TeX is) leaves
+A VS Code `CustomTextEditorProvider` (which Chalk is) leaves
 `activeTextEditor` as `undefined`, so paths 1 and 2 can't run. Path 3
 doesn't always trigger cleanly — Workshop short-circuits the chain with
 "not a LaTeX document" in some versions.
@@ -67,7 +67,7 @@ doesn't always trigger cleanly — Workshop short-circuits the chain with
    workspace setting that Workshop reads independently of
    `activeTextEditor`.
 5. Escalate to the side-panel-preview architecture (see CLAUDE.md
-   architecture discussion): native editor for editing + Chalk-TeX as a
+   architecture discussion): native editor for editing + Chalk as a
    read-mostly preview pane.
 
 **Scope note:** Automatic build-on-save is explicitly **out of scope**

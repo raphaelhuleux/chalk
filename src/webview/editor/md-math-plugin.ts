@@ -164,9 +164,6 @@ export const mathSyntax: MarkdownConfig = {
   parseBlock: [displayMathParser],
 };
 
-// Backward compat
-export { mathSyntax as inlineMathSyntax };
-
 // ---------------------------------------------------------------------------
 //  KaTeX inline widget
 // ---------------------------------------------------------------------------
