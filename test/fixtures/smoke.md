@@ -18,9 +18,11 @@ A list:
 
 A [link](https://example.com).
 
-1. fdjqklmfs
-2. fjdsqklmfjqs
-3.
+A numbered list
+
+1. first
+2. second
+3. third
 
 A literal dollar: \$5 (should NOT be math).
 

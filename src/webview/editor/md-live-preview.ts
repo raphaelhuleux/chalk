@@ -239,6 +239,15 @@ function buildLivePreviewDecorations(view: EditorView): DecorationSet {
           }
         }
 
+        // ---- List markers (- / * / + and 1. / 2. / …) ----
+        // Both BulletList and OrderedList produce a ListMark child for the
+        // marker itself. We mark (not replace) it: structural punctuation
+        // stays visible at all times, like the # in a heading. Don't
+        // return — children inside list items still need processing.
+        if (node.name === 'ListMark') {
+          builder.add(node.from, node.to, Decoration.mark({ class: 'cm-live-list-mark' }));
+        }
+
         // ---- Horizontal Rule ----
         if (node.name === 'HorizontalRule') {
           const line = state.doc.lineAt(node.from);

@@ -124,3 +124,15 @@
 .cm-live-quote-mark {
   opacity: 0.3;
 }
+
+/* --------------------------------------------------------------------------
+   List markers
+   -------------------------------------------------------------------------- */
+
+/* Bullet (- * +) and ordered (1. 2. …) markers. Theme-aware accent with a
+ * --chalk-list-mark override hook (mirrors the --chalk-heading-N pattern).
+ * Bold so the marker reads as structural, not as content. */
+.cm-live-list-mark {
+  color: var(--chalk-list-mark, var(--vscode-textLink-foreground));
+  font-weight: 600;
+}
