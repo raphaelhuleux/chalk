@@ -6,7 +6,7 @@ Two `viewType`s share one host shell, KaTeX cache, theme reader, and hsnips snip
 
 ## Status (2026-04-26)
 
-v0.3.1, published to the VS Code Marketplace as
+v0.3.2, published to the VS Code Marketplace as
 `RaphalHuleux.chalk-math` (GitHub: `raphaelhuleux/chalk`). End-users
 see "Chalk" everywhere — `displayName` drives the marketplace listing
 title, search results, install dialog. The technical `name` field is
@@ -94,7 +94,7 @@ Resolution order: (1) `hsnips.hsnipsPath` setting, (2) `~/.config/hsnips/`, (3) 
 npm install
 npm run build          # esbuild: extension + webview
 npm run package        # produces chalk-X.Y.Z.vsix
-code --install-extension chalk-math-0.3.1.vsix --force
+code --install-extension chalk-math-0.3.2.vsix --force
 ```
 
 Test fixtures: [test/fixtures/smoke.tex](test/fixtures/smoke.tex),

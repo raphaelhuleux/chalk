@@ -6,6 +6,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-04-26
+
+### Changed
+
+- README now points users at the Marketplace install URL
+  (`vscode:extension/RaphalHuleux.chalk-math`) so a single-click install
+  works from the rendered listing on github.com. No code changes —
+  ships the `a9a0f93` README update as a versioned release.
+
 ## [0.3.1] — 2026-04-26
 
 ### Changed

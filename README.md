@@ -44,7 +44,7 @@ The `Chalk: Diagnose Theme Resolution` command (Cmd/Ctrl+Shift+P → type "Chalk
 npm install
 npm run build           # esbuild: extension + webview
 npm run package         # production build → chalk-X.Y.Z.vsix
-code --install-extension chalk-math-0.3.1.vsix --force
+code --install-extension chalk-math-0.3.2.vsix --force
 ```
 
 `npm test` runs the vitest suite; `npm run lint` runs eslint.
