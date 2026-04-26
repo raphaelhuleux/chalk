@@ -68,6 +68,18 @@ const sessionField = StateField.define<SnippetSession | null>({
       const to = tr.changes.mapPos(ts.to, -1);
       return { ...ts, from, to: Math.max(from, to) };
     });
+    // Kill the session if the cursor wandered outside the bounding box of
+    // every tab stop — covers click-away, arrow-out-then-type, or typing
+    // far from the active placeholder. Without this, mapPos silently
+    // drifts the stale ranges across whatever now occupies them.
+    let min = Infinity;
+    let max = -Infinity;
+    for (const s of mapped) {
+      if (s.from < min) min = s.from;
+      if (s.to > max) max = s.to;
+    }
+    const head = tr.newSelection.main.head;
+    if (head < min || head > max) return null;
     return { ...session, tabStops: mapped };
   },
 });
@@ -91,6 +103,8 @@ const sessionDecorations = EditorView.decorations.compute(
 
 // ── Context filter ──────────────────────────────────────────────────
 
+const loggedUnknownContexts = new Set<string>();
+
 function passesContextFilter(
   snippet: HSnippet,
   state: EditorState,
@@ -98,11 +112,20 @@ function passesContextFilter(
   isInMathContext: (state: EditorState, pos: number) => boolean,
 ): boolean {
   if (!snippet.contextFilter) return true;
-  // Support the standard `math(context)` filter from .hsnips files.
-  if (snippet.contextFilter.includes('math')) {
+  // Standard HyperSnips filter — exact match, not substring, so user
+  // contexts like notmath(context) or math2(context) don't accidentally
+  // route through the math gate.
+  if (snippet.contextFilter === 'math(context)') {
     return isInMathContext(state, pos);
   }
-  // Unknown context filters: skip the snippet to be safe.
+  // Unknown context filters: warn once per filter so users notice their
+  // snippets vanished, then reject to be safe.
+  if (!loggedUnknownContexts.has(snippet.contextFilter)) {
+    loggedUnknownContexts.add(snippet.contextFilter);
+    console.warn(
+      `[chalk hsnips] unknown context filter ${JSON.stringify(snippet.contextFilter)} — snippet skipped. Only "math(context)" is supported.`,
+    );
+  }
   return false;
 }
 
@@ -242,11 +265,14 @@ function processBody(
           }
         }
       }
-      // $N form (single digit)
+      // $N form — scan the full digit run so $10, $11, … parse correctly
+      // (the original single-digit slice would split $10 into $1 + literal 0).
       if (/[0-9]/.test(body[i + 1])) {
-        const index = parseInt(body[i + 1], 10);
+        let j = i + 2;
+        while (j < body.length && /[0-9]/.test(body[j])) j++;
+        const index = parseInt(body.slice(i + 1, j), 10);
         tabStops.push({ from: offset, to: offset, index });
-        i += 2;
+        i = j;
         continue;
       }
       // Not a tab stop — literal $

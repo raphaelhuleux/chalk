@@ -9,6 +9,7 @@ import {
   Completion,
 } from '@codemirror/autocomplete';
 import { Extension } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 
 // ── Environment names ───────────────────────────────────────────────
 
@@ -245,13 +246,16 @@ function latexCompletions(context: CompletionContext): CompletionResult | null {
     const prefix = envMatch.text.slice(braceIdx + 1);
     const from = envMatch.from + braceIdx + 1;
 
-    // Check if there's already a closing } after the cursor — if so, consume it.
-    const afterCursor = context.state.sliceDoc(context.pos, context.pos + 1);
-    const hasClosingBrace = afterCursor === '}';
-    const to = hasClosingBrace ? context.pos + 1 : context.pos;
-
     // Determine if we're in \begin or \end.
     const isBegin = envMatch.text.startsWith('\\begin');
+
+    // Resolve the closing-brace consume at apply-time, not source-time —
+    // CM6 may invoke apply long after the source ran, with a different
+    // cursor position, and using the closed-over `context.pos` would
+    // delete the wrong range.
+    const consumeBrace = (view: EditorView, end: number): number => {
+      return view.state.sliceDoc(end, end + 1) === '}' ? end + 1 : end;
+    };
 
     return {
       from,
@@ -259,16 +263,24 @@ function latexCompletions(context: CompletionContext): CompletionResult | null {
         .filter(e => e.startsWith(prefix))
         .map(e => {
           if (!isBegin) {
-            return { label: e, type: 'keyword', apply: hasClosingBrace ? e : e + '}' };
+            return {
+              label: e,
+              type: 'keyword',
+              apply: (view, _completion, from2, to2) => {
+                view.dispatch({
+                  changes: { from: from2, to: consumeBrace(view, to2), insert: e },
+                });
+              },
+            };
           }
           const boilerplate = ENV_BOILERPLATE[e];
           if (boilerplate) {
             return {
               label: e,
               type: 'keyword',
-              apply: (view, completion, from2, to2) => {
+              apply: (view, _completion, from2, to2) => {
                 view.dispatch({
-                  changes: { from: from2, to, insert: boilerplate('}') },
+                  changes: { from: from2, to: consumeBrace(view, to2), insert: boilerplate('}') },
                 });
               },
             };
@@ -277,9 +289,9 @@ function latexCompletions(context: CompletionContext): CompletionResult | null {
           return {
             label: e,
             type: 'keyword',
-            apply: (view, completion, from2, to2) => {
+            apply: (view, _completion, from2, to2) => {
               view.dispatch({
-                changes: { from: from2, to, insert: e + '}\n    \n\\end{' + e + '}' },
+                changes: { from: from2, to: consumeBrace(view, to2), insert: e + '}\n    \n\\end{' + e + '}' },
               });
             },
           };
@@ -293,7 +305,11 @@ function latexCompletions(context: CompletionContext): CompletionResult | null {
   if (cmdMatch) {
     return {
       from: cmdMatch.from,
-      options: COMMANDS.map(c => ({ ...c, type: 'function' })),
+      // Pre-filter by prefix so the initial render isn't 100+ items.
+      // CM6 still re-filters via validFor as the user types.
+      options: COMMANDS
+        .filter(c => c.label.startsWith(cmdMatch.text))
+        .map(c => ({ ...c, type: 'function' })),
       validFor: /^\\[a-zA-Z]*$/,
     };
   }

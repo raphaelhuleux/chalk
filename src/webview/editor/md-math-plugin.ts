@@ -347,9 +347,22 @@ const requestPreviewUpdate = StateEffect.define<null>();
  * Extract LaTeX content from a DisplayMath node's full text.
  * Works for all forms: traditional ($$\n...\n$$), single-line ($$...$$),
  * and multi-line inline ($$...\n...\n...$$).
+ *
+ * Defensive: if the trimmed input isn't actually wrapped in `$$ … $$`
+ * (would indicate the parser shape drifted), returns the trimmed text
+ * as-is so KaTeX surfaces a parse error rather than us silently
+ * shaving two real content chars off each end.
  */
 export function extractDisplayLatex(text: string): string {
-  return text.trim().slice(2, -2).trim();
+  const trimmed = text.trim();
+  if (
+    trimmed.length < 4 ||
+    !trimmed.startsWith('$$') ||
+    !trimmed.endsWith('$$')
+  ) {
+    return trimmed;
+  }
+  return trimmed.slice(2, -2).trim();
 }
 
 function buildDisplayMathDecorations(state: EditorState): DecorationSet {
