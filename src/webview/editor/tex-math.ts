@@ -318,10 +318,24 @@ function buildDecorations(
   const regions = scanMathRegions(state.doc.toString());
 
   for (const r of regions) {
-    // r.to is one past the closing delimiter (see MathRegion), so the
-    // cursor is "inside" only when strictly less than r.to. Otherwise
-    // the cursor sitting just past `$` would falsely reveal raw source.
-    const cursorInside = cursor >= r.from && cursor < r.to;
+    // Two different "inside" rules:
+    //   - Display math (`$$…$$`, `\[…\]`, environments): line-based.
+    //     Source stays visible whenever the cursor is on any line the
+    //     region touches, including the delimiter lines. This makes
+    //     selecting the whole block (shift-down past the closing $$)
+    //     work without the widget collapsing under the cursor mid-drag.
+    //   - Inline math (`$…$`, `\(…\)`): char-based, with strict-less-
+    //     than r.to (one past closing delim). Multiple inline regions
+    //     can share a line, so we want only the active one to reveal.
+    let cursorInside: boolean;
+    if (r.display) {
+      const startLine = state.doc.lineAt(r.from).number;
+      const endLine = state.doc.lineAt(r.to - 1).number;
+      const cursorLine = state.doc.lineAt(cursor).number;
+      cursorInside = cursorLine >= startLine && cursorLine <= endLine;
+    } else {
+      cursorInside = cursor >= r.from && cursor < r.to;
+    }
 
     if (cursorInside) {
       // Source stays visible. For display math, drop a live preview

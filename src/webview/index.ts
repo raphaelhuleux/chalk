@@ -4,6 +4,7 @@ import { createEditor, type EditorActions, type Language } from './editor/setup'
 import { setVsCodeApi, sendEdit, sendReady } from './api';
 import { parseHSnips } from './editor/hsnips-parser';
 import { setSnippets } from './editor/hsnips-plugin';
+import { diffReplace } from './utils/text-diff';
 
 // KaTeX's CSS needs to be bundled. Importing it from the entry point causes
 // esbuild to emit dist/webview.css alongside dist/webview.js.
@@ -92,14 +93,15 @@ function handleMessage(msg: ExtensionMessage): void {
     }
     case 'update': {
       if (!view) return;
-      if (msg.text === view.state.doc.toString()) return;
+      const oldText = view.state.doc.toString();
+      if (msg.text === oldText) return;
       lastKnownText = msg.text;
+      // Replace only the differing slice. A naive from:0/to:length
+      // dispatch makes CM6 collapse any cursor inside the replaced range
+      // to position 0 — see utils/text-diff.ts for the full reasoning.
+      const { from, to, insert } = diffReplace(oldText, msg.text);
       view.dispatch({
-        changes: {
-          from: 0,
-          to: view.state.doc.length,
-          insert: msg.text,
-        },
+        changes: { from, to, insert },
         // Sync-back from extension host — don't pollute undo history.
         annotations: [Transaction.addToHistory.of(false)],
       });

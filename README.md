@@ -1,6 +1,6 @@
 # Chalk
 
-Live-preview editor for `.tex` and `.md` files, with KaTeX math rendering and HyperSnips-style snippet expansion. Two custom-editor `viewType`s share one host shell, KaTeX cache, theme reader, and snippet engine.
+Live-preview editor for `.tex` and `.md` files à la Obsidian / Typora, with KaTeX math rendering and HyperSnips-style snippet expansion. Two custom-editor `viewType`s share one host shell, KaTeX cache, theme reader, and snippet engine.
 
 ## What it does
 
@@ -42,7 +42,7 @@ The `Chalk: Diagnose Theme Resolution` command (Cmd/Ctrl+Shift+P → type "Chalk
 npm install
 npm run build           # esbuild: extension + webview
 npm run package         # production build → chalk-X.Y.Z.vsix
-code --install-extension chalk-0.2.0.vsix --force
+code --install-extension chalk-0.3.0.vsix --force
 ```
 
 `npm test` runs the vitest suite; `npm run lint` runs eslint.

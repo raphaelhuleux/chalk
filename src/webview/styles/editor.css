@@ -10,6 +10,18 @@
   display: block;
   text-align: center;
   padding: 0.5em 0;
+  /* Numbered equations (`\begin{equation}`, `\tag{}`) and wide KaTeX
+   * output otherwise force `.cm-content` (CM6's flex-shrink:0 content
+   * area) wider than the viewport, surfacing the editor-wide scrollbar
+   * on `.cm-scroller`. `overflow: clip` alone only paint-clips; it
+   * doesn't stop descendants' intrinsic width from propagating up.
+   * `contain: inline-size` cuts that propagation: the widget's inline
+   * size is determined from outside (width: 100% of the line) and
+   * descendants' content widths are ignored when sizing this box. */
+  width: 100%;
+  min-width: 0;
+  contain: inline-size;
+  overflow-x: clip;
 }
 
 /* Parse errors: show the raw LaTeX in a subtle error state so the user
@@ -31,20 +43,52 @@
   margin-top: 0.25em;
   border-top: 1px dashed var(--vscode-editorWidget-border, var(--vscode-editor-foreground));
   opacity: 0.75;
+  /* Same overflow-containment story as .cm-tex-math-display above. */
+  width: 100%;
+  min-width: 0;
+  contain: inline-size;
+  overflow-x: clip;
 }
 
-/* CM6 transparent-izes the browser's native ::selection only inside
- * `.cm-line`. Block-replace widgets live OUTSIDE `.cm-line`, so the
- * browser paints its native (opaque) selection on top of our math
- * widgets while CM6's layered selection stays correctly behind. Extend
- * the transparency to our widgets and their descendants (KaTeX output
- * is deeply nested spans). */
+/* Suppress the browser's native ::selection across the entire webview.
+ *
+ * CM6's drawSelection() draws the visible selection as <div>s in a
+ * z-index:-1 layer BEHIND text (.cm-selectionBackground, themed in
+ * theme.ts). For that layered version to be the only visible selection,
+ * the browser's native ::selection must be transparent — otherwise it
+ * paints an opaque overlay (macOS active = blue/white, inactive = grey)
+ * ON TOP of the text and the text becomes unreadable.
+ *
+ * Why a universal `::selection` rule, not a scoped one:
+ * CM6's defaultTheme already does this scoped to `.cm-line ::selection`,
+ * but inside a VS Code custom-editor webview, VS Code injects its own
+ * stylesheet AFTER our static CSS loads, with rules that can win against
+ * scoped + !important via equal-specificity-later-declared. A universal
+ * `::selection` is the only way to be certain nothing reclaims it.
+ * Our webview is exclusively a CM6 editor — there's no other UI element
+ * that legitimately wants its own ::selection styling — so the universal
+ * rule is safe.
+ *
+ * Both `background-color` AND `color` must override: macOS's active
+ * ::selection also sets `color: white` on selected text. Without
+ * overriding `color`, even transparent-background-only would leave
+ * white-on-white text once CM6's semi-transparent layered selection
+ * paints behind it.
+ *
+ * The math-widget classes are kept in the selector list as a defense in
+ * depth — they live outside `.cm-line` and so wouldn't be matched by
+ * CM6's default scoped rule even if it weren't being overridden. */
+::selection,
+.cm-editor ::selection,
+.cm-content ::selection,
+.cm-line ::selection,
 .cm-tex-math-display ::selection,
 .cm-tex-math-display::selection,
 .cm-tex-math-inline ::selection,
 .cm-tex-math-inline::selection,
 .cm-tex-math-preview ::selection,
 .cm-tex-math-preview::selection {
+  background: transparent !important;
   background-color: transparent !important;
 }
 

@@ -381,7 +381,14 @@ function buildDisplayMathDecorations(state: EditorState): DecorationSet {
       const fullText = state.doc.sliceString(blockFrom, blockTo);
       const latex = extractDisplayLatex(fullText);
 
-      const cursorInside = cursor.from >= blockFrom && cursor.to <= blockTo;
+      // Line-based for display math: source stays visible whenever the
+      // cursor's line touches the block (including the delimiter lines),
+      // so selecting the whole `$$…$$` block doesn't collapse under the
+      // cursor mid-drag. Inline math (above) keeps its char-based check.
+      const startLine = state.doc.lineAt(blockFrom).number;
+      const endLine = state.doc.lineAt(Math.max(blockFrom, blockTo - 1)).number;
+      const cursorLine = state.doc.lineAt(cursor.head).number;
+      const cursorInside = cursorLine >= startLine && cursorLine <= endLine;
 
       if (cursorInside) {
         // EDIT MODE: preview widget after closing $$

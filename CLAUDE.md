@@ -69,7 +69,7 @@ Resolution order: (1) `hsnips.hsnipsPath` setting, (2) `~/.config/hsnips/`, (3) 
 npm install
 npm run build          # esbuild: extension + webview
 npm run package        # produces chalk-X.Y.Z.vsix
-code --install-extension chalk-0.2.0.vsix --force
+code --install-extension chalk-0.3.0.vsix --force
 ```
 
 Test fixtures: [test/fixtures/smoke.tex](test/fixtures/smoke.tex),

@@ -27,7 +27,15 @@
   display: block;
   text-align: center;
   padding: 0.25em 0;
-  overflow-x: auto;
+  /* See editor.css `.cm-tex-math-display` for the rationale: `contain:
+   * inline-size` stops KaTeX descendants from forcing `.cm-content`
+   * wider than the viewport (which would surface CM6's editor-wide
+   * horizontal scrollbar). `overflow-x: clip` paint-clips the residual
+   * tag/strut overflow without spawning a per-widget scrollbar. */
+  width: 100%;
+  min-width: 0;
+  contain: inline-size;
+  overflow-x: clip;
 }
 
 /* Display math: live preview below source (cursor inside) */
