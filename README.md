@@ -8,7 +8,7 @@ Open a `.tex` or `.md` file. Math delimited by `$…$`, `$$…$$`, `\(…\)`, `\
 
 Supported math environments (with starred variants): `equation`, `align`, `gather`, `multline`, `alignat`, `eqnarray`.
 
-**LaTeX (`.tex`)** — `stex` syntax highlighting, autocomplete for `\begin{…}` environments and common commands (`\frac`, `\alpha`, Greek letters, decorations, accents), and `Cmd+Alt+B` for LaTeX Workshop's build command (currently non-functional — see `KNOWN_ISSUES.md`).
+**LaTeX (`.tex`)** — `stex` syntax highlighting, autocomplete for `\begin{…}` environments and common commands (`\frac`, `\alpha`, Greek letters, decorations, accents). To compile, hit `Cmd+Shift+;` to switch to VS Code's plain text editor and use LaTeX Workshop from there — Chalk doesn't bridge the build command.
 
 **Markdown (`.md`)** — bold/italic/strikethrough/code/link decorations, heading colors derived from the active VS Code theme, horizontal rules, blockquotes, and inline+display math.
 

@@ -3,7 +3,7 @@ import type { ThemeColors } from '../theme-reader';
 /**
  * Per-language data passed into ChalkEditorProvider. Captures everything
  * the host shell needs to know that depends on the file type — viewType
- * registration, allowed webview commands, hsnips loading, theme scopes.
+ * registration, hsnips loading, theme scopes.
  *
  * The webview-side language switch (markdown vs stex CM extensions, math
  * detection strategy, live-preview decorations) is driven separately by
@@ -17,10 +17,6 @@ export interface LanguageProfile {
 
   /** Custom-editor viewType registered in package.json's customEditors. */
   viewType: string;
-
-  /** Commands the webview is allowed to invoke via the `command` message.
-   *  Keeps the message bridge from becoming an arbitrary-command executor. */
-  allowedWebviewCommands: Set<string>;
 
   /** TextMate scope candidates per CM6 highlight tag, used by theme-reader
    *  to look up colors in the active theme's tokenColors. Empty for languages

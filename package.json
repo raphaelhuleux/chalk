@@ -27,11 +27,6 @@
     ],
     "commands": [
       {
-        "command": "chalk.build",
-        "title": "Build (LaTeX Workshop)",
-        "category": "Chalk"
-      },
-      {
         "command": "chalk.diagnoseTheme",
         "title": "Diagnose Theme Resolution",
         "category": "Chalk"
@@ -43,12 +38,6 @@
         "key": "cmd+shift+;",
         "mac": "cmd+shift+;",
         "when": "resourceExtname == .tex || resourceExtname == .md"
-      },
-      {
-        "command": "chalk.build",
-        "key": "cmd+alt+b",
-        "mac": "cmd+alt+b",
-        "when": "activeCustomEditorId == 'chalk.texEditor'"
       }
     ]
   },

@@ -1,7 +1,6 @@
 import { EditorView } from '@codemirror/view';
 import { Transaction } from '@codemirror/state';
-import { createEditor, type Language } from './editor/setup';
-import type { EditorActions } from './editor/keymap';
+import { createEditor, type EditorActions, type Language } from './editor/setup';
 import { setVsCodeApi, sendEdit, sendReady } from './api';
 import { parseHSnips } from './editor/hsnips-parser';
 import { setSnippets } from './editor/hsnips-plugin';

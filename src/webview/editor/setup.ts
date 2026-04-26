@@ -33,7 +33,6 @@ import { markdown } from '@codemirror/lang-markdown';
 import { Strikethrough, TaskList } from '@lezer/markdown';
 
 import { themeCompartment, previewCompartment, vsCodeTheme } from './theme';
-import { chalkKeymap, EditorActions } from './keymap';
 import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
 
 import { texMathPlugin, isInMathContextTex } from './tex-math';
@@ -45,6 +44,13 @@ import { livePreviewPlugin } from './md-live-preview';
 
 export type Language = 'tex' | 'md';
 
+/** Callbacks the webview bootstrap supplies to the editor. The only
+ *  channel into the host is content-change notification; everything
+ *  else (save, reopen, etc.) is owned by VS Code. */
+export interface EditorActions {
+  onContentChange: (content: string) => void;
+}
+
 export function buildExtensions(
   actions: EditorActions,
   language: Language,
@@ -52,7 +58,6 @@ export function buildExtensions(
   const shared = [
     keymap.of(hsnipsKeymap),
     keymap.of([{ key: 'Tab', run: acceptCompletion }]),
-    keymap.of(chalkKeymap()),
 
     keymap.of([indentWithTab]),
     keymap.of(closeBracketsKeymap),

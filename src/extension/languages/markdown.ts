@@ -44,7 +44,6 @@ function loadMarkdownHsnips(): string | null {
 export const markdownProfile: LanguageProfile = {
   id: 'md',
   viewType: 'chalk.markdownEditor',
-  allowedWebviewCommands: new Set(),
   themeScopeCandidates: MD_SCOPE_CANDIDATES,
   loadHsnips: loadMarkdownHsnips,
 };

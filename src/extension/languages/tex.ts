@@ -85,7 +85,6 @@ function loadLatexHsnips(): string | null {
 export const texProfile: LanguageProfile = {
   id: 'tex',
   viewType: 'chalk.texEditor',
-  allowedWebviewCommands: new Set(['chalk.build']),
   themeScopeCandidates: TEX_SCOPE_CANDIDATES,
   loadHsnips: loadLatexHsnips,
 };

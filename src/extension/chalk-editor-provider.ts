@@ -105,16 +105,6 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
           void vscode.env.openExternal(vscode.Uri.parse(msg.url));
           return;
         }
-        case 'command': {
-          // Whitelist: only commands explicitly owned by Chalk can be
-          // dispatched from the webview. Prevents an accidental future
-          // regression where this handler turns into an arbitrary-command
-          // executor for anyone who can post a message.
-          if (typeof msg.id !== 'string') return;
-          if (!this.profile.allowedWebviewCommands.has(msg.id)) return;
-          await vscode.commands.executeCommand(msg.id);
-          return;
-        }
       }
     });
 

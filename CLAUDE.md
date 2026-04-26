@@ -4,9 +4,16 @@ Live-preview editor for `.tex` and `.md` files with first-class math support, pa
 
 Two `viewType`s share one host shell, KaTeX cache, theme reader, and hsnips snippet engine; per-language CodeMirror extensions diverge in [setup.ts](src/webview/editor/setup.ts).
 
-## Status (2026-04-25)
+## Status (2026-04-26)
 
-Merged from chalk-tex (LaTeX-only) and the archived chalk-md. Tex math preview works. Markdown headings + math + live-preview work. Hsnips shared across both. LaTeX Workshop bridge for `chalk.build` (`Cmd+Alt+B`) is **non-functional** — see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+Merged from chalk-tex (LaTeX-only) and the archived chalk-md. Tex math
+preview works. Markdown headings + math + live-preview work. Hsnips
+shared across both. **No build bridge** — to compile a `.tex` file,
+hit `Cmd+Shift+;` to switch to the plain text editor and use LaTeX
+Workshop from there. The webview-side build path (formerly `chalk.build`
++ `Cmd+Alt+B`) was removed because Workshop's root detection depends
+on `activeTextEditor` which is undefined when a `CustomTextEditorProvider`
+owns the tab.
 
 ## Architecture
 
@@ -16,10 +23,7 @@ Extension host (Node) ↔ webview (Chromium sandbox) via `postMessage`:
   `theme-colors({colors})`, `heading-colors({colors})` (md only),
   `hsnips({content})`
 - `webview → extension`: `ready`, `edit({text})`,
-  `open-external({url})`, `command({id})`
-
-`command` is whitelisted per language profile via
-`allowedWebviewCommands`. Tex allows `chalk.build`; md allows nothing.
+  `open-external({url})`
 
 Sync strategy: eager full-text replace. `isApplyingOwnEdit` flag prevents
 edit→WorkspaceEdit→onDidChangeTextDocument→update→edit loops.

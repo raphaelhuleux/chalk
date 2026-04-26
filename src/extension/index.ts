@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { ChalkEditorProvider } from './chalk-editor-provider';
-import { buildWithWorkshop } from './workshop-bridge';
 import { diagnoseThemeResolution } from './theme-reader';
 import { texProfile } from './languages/tex';
 import { markdownProfile } from './languages/markdown';
@@ -27,7 +26,6 @@ export function activate(context: vscode.ExtensionContext): void {
       new ChalkEditorProvider(context, markdownProfile),
       editorOptions,
     ),
-    vscode.commands.registerCommand('chalk.build', buildWithWorkshop),
     vscode.commands.registerCommand('chalk.diagnoseTheme', async () => {
       // Pick the profile that matches the currently-focused custom editor;
       // fall back to tex.

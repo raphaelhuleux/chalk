@@ -37,7 +37,3 @@ export function sendEdit(text: string): void {
 export function sendReady(): void {
   postMessage({ type: 'ready' });
 }
-
-export function sendCommand(id: string): void {
-  postMessage({ type: 'command', id });
-}
