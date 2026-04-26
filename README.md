@@ -20,7 +20,9 @@ No compile-to-PDF. No side-panel preview. No bibliography management. This is me
 
 ## Install
 
-Once published, search "Chalk" in the VS Code Extensions panel, or:
+Marketplace: <https://marketplace.visualstudio.com/items?itemName=RaphalHuleux.chalk-math>
+
+Search "Chalk" in the VS Code Extensions panel, or from a terminal:
 
 ```bash
 code --install-extension RaphalHuleux.chalk-math
