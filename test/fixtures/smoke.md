@@ -18,9 +18,11 @@ A list:
 
 A [link](https://example.com).
 
-A literal dollar: \$5 (should NOT be math).
+1. fdjqklmfs
+2. fjdsqklmfjqs
+3.
 
----
+A literal dollar: \$5 (should NOT be math).
 
 ## Heading 2
 

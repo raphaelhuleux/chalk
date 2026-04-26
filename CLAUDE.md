@@ -1,18 +1,12 @@
 # Chalk
 
-Live-preview editor for `.tex` and `.md` files with first-class math
-support, packaged as a VS Code custom editor extension.
+Live-preview editor for `.tex` and `.md` files with first-class math support, packaged as a VS Code custom editor extension.
 
-Two `viewType`s share one host shell, KaTeX cache, theme reader, and
-hsnips snippet engine; per-language CodeMirror extensions diverge in
-[setup.ts](src/webview/editor/setup.ts).
+Two `viewType`s share one host shell, KaTeX cache, theme reader, and hsnips snippet engine; per-language CodeMirror extensions diverge in [setup.ts](src/webview/editor/setup.ts).
 
 ## Status (2026-04-25)
 
-Merged from chalk-tex (LaTeX-only) and the archived chalk-md. Tex math
-preview works. Markdown headings + math + live-preview work. Hsnips
-shared across both. LaTeX Workshop bridge for `chalk.build`
-(`Cmd+Alt+B`) is **non-functional** — see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+Merged from chalk-tex (LaTeX-only) and the archived chalk-md. Tex math preview works. Markdown headings + math + live-preview work. Hsnips shared across both. LaTeX Workshop bridge for `chalk.build` (`Cmd+Alt+B`) is **non-functional** — see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Architecture
 
@@ -41,26 +35,13 @@ both `priority: "default"`. `Cmd+Shift+;` reopens with VS Code's picker.
 - `tex.ts` — viewType, build command, latex.hsnips loader, tex scope candidates
 - `markdown.ts` — viewType, no commands, latex+markdown hsnips loader, empty scopes (md uses heading-color channel separately)
 
-The provider class is generic over the profile. The webview's
-[setup.ts](src/webview/editor/setup.ts) branches on the `language` field
-in the init message: `tex` arm uses `stex` + `texMathPlugin` + tex syntax
-highlight + `latexCompletionExtension`; `md` arm uses `markdown(...)` +
-`mathPlugin` + `livePreviewPlugin` in a preview compartment.
+The provider class is generic over the profile. The webview's [setup.ts](src/webview/editor/setup.ts) branches on the `language` field in the init message: `tex` arm uses `stex` + `texMathPlugin` + tex syntax highlight + `latexCompletionExtension`; `md` arm uses `markdown(...)` + `mathPlugin` + `livePreviewPlugin` in a preview compartment.
 
-The shared hsnips engine ([hsnips-plugin.ts](src/webview/editor/hsnips-plugin.ts))
-takes an `isInMathContext` callback at construction time — tex passes
-`isInMathContextTex` (regex/character walker), md passes `isInMathContextMd`
-(lezer-tree query). All trigger matching, body parsing, tab-stops are
-language-agnostic.
+The shared hsnips engine ([hsnips-plugin.ts](src/webview/editor/hsnips-plugin.ts)) takes an `isInMathContext` callback at construction time — tex passes `isInMathContextTex` (regex/character walker), md passes `isInMathContextMd` (lezer-tree query). All trigger matching, body parsing, tab-stops are language-agnostic.
 
 ## Hsnips
 
-Standalone implementation of the HyperSnips file format (no dependency
-on the `draivin.vscode-hsnips` extension). The engine is fully
-self-contained in CM6 — VS Code's native snippet machinery doesn't run
-inside custom-editor webviews. Inline JS blocks (\`\`…\`\`) in `.hsnips`
-files are parsed but discarded; only static-body snippets are supported.
-Reads from `hsnips.hsnipsPath` setting first, then `~/.config/hsnips`.
+Standalone implementation of the HyperSnips file format (no dependency on the `draivin.vscode-hsnips` extension). The engine is fully self-contained in CM6 — VS Code's native snippet machinery doesn't run inside custom-editor webviews. Inline JS blocks (\`\`…\`\`) in `.hsnips` files are parsed but discarded; only static-body snippets are supported. Reads from `hsnips.hsnipsPath` setting first, then `~/.config/hsnips`.
 
 ## Guardrails
 
