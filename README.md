@@ -23,7 +23,7 @@ No compile-to-PDF. No side-panel preview. No bibliography management. This is me
 Once published, search "Chalk" in the VS Code Extensions panel, or:
 
 ```bash
-code --install-extension raphaelhuleux.chalk
+code --install-extension RaphalHuleux.chalk-math
 ```
 
 `.tex` and `.md` files open in Chalk by default. `Ctrl+Shift+;` (`Cmd+Shift+;` on macOS) opens VS Code's *Reopen Editor With…* picker if you want to switch back to the plain text editor.
@@ -42,7 +42,7 @@ The `Chalk: Diagnose Theme Resolution` command (Cmd/Ctrl+Shift+P → type "Chalk
 npm install
 npm run build           # esbuild: extension + webview
 npm run package         # production build → chalk-X.Y.Z.vsix
-code --install-extension chalk-0.3.0.vsix --force
+code --install-extension chalk-math-0.3.1.vsix --force
 ```
 
 `npm test` runs the vitest suite; `npm run lint` runs eslint.

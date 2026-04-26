@@ -6,6 +6,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-04-26
+
+### Changed
+
+- Extension `name` renamed from `chalk` to `chalk-math` because plain
+  `chalk` was already registered on the VS Code Marketplace by another
+  publisher. `displayName` stays `"Chalk"` so end-users still see
+  "Chalk" in search results, install dialogs, and the listing title;
+  only the install command and marketplace URL change to
+  `RaphalHuleux.chalk-math`.
+
+### Fixed
+
+- Marketplace publisher ID corrected from `raphaelhuleux` to
+  `RaphalHuleux` to match the actual publisher namespace registered
+  on the VS Code Marketplace (Microsoft auto-derived the ID from the
+  account display name with diacritics stripped). This and the name
+  rename above were publish-blocking metadata mismatches in 0.3.0;
+  functionally identical otherwise. The 0.3.0 .vsix on the GitHub
+  Release remains downloadable for sideload installs but never reached
+  the marketplace.
+
 ## [0.3.0] — 2026-04-26
 
 ### Added
