@@ -83,6 +83,55 @@ export function scanForExit(
   return null;
 }
 
+// -----------------------------------------------------------------------
+// CM6 command + keymap factory
+// -----------------------------------------------------------------------
+
+import { EditorView, keymap } from '@codemirror/view';
+import { EditorSelection, EditorState, Extension, Prec } from '@codemirror/state';
+
+/**
+ * Returns the Tab `run` command — exported separately from the keymap
+ * so tests can call it directly with a view, no keymap-event plumbing.
+ *
+ * Falls through (returns false) when:
+ *   - the selection is non-empty (let indent handle a multi-line indent),
+ *   - the cursor is outside any math context,
+ *   - no exit delimiter is reachable before EOF.
+ */
+export function taboutCommand(
+  isInMathContext: (state: EditorState, pos: number) => boolean,
+  lang: 'tex' | 'md',
+): (view: EditorView) => boolean {
+  return (view) => {
+    const sel = view.state.selection.main;
+    if (!sel.empty) return false;
+    if (!isInMathContext(view.state, sel.head)) return false;
+    const target = scanForExit(view.state.doc.toString(), sel.head, lang);
+    if (target === null) return false;
+    view.dispatch({
+      selection: EditorSelection.cursor(target),
+      scrollIntoView: true,
+    });
+    return true;
+  };
+}
+
+/**
+ * Math-gated Tab → forward-scope-exit keymap, wrapped in `Prec.high`
+ * for predictable ordering. Slot AFTER hsnips and acceptCompletion so
+ * snippet tabstops and active autocomplete popups win over Tabout, and
+ * BEFORE indentWithTab so indent is the fallback.
+ */
+export function taboutKeymap(
+  isInMathContext: (state: EditorState, pos: number) => boolean,
+  lang: 'tex' | 'md',
+): Extension {
+  return Prec.high(
+    keymap.of([{ key: 'Tab', run: taboutCommand(isInMathContext, lang) }]),
+  );
+}
+
 /**
  * Reads the delimiter following `\left` / `\right`. Supports:
  *   - single chars: ( ) [ ] < > . |

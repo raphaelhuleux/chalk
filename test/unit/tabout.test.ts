@@ -1,5 +1,27 @@
-import { describe, it, expect } from 'vitest';
-import { scanForExit } from '../../src/webview/editor/tabout';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { EditorView } from '@codemirror/view';
+import { EditorState, EditorSelection } from '@codemirror/state';
+import { scanForExit, taboutCommand } from '../../src/webview/editor/tabout';
+
+beforeAll(() => {
+  if (typeof Range.prototype.getClientRects !== 'function') {
+    Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+  }
+  if (typeof Range.prototype.getBoundingClientRect !== 'function') {
+    Range.prototype.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0, toJSON: () => ({}) }) as DOMRect;
+  }
+});
+
+function makeView(doc: string, cursor: number): EditorView {
+  const parent = document.createElement('div');
+  document.body.appendChild(parent);
+  const state = EditorState.create({
+    doc,
+    selection: EditorSelection.cursor(cursor),
+  });
+  return new EditorView({ state, parent });
+}
 
 describe('scanForExit', () => {
   it('returns position just past the next closing }', () => {
@@ -102,4 +124,76 @@ describe('scanForExit — \\left … \\right pairing', () => {
     // \right (0..5), readDelim at 6: \ then letters r,a,n,g,l,e → return 13
     expect(scanForExit('\\right\\rangle x', 0, 'tex')).toBe(13);
   });
+});
+
+describe('taboutCommand', () => {
+  it('inside math: Tab past `}` jumps the cursor', () => {
+    // 'a{b}c' — `}` is at index 3
+    const view = makeView('a{b}c', 2);
+    const cmd = taboutCommand(() => true, 'tex');
+    expect(cmd(view)).toBe(true);
+    expect(view.state.selection.main.head).toBe(4);
+    view.destroy();
+  });
+
+  it('outside math: Tab is a no-op (returns false)', () => {
+    const view = makeView('a{b}c', 2);
+    const cmd = taboutCommand(() => false, 'tex');
+    expect(cmd(view)).toBe(false);
+    expect(view.state.selection.main.head).toBe(2);
+    view.destroy();
+  });
+
+  it('inside math, no closing delim: Tab returns false', () => {
+    const view = makeView('abc', 0);
+    const cmd = taboutCommand(() => true, 'tex');
+    expect(cmd(view)).toBe(false);
+    view.destroy();
+  });
+
+  it('non-empty selection: Tab returns false (lets indent handle it)', () => {
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    const state = EditorState.create({
+      doc: 'a{b}c',
+      selection: EditorSelection.range(0, 4),
+    });
+    const view = new EditorView({ state, parent });
+    const cmd = taboutCommand(() => true, 'tex');
+    expect(cmd(view)).toBe(false);
+    view.destroy();
+  });
+});
+
+describe('taboutCommand — spec worked examples', () => {
+  // Doc strings use JS escapes — `\\` is one `\` in the actual document.
+  const cases: [string, string, number, number][] = [
+    // $\frac{a|}{b}$   →  $\frac{a}|{b}$  (cursor 7 → past first } at 9)
+    // chars: $ \ f r a c { a } { b } $
+    // index: 0 1 2 3 4 5 6 7 8 9 10 11 12
+    ['frac inside first arg', '$\\frac{a}{b}$', 7, 9],
+    // $\frac{a}|{b}$   →  $\frac{a}{b}|$  (cursor 9 → past second } at 12)
+    ['frac between args', '$\\frac{a}{b}$', 9, 12],
+    // $\frac{a}{b}|$   →  $\frac{a}{b}$|  (cursor 12 → past closing $ at 13)
+    ['frac after second }', '$\\frac{a}{b}$', 12, 13],
+    // $\sin(x|)$       →  $\sin(x)|$
+    // chars: $ \ s i n ( x ) $
+    // index: 0 1 2 3 4 5 6 7 8
+    ['inside parens', '$\\sin(x)$', 7, 8],
+    // $\left(a|\right) + b$  →  $\left(a\right)| + b$
+    // chars: $ \ l e f t ( a \ r  i  g  h  t  )  ' '  +  ' '  b  $
+    // index: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
+    // Cursor at 8 = at `\` of \right. Scanner returns past `\right)` → 15.
+    ['left-right group', '$\\left(a\\right) + b$', 8, 15],
+  ];
+
+  for (const [name, doc, cur, expected] of cases) {
+    it(name, () => {
+      const view = makeView(doc, cur);
+      const cmd = taboutCommand(() => true, 'tex');
+      cmd(view);
+      expect(view.state.selection.main.head).toBe(expected);
+      view.destroy();
+    });
+  }
 });
