@@ -88,7 +88,7 @@ export function scanForExit(
 // -----------------------------------------------------------------------
 
 import { EditorView, keymap } from '@codemirror/view';
-import { EditorSelection, EditorState, Extension, Prec } from '@codemirror/state';
+import { EditorSelection, EditorState, Extension } from '@codemirror/state';
 
 /**
  * Returns the Tab `run` command — exported separately from the keymap
@@ -118,18 +118,22 @@ export function taboutCommand(
 }
 
 /**
- * Math-gated Tab → forward-scope-exit keymap, wrapped in `Prec.high`
- * for predictable ordering. Slot AFTER hsnips and acceptCompletion so
- * snippet tabstops and active autocomplete popups win over Tabout, and
- * BEFORE indentWithTab so indent is the fallback.
+ * Math-gated Tab → forward-scope-exit keymap.
+ *
+ * Intentionally NOT wrapped in `Prec.high` — that would put Tabout
+ * ABOVE hsnips' Tab handler (snippet tabstop advance), so a `\frac{$1}
+ * {$2}$0` expansion's Tab would jump past the closing `}` instead of
+ * advancing $1 → $2. Default precedence + registration order in
+ * setup.ts (hsnips before tabout) yields the right chain:
+ *   hsnips Tab → autocomplete Tab → tabout Tab → indent Tab.
  */
 export function taboutKeymap(
   isInMathContext: (state: EditorState, pos: number) => boolean,
   lang: 'tex' | 'md',
 ): Extension {
-  return Prec.high(
-    keymap.of([{ key: 'Tab', run: taboutCommand(isInMathContext, lang) }]),
-  );
+  return keymap.of([
+    { key: 'Tab', run: taboutCommand(isInMathContext, lang) },
+  ]);
 }
 
 /**
