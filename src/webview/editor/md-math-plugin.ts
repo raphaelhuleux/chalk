@@ -5,8 +5,9 @@ import {
   ViewPlugin,
   ViewUpdate,
   WidgetType,
+  keymap,
 } from '@codemirror/view';
-import { EditorState, Extension, RangeSetBuilder, StateField, StateEffect } from '@codemirror/state';
+import { EditorSelection, EditorState, Extension, Prec, RangeSetBuilder, StateField, StateEffect } from '@codemirror/state';
 import { syntaxTree, syntaxTreeAvailable } from '@codemirror/language';
 import type { MarkdownConfig, InlineParser, InlineContext, BlockParser, BlockContext, Line } from '@lezer/markdown';
 import { tags } from '@lezer/highlight';
@@ -448,7 +449,12 @@ export const displayMathField = StateField.define<DecorationSet>({
   },
   provide: (f) => [
     EditorView.decorations.from(f),
-    EditorView.atomicRanges.of((view) => view.state.field(f)),
+    // Intentionally NOT registered as atomicRanges. See tex-math.ts
+    // for the full reasoning — the short version is that an atomic
+    // block-replace would make Up/Down skip the entire `$$…$$` block
+    // instead of stepping into it; the `cursorInside` (line-based)
+    // check already reveals the source as soon as the cursor enters
+    // a math line, which is the desired arrow-key behaviour.
   ],
 });
 
@@ -541,6 +547,81 @@ export function preRenderAllMath(state: EditorState): number {
 export function mathPlugin(): Extension {
   return [mathViewPlugin, displayMathField, displayMathDebouncer, mathBaseTheme];
 }
+
+// ---------------------------------------------------------------------------
+// Vertical arrow-key navigation into collapsed display math (md side)
+// ---------------------------------------------------------------------------
+//
+// See tex-math.ts for the full reasoning. Mirror implementation here, but
+// using the markdown syntax tree to find DisplayMath nodes instead of the
+// regex-based scanMathRegions used on the tex side.
+
+function findAdjacentDisplayMath(
+  state: EditorState,
+  predicate: (startLine: number, endLine: number, cursorLine: number) => boolean,
+): { startLine: number; endLine: number } | null {
+  const cursorLine = state.doc.lineAt(state.selection.main.head).number;
+  const tree = syntaxTree(state);
+  let result: { startLine: number; endLine: number } | null = null;
+  tree.iterate({
+    enter(node) {
+      if (result) return false;
+      if (node.name !== 'DisplayMath') return;
+      const startLine = state.doc.lineAt(node.from).number;
+      const endLine = state.doc.lineAt(Math.max(node.from, node.to - 1)).number;
+      if (predicate(startLine, endLine, cursorLine)) {
+        result = { startLine, endLine };
+        return false;
+      }
+    },
+  });
+  return result;
+}
+
+function mdEnterDisplayMathFromAbove(view: EditorView): boolean {
+  const { state } = view;
+  if (!state.selection.main.empty) return false;
+  const hit = findAdjacentDisplayMath(
+    state,
+    (start, _end, cursor) => start === cursor + 1,
+  );
+  if (!hit) return false;
+  const target = state.doc.line(hit.startLine).to;
+  view.dispatch({
+    selection: EditorSelection.cursor(target),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+function mdEnterDisplayMathFromBelow(view: EditorView): boolean {
+  const { state } = view;
+  if (!state.selection.main.empty) return false;
+  const hit = findAdjacentDisplayMath(
+    state,
+    (_start, end, cursor) => end === cursor - 1,
+  );
+  if (!hit) return false;
+  const target = state.doc.line(hit.endLine).from;
+  view.dispatch({
+    selection: EditorSelection.cursor(target),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+export const mdMathArrowKeymap: Extension = Prec.high(
+  keymap.of([
+    { key: 'ArrowDown', run: mdEnterDisplayMathFromAbove },
+    { key: 'ArrowUp', run: mdEnterDisplayMathFromBelow },
+  ]),
+);
+
+// Exported for tests.
+export const _testing = {
+  mdEnterDisplayMathFromAbove,
+  mdEnterDisplayMathFromBelow,
+};
 
 /**
  * Returns true when `pos` lies inside an `InlineMath` or `DisplayMath`

@@ -3,10 +3,13 @@ import {
   DecorationSet,
   EditorView,
   WidgetType,
+  keymap,
 } from '@codemirror/view';
 import {
+  EditorSelection,
   EditorState,
   Extension,
+  Prec,
   RangeSetBuilder,
   StateField,
 } from '@codemirror/state';
@@ -394,7 +397,15 @@ export function texMathPlugin(): Extension {
     },
     provide: (field) => [
       EditorView.decorations.from(field),
-      EditorView.atomicRanges.of((view) => view.state.field(field)),
+      // Intentionally NOT registering field as atomicRanges. The
+      // collapsed-math `Decoration.replace` covers `r.from..r.to`; if
+      // we made that atomic, CM6 would push the cursor over the entire
+      // span on Left/Right (skipping past the closing `$`) and over the
+      // entire `$$…$$` block on Up/Down. The `cursorInside` check in
+      // buildDecorations already reveals the source as soon as the
+      // cursor steps into a math region, which is exactly what we want
+      // arrow-key navigation to do — let CM6 navigate one position at
+      // a time, and we'll un-collapse around the caret.
     ],
   });
 }
@@ -413,3 +424,92 @@ export function isInMathContextTex(state: EditorState, pos: number): boolean {
   const regions = scanMathRegions(doc);
   return regions.some((r) => pos >= r.from && pos < r.to);
 }
+
+// -----------------------------------------------------------------------
+// Vertical arrow-key navigation into collapsed display math
+// -----------------------------------------------------------------------
+//
+// Removing `atomicRanges` fixed Left/Right stepping, but vertical motion
+// has its own problem: a `Decoration.replace({ block: true })` covering
+// `$$…$$` collapses the multi-line source to a single visual line, so
+// CM6's `moveByLine` (which steps by visual lines) jumps over the entire
+// block in one keystroke. The cursor lands on the line *below* the math,
+// the line-based `cursorInside` check fails, and the source never
+// reveals.
+//
+// Workaround: a Prec.high keymap that catches Down on the line directly
+// above a collapsed block (and Up on the line directly below) and
+// explicitly places the caret on the math's opening / closing line. The
+// existing `cursorInside` check then reveals the source on the next
+// transaction. We deliberately DON'T attempt to preserve goal-column —
+// the user's mental model here is "Down enters the math", not "Down
+// preserves my column over a hidden region".
+
+/**
+ * Down on the line immediately above a collapsed display-math region.
+ * Lands the caret at the end of the math's opening line (just past
+ * `$$`, `\[`, or `\begin{env}`).
+ */
+function enterDisplayMathFromAbove(view: EditorView): boolean {
+  const { state } = view;
+  const sel = state.selection.main;
+  if (!sel.empty) return false;
+
+  const cursorLineNum = state.doc.lineAt(sel.head).number;
+  const regions = scanMathRegions(state.doc.toString());
+
+  for (const r of regions) {
+    if (!r.display) continue;
+    const startLine = state.doc.lineAt(r.from).number;
+    if (startLine !== cursorLineNum + 1) continue;
+
+    const target = state.doc.line(startLine).to;
+    view.dispatch({
+      selection: EditorSelection.cursor(target),
+      scrollIntoView: true,
+    });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Up on the line immediately below a collapsed display-math region.
+ * Lands the caret at the start of the math's closing line (just before
+ * `$$`, `\]`, or `\end{env}`).
+ */
+function enterDisplayMathFromBelow(view: EditorView): boolean {
+  const { state } = view;
+  const sel = state.selection.main;
+  if (!sel.empty) return false;
+
+  const cursorLineNum = state.doc.lineAt(sel.head).number;
+  const regions = scanMathRegions(state.doc.toString());
+
+  for (const r of regions) {
+    if (!r.display) continue;
+    const endLine = state.doc.lineAt(r.to - 1).number;
+    if (endLine !== cursorLineNum - 1) continue;
+
+    const target = state.doc.line(endLine).from;
+    view.dispatch({
+      selection: EditorSelection.cursor(target),
+      scrollIntoView: true,
+    });
+    return true;
+  }
+  return false;
+}
+
+export const texMathArrowKeymap: Extension = Prec.high(
+  keymap.of([
+    { key: 'ArrowDown', run: enterDisplayMathFromAbove },
+    { key: 'ArrowUp', run: enterDisplayMathFromBelow },
+  ]),
+);
+
+// Exported for tests.
+export const _testing = {
+  enterDisplayMathFromAbove,
+  enterDisplayMathFromBelow,
+};

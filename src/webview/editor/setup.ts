@@ -35,11 +35,11 @@ import { Strikethrough, TaskList } from '@lezer/markdown';
 import { themeCompartment, previewCompartment, vsCodeTheme } from './theme';
 import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
 
-import { texMathPlugin, isInMathContextTex } from './tex-math';
+import { texMathPlugin, isInMathContextTex, texMathArrowKeymap } from './tex-math';
 import { texHighlightStyle } from './tex-syntax-highlight';
 import { latexCompletionExtension } from './latex-completions';
 
-import { mathPlugin, mathSyntax, isInMathContextMd } from './md-math-plugin';
+import { mathPlugin, mathSyntax, isInMathContextMd, mdMathArrowKeymap } from './md-math-plugin';
 import { livePreviewPlugin } from './md-live-preview';
 
 export type Language = 'tex' | 'md';
@@ -91,6 +91,7 @@ export function buildExtensions(
       StreamLanguage.define(stex),
       syntaxHighlighting(texHighlightStyle),
       texMathPlugin(),
+      texMathArrowKeymap,
       hsnipsExtension({ isInMathContext: isInMathContextTex }),
       latexCompletionExtension(),
       placeholder('% Start typing LaTeX…'),
@@ -103,6 +104,7 @@ export function buildExtensions(
     ...shared,
     markdown({ extensions: [mathSyntax, Strikethrough, TaskList] }),
     previewCompartment.of([mathPlugin(), livePreviewPlugin()]),
+    mdMathArrowKeymap,
     hsnipsExtension({ isInMathContext: isInMathContextMd }),
     placeholder('Start typing…'),
   ];
