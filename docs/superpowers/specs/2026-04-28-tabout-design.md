@@ -17,13 +17,13 @@ hand-typed math benefits too.
 
 ## Decisions
 
-| # | Question | Choice |
-|---|----------|--------|
-| 1 | Languages | Tex + Markdown |
-| 2 | `\left…\right` handling | Treat as one unit — jump past `\right⟨delim⟩` |
-| 3 | Outside-math behaviour | Strictly math-gated; no-op outside math |
-| 4 | Reverse direction | Out of scope for v1 (no Shift+Tab) |
-| 5 | `\rangle` / `\rvert` | Out of scope for v1 (uncommon in this codebase) |
+| #   | Question                | Choice                                          |
+| --- | ----------------------- | ----------------------------------------------- |
+| 1   | Languages               | Tex + Markdown                                  |
+| 2   | `\left…\right` handling | Treat as one unit — jump past `\right⟨delim⟩`   |
+| 3   | Outside-math behaviour  | Strictly math-gated; no-op outside math         |
+| 4   | Reverse direction       | Out of scope for v1 (no Shift+Tab)              |
+| 5   | `\rangle` / `\rvert`    | Out of scope for v1 (uncommon in this codebase) |
 
 ## Algorithm
 
@@ -41,19 +41,19 @@ return true
 `scanForExit` walks forward from `p` and returns the position **just
 past** the first exit it finds:
 
-| Token at scan position | Action |
-|------------------------|--------|
-| `\\`, `\$`, `\{`, `\}`, `\%` | Skip 2 chars (escape) |
-| `%` (tex only) | Skip to end of line |
-| `\left⟨c⟩` where c ∈ `({[<.\|`/letter-form | Push `LEFT_GROUP`, advance past `\left⟨c⟩` |
-| `\right⟨c⟩` where c ∈ above | If stack non-empty, pop & advance past it. Else **return position-just-past `\right⟨c⟩`** |
-| `}`, `]`, `)` | **Return position-just-past it** |
-| `$$` | Math close — return position-just-past it |
-| `$` | Math close — return position-just-past it |
-| `\)` | Math close — return position-just-past it |
-| `\]` | Math close — return position-just-past it |
-| `\end{…}` | Math close — return position-just-past it |
-| any other char | Advance 1 |
+| Token at scan position                     | Action                                                                                    |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `\\`, `\$`, `\{`, `\}`, `\%`               | Skip 2 chars (escape)                                                                     |
+| `%` (tex only)                             | Skip to end of line                                                                       |
+| `\left⟨c⟩` where c ∈ `({[<.\|`/letter-form | Push `LEFT_GROUP`, advance past `\left⟨c⟩`                                                |
+| `\right⟨c⟩` where c ∈ above                | If stack non-empty, pop & advance past it. Else **return position-just-past `\right⟨c⟩`** |
+| `}`, `]`, `)`                              | **Return position-just-past it**                                                          |
+| `$$`                                       | Math close — return position-just-past it                                                 |
+| `$`                                        | Math close — return position-just-past it                                                 |
+| `\)`                                       | Math close — return position-just-past it                                                 |
+| `\]`                                       | Math close — return position-just-past it                                                 |
+| `\end{…}`                                  | Math close — return position-just-past it                                                 |
+| any other char                             | Advance 1                                                                                 |
 
 The scanner does **not** track `{`/`[`/`(` opens — they are
 inert in this scan because we want repeated Tab to step out one
@@ -65,17 +65,17 @@ exit anyway, and the scanner stops at the *first* close).
 
 ## Worked examples
 
-| Before | After Tab |
-|--------|-----------|
-| `$\frac{a\|}{b}$` | `$\frac{a}\|{b}$` |
-| `$\frac{a}\|{b}$` | `$\frac{a}{b}\|$` |
-| `$\frac{a}{b}\|$` | `$\frac{a}{b}$\|` |
-| `$\sin(x\|)$` | `$\sin(x)\|$` |
-| `$[a, b\|]$` | `$[a, b]\|$` |
-| `$\left(a\|\right) + b$` | `$\left(a\right)\| + b$` |
-| `$x\|$` | `$x$\|` |
-| `$x$\|` | (fall through — no-op) |
-| `\section{a\|}` | (fall through — outside math) |
+| Before                            | After Tab                         |
+| --------------------------------- | --------------------------------- |
+| `$\frac{a\|}{b}$`                 | `$\frac{a}\|{b}$`                 |
+| `$\frac{a}\|{b}$`                 | `$\frac{a}{b}\|$`                 |
+| `$\frac{a}{b}\|$`                 | `$\frac{a}{b}$\|`                 |
+| `$\sin(x\|)$`                     | `$\sin(x)\|$`                     |
+| `$[a, b\|]$`                      | `$[a, b]\|$`                      |
+| `$\left(a\|\right) + b$`          | `$\left(a\right)\| + b$`          |
+| `$x\|$`                           | `$x$\|`                           |
+| `$x$\|`                           | (fall through — no-op)            |
+| `\section{a\|}`                   | (fall through — outside math)     |
 | `\begin{align}\nx\|\n\end{align}` | `\begin{align}\nx\n\end{align}\|` |
 
 ## File layout
@@ -104,19 +104,19 @@ Edits:
 
 New: `test/unit/tabout.test.ts`
 
-| Case | Expectation |
-|------|-------------|
-| Tab outside math | returns false, cursor unchanged |
-| Tab inside `$x\|$` | cursor → after `$` |
-| Tab inside `$\frac{a\|}{b}$` | cursor → after first `}` |
-| Tab repeated through nested braces | unwraps one at a time |
-| Tab inside `\left(a\|\right)` | cursor → after `\right)` |
-| Tab past balanced inner `\left/\right` | doesn't pop wrong scope |
-| Tab inside `\begin{align}…\|…\end{align}` | cursor → after `\end{align}` |
-| Tab at EOF inside open math | falls through |
-| Escape handling: `\}` is not an exit | skipped correctly |
-| Comment handling (tex): `% }` doesn't trigger | skipped |
-| Markdown variant (`$$…$$` block) | same exits as tex |
+| Case                                          | Expectation                     |
+| --------------------------------------------- | ------------------------------- |
+| Tab outside math                              | returns false, cursor unchanged |
+| Tab inside `$x\|$`                            | cursor → after `$`              |
+| Tab inside `$\frac{a\|}{b}$`                  | cursor → after first `}`        |
+| Tab repeated through nested braces            | unwraps one at a time           |
+| Tab inside `\left(a\|\right)`                 | cursor → after `\right)`        |
+| Tab past balanced inner `\left/\right`        | doesn't pop wrong scope         |
+| Tab inside `\begin{align}…\|…\end{align}`     | cursor → after `\end{align}`    |
+| Tab at EOF inside open math                   | falls through                   |
+| Escape handling: `\}` is not an exit          | skipped correctly               |
+| Comment handling (tex): `% }` doesn't trigger | skipped                         |
+| Markdown variant (`$$…$$` block)              | same exits as tex               |
 
 ## Non-goals
 

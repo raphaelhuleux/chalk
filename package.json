@@ -2,7 +2,7 @@
   "name": "chalk-math",
   "displayName": "Chalk",
   "description": "Live-preview editor for LaTeX (.tex) and Markdown (.md) files with first-class math support, running inside VS Code.",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "publisher": "RaphalHuleux",
   "license": "MIT",
   "repository": {

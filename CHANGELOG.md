@@ -6,6 +6,37 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-04-28
+
+### Added
+
+- **Tabout**: `Tab` inside math jumps the cursor past the next closing
+  scope — `}`, `]`, `)`, `\right⟨delim⟩`, or the math close itself
+  (`$`, `$$`, `\)`, `\]`, `\end{…}`). Repeated presses unwrap nested
+  scopes one at a time. `\left…\right` pairs are tracked as a unit so
+  an inner balanced pair doesn't consume the outer exit. Inspired by
+  Obsidian-Latex-Suite's Tabout; complements (rather than replaces)
+  the existing snippet-tabstop convention. Outside math, `Tab` is
+  unchanged (snippet advance → autocomplete-accept → indent).
+
+- Vertical `↑` / `↓` arrows now enter a collapsed `$$…$$` block when
+  pressed from the line directly above or below it. Down lands at the
+  end of the opening `$$`/`\[`/`\begin{…}` line; Up lands at the start
+  of the closing line.
+
+### Fixed
+
+- Horizontal `←` / `→` arrows now step into a collapsed `$x^2$` math
+  span one position at a time instead of jumping over the entire
+  region. Pressing Left from `$x^2$|` lands the caret at `$x^2|$` and
+  reveals the source, matching the behaviour every other text editor
+  has for hidden ranges.
+
+  Root cause: the math `StateField` was registering its decoration set
+  as `EditorView.atomicRanges`, which made CM6 push the cursor over
+  the entire `Decoration.replace` span. The atomic registration was
+  removed; the existing `cursorInside` reveal logic handles the rest.
+
 ## [0.3.2] — 2026-04-26
 
 ### Changed

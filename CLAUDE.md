@@ -4,9 +4,9 @@ Live-preview editor for `.tex` and `.md` files with first-class math support, pa
 
 Two `viewType`s share one host shell, KaTeX cache, theme reader, and hsnips snippet engine; per-language CodeMirror extensions diverge in [setup.ts](src/webview/editor/setup.ts).
 
-## Status (2026-04-26)
+## Status (2026-04-28)
 
-v0.3.2, published to the VS Code Marketplace as
+v0.4.0, published to the VS Code Marketplace as
 `RaphalHuleux.chalk-math` (GitHub: `raphaelhuleux/chalk`). End-users
 see "Chalk" everywhere — `displayName` drives the marketplace listing
 title, search results, install dialog. The technical `name` field is
