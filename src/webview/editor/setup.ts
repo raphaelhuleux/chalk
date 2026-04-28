@@ -36,6 +36,7 @@ import { themeCompartment, previewCompartment, vsCodeTheme } from './theme';
 import { hsnipsExtension, hsnipsKeymap } from './hsnips-plugin';
 
 import { texMathPlugin, isInMathContextTex, texMathArrowKeymap } from './tex-math';
+import { taboutKeymap } from './tabout';
 import { texHighlightStyle } from './tex-syntax-highlight';
 import { latexCompletionExtension } from './latex-completions';
 
@@ -59,7 +60,9 @@ export function buildExtensions(
     keymap.of(hsnipsKeymap),
     keymap.of([{ key: 'Tab', run: acceptCompletion }]),
 
-    keymap.of([indentWithTab]),
+    // indentWithTab is wired per-language AFTER taboutKeymap so Tabout
+    // (math-context-only) gets first crack at Tab before falling through
+    // to indent.
     keymap.of(closeBracketsKeymap),
     keymap.of(historyKeymap),
     keymap.of(searchKeymap),
@@ -94,6 +97,8 @@ export function buildExtensions(
       texMathArrowKeymap,
       hsnipsExtension({ isInMathContext: isInMathContextTex }),
       latexCompletionExtension(),
+      taboutKeymap(isInMathContextTex, 'tex'),
+      keymap.of([indentWithTab]),
       placeholder('% Start typing LaTeX…'),
     ];
   }
@@ -106,6 +111,8 @@ export function buildExtensions(
     previewCompartment.of([mathPlugin(), livePreviewPlugin()]),
     mdMathArrowKeymap,
     hsnipsExtension({ isInMathContext: isInMathContextMd }),
+    taboutKeymap(isInMathContextMd, 'md'),
+    keymap.of([indentWithTab]),
     placeholder('Start typing…'),
   ];
 }
