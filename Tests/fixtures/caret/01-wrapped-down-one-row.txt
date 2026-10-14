@@ -1,0 +1,11 @@
+--- text
+The |quick brown fox jumps over the lazy dog
+--- width
+20
+--- keys
+Down
+--- expect
+The quick brown fox jump|s over the lazy dog
+--- note
+Row 1 col 4 down to row 2 col 4. Both rows start at the same x, so a
+pixel goal column and a character column agree here.

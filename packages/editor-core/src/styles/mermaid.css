@@ -1,0 +1,29 @@
+/* Diagrams under ```mermaid fences: md-mermaid-plugin.ts's block widget.
+ * NO vertical margins inside .cm-content (CM6 height map): padding only. */
+
+.cm-mermaid {
+  padding: 0.6em 0 0.9em;
+  text-align: center;
+  /* A wide diagram must not widen .cm-content (as .cm-math-display). */
+  contain: inline-size;
+  overflow-x: auto;
+}
+
+/* mermaid sizes its SVG to 100% wide with an inline max-width; the height
+   follows the viewBox so a narrow column scales the diagram down whole. */
+.cm-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.cm-mermaid-stale .cm-mermaid-diagram {
+  opacity: 0.35;
+}
+
+.cm-mermaid-error {
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  text-align: left;
+  color: #e53e3e;
+}

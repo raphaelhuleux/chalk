@@ -1,0 +1,12 @@
+--- text
+alpha be|ta
+
+gamma delta
+--- keys
+Down Down
+--- expect
+alpha beta
+
+gamma de|lta
+--- note
+Line 2 is empty: two consecutive newlines. The caret starts at column 8 of line 1. The first Down cannot hold column 8 on a zero-length line, so it clamps to column 0 there, but it must not discard the goal column. The second Down then restores column 8 on line 3. An empty line is the extreme short line and must carry the goal column through just as a longer short line does (see caret/05, caret/06).

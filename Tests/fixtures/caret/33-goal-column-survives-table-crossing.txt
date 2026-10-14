@@ -1,0 +1,27 @@
+--- text
+park park park park park one
+| a | b |
+| --- | --- |
+| 1 | 2 |
+
+park park park park park two
+--- caret
+18
+--- language
+md
+--- keys
+Down Down
+--- expect
+park park park park park one
+| a | b |
+| --- | --- |
+| 1 | 2 |
+
+park park park park park two
+--- expect-caret
+82
+--- note
+Promoted from matrix cell md/table/plain/w80/desktop (FINDINGS.md #3, rule R-V2).
+The table document needs literal pipes, so this fixture uses the numeric caret sections: start at offset 18 (column 18 of the top line), expect offset 82 (column 18 of the bottom line).
+The first Down crosses the rendered table in one press and lands at the far side's line start by design (R-V7, offset 63, the blank line); the SECOND press must aim back at the run's goal column.
+Before the fix, tableArrowKeymap's crossing dispatched without the vertical-motion session bookkeeping, the goal re-captured at the col-0 landing, and the caret continued at column 0 forever.

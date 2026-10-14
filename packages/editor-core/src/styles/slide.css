@@ -1,0 +1,183 @@
+/* Beamer frame slide cards (tex-frame-plugin.ts), faked by stacking per-line
+ * edges since CM6 has no wrapper element.
+ *
+ * The outline is INSET BOX-SHADOWS, not borders: a nested callout's own
+ * `border-left` accent would replace the card's left edge, and a border would
+ * change the line's layout width. Shadows also survive math's `overflow-x: clip`.
+ * NO VERTICAL MARGINS (CM6 height map, see callout.css): padding only.
+ * `--chalk-slide-*` overrides fall back to neutral alphas that read in both
+ * appearances. */
+
+.cm-line.cm-slide,
+.cm-tex-math-display.cm-slide {
+  --slide-edge: var(--chalk-slide-edge, rgba(140, 140, 140, 0.34));
+  --slide-band: var(--chalk-slide-band, rgba(140, 140, 140, 0.07));
+
+  box-shadow:
+    inset 1px 0 0 var(--slide-edge),
+    inset -1px 0 0 var(--slide-edge);
+  /* Hang the card into the side buffer so slide text lines up with ordinary
+     text. 6px restores CM6's base `.cm-line` padding-left; `--chalk-hang`
+     balances hanging-indent.ts's negative text-indent on `\item` lines. */
+  margin-left: calc(-1 * var(--chalk-slide-outdent, 0.75em));
+  padding-left: calc(6px + var(--chalk-slide-outdent, 0.75em) + var(--chalk-hang, 0px));
+  padding-right: var(--chalk-slide-outdent, 0.75em);
+}
+
+/* Display math gets these classes via frameBlockAt. Its `width: 100%` ignores
+   the negative margin, so widen by the outdent to meet the card's right edge. */
+.cm-tex-math-display.cm-slide {
+  width: calc(100% + var(--chalk-slide-outdent, 0.75em));
+  max-width: calc(100% + var(--chalk-slide-outdent, 0.75em));
+}
+
+/* Title band: one row in the brace form, up to two in the `\frametitle` form,
+   so tint, top edge and closing hairline are separate classes. Both syntaxes
+   must produce the same band (pinned in the browser harness: a measured
+   height). `position: relative` anchors the slide number. */
+.cm-line.cm-slide-band {
+  background: var(--slide-band);
+}
+
+.cm-line.cm-slide-top {
+  position: relative;
+  box-shadow:
+    inset 1px 0 0 var(--slide-edge),
+    inset -1px 0 0 var(--slide-edge),
+    inset 0 1px 0 var(--slide-edge);
+  padding-top: 0.7em;
+  border-top-left-radius: 7px;
+  border-top-right-radius: 7px;
+}
+
+.cm-line.cm-slide-band-end {
+  box-shadow:
+    inset 1px 0 0 var(--slide-edge),
+    inset -1px 0 0 var(--slide-edge),
+    inset 0 -1px 0 var(--slide-edge);
+  padding-bottom: 0.6em;
+}
+
+/* Gap under the band's rule: must be the NEXT row's padding (padding on the
+   band row lands above the rule). A sibling selector, so it hits the first
+   visible row whatever other plugins collapsed. */
+.cm-slide-band-end + .cm-slide {
+  padding-top: 0.55em;
+}
+
+/* Single-row band. Declared after both so it wins. */
+.cm-line.cm-slide-top.cm-slide-band-end {
+  box-shadow:
+    inset 1px 0 0 var(--slide-edge),
+    inset -1px 0 0 var(--slide-edge),
+    inset 0 1px 0 var(--slide-edge),
+    inset 0 -1px 0 var(--slide-edge);
+}
+
+.cm-line.cm-slide-bottom,
+.cm-tex-math-display.cm-slide-bottom {
+  box-shadow:
+    inset 1px 0 0 var(--slide-edge),
+    inset -1px 0 0 var(--slide-edge),
+    inset 0 -1px 0 var(--slide-edge);
+  /* Small: the foot is already a full empty row (`\end{frame}`, text hidden). */
+  padding-bottom: 0.35em;
+  border-bottom-left-radius: 7px;
+  border-bottom-right-radius: 7px;
+}
+
+/* One-row card: all four edges, or the bottom rule above drops the top edge. */
+.cm-line.cm-slide-top.cm-slide-bottom {
+  box-shadow:
+    inset 1px 0 0 var(--slide-edge),
+    inset -1px 0 0 var(--slide-edge),
+    inset 0 1px 0 var(--slide-edge),
+    inset 0 -1px 0 var(--slide-edge);
+}
+
+/* Slide number as a pseudo-element on a data attribute: no height, no caret
+   stop (same trick as code.css's language chip). Counts frames in document
+   order, so `\againframe`/`allowframebreaks` can diverge from the PDF. Sized
+   in em to track the text, like the callout chip. */
+.cm-line.cm-slide-top[data-slide]::after {
+  content: attr(data-slide);
+  position: absolute;
+  top: 0.8em;
+  right: 0.85em;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--chalk-slide-number, inherit);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Brace-form widget and `\frametitle` line alike. Sized in em to track the
+   font-size slider. */
+.cm-slide-title,
+.cm-tex-frametitle {
+  font-weight: 600;
+  font-size: 1.13em;
+  color: var(--chalk-heading-1, inherit);
+}
+
+.cm-tex-framesubtitle {
+  font-size: 0.86em;
+  opacity: 0.72;
+}
+
+/* Its own row comes from a <br> in the widget: `display: block` would leave an
+   empty anonymous block, a full extra line of band height. No margins either
+   (height map). */
+.cm-slide-subtitle {
+  font-size: 0.86em;
+  opacity: 0.72;
+}
+
+/* A callout inside a slide. The ROW keeps the card's geometry (any margin or
+   border change jogs the card's outline on those rows) and an inset `::before`
+   paints the callout's tint, bar and radii. Unlike callout.css's hanging bar,
+   this one is inside the box, so math's `overflow-x: clip` can't cut it. */
+.cm-line.cm-slide.cm-callout,
+.cm-tex-math-display.cm-slide.cm-callout {
+  position: relative;
+  margin-left: calc(-1 * var(--chalk-slide-outdent, 0.75em));
+  margin-right: 0;
+  border-left: 0;
+  background: none;
+  box-shadow:
+    inset 1px 0 0 var(--slide-edge),
+    inset -1px 0 0 var(--slide-edge);
+  padding-left: calc(
+    6px + var(--chalk-slide-outdent, 0.75em) + var(--chalk-hang, 0px) +
+      var(--chalk-slide-inset, 0.85em) + 3px + 0.5em
+  );
+  padding-right: calc(var(--chalk-slide-outdent, 0.75em) + var(--chalk-slide-inset, 0.85em));
+}
+
+.cm-line.cm-slide.cm-callout::before,
+.cm-tex-math-display.cm-slide.cm-callout::before {
+  content: '';
+  position: absolute;
+  left: var(--chalk-slide-inset, 0.85em);
+  right: var(--chalk-slide-inset, 0.85em);
+  top: 0;
+  bottom: 0;
+  background: var(--callout-bg);
+  border-left: 3px solid var(--callout-accent);
+  /* Safe: `.cm-content` paints no background to fall behind. */
+  z-index: -1;
+  pointer-events: none;
+}
+
+.cm-line.cm-slide.cm-callout.cm-callout-top::before {
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+}
+
+.cm-line.cm-slide.cm-callout.cm-callout-bottom::before,
+.cm-tex-math-display.cm-slide.cm-callout.cm-callout-bottom::before {
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+}

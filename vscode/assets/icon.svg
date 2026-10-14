@@ -1,0 +1,54 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Chalk extension icon.
+    Symbol: ∮ (contour integral) — Stokes' theorem, the path that returns to itself.
+    Glyph: STIX Two Math, italic, text-to-path via Inkscape.
+    Surface: deep slate (lecture-hall blackboard, not children's-classroom green).
+    Chalk: warm cream, the colour of real classroom chalk under tungsten.
+  -->
+  <defs>
+    <!-- Surface: vertical gradient from a barely-warmer top to a deeper base.
+         Reads as a real chalkboard lit by overhead light, not an iOS template. -->
+    <linearGradient id="slate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1f2826"/>
+      <stop offset="55%"  stop-color="#161e1c"/>
+      <stop offset="100%" stop-color="#0f1614"/>
+    </linearGradient>
+
+    <!-- Top inner highlight: a single hairline white stroke along the upper edge
+         that suggests a thin beveled rim. The trick that separates premium-flat from amateur-flat. -->
+    <linearGradient id="topHighlight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Chalk halo: a barely-perceptible warm glow centred on the glyph.
+         The chalk reads as material pressed into the slate, not a sticker on top. -->
+    <radialGradient id="chalkHalo" cx="50%" cy="52%" r="42%">
+      <stop offset="0%"   stop-color="#f5d8a0" stop-opacity="0.10"/>
+      <stop offset="60%"  stop-color="#f5d8a0" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#f5d8a0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 1. Slate panel -->
+  <rect width="128" height="128" rx="22" fill="url(#slate)"/>
+
+  <!-- 2. Top inner highlight (a 12px tall fade just under the upper edge, masked by the panel rounding) -->
+  <rect x="1" y="1" width="126" height="16" rx="21" fill="url(#topHighlight)"/>
+
+  <!-- 2b. Warm halo behind where the glyph will sit — gives the chalk an apparent light source. -->
+  <rect width="128" height="128" rx="22" fill="url(#chalkHalo)"/>
+
+  <!-- 3. The ∮ glyph.
+          Original glyph in 200-unit space: bbox roughly x[10–165], y[30–195], centred at (87, 112).
+          Transform: translate(64,66) scale(0.52) translate(-87,-112) → centred, with 16px breathing room.
+          Slight downward bias (cy 66 instead of 64) so the descender doesn't crowd the bottom edge. -->
+  <g transform="translate(64 66) scale(0.52) translate(-87 -112)" fill="#ecd5a3" fill-opacity="0.97">
+    <path d="m 147.2,35.8 c -4,3.6 -6,7.4 -6,12.2 0,5.8 3,8.8 7.8,8.8 6,0 13.4,-5 13.4,-15.2 0,-11.4 -8.6,-17 -18.4,-17 -23.6,0 -37,23 -45.600002,50.8 -24.4,0.2 -44.2,18.2 -44.2,43.8 0,19.4 10.8,34.2 26.6,40.6 -5.2,27 -11.4,47.6 -23.6,47.6 -3.4,0 -4.8,-1.2 -4.8,-1.2 v -1.4 c 2.6,-3.8 4.6,-7 4.6,-12.6 0,-5 -2.6,-8.4 -7.8,-8.4 -6.2,0 -11.6,5.2 -11.6,14.4 0,8.2 5.6,17 19.8,17 18.2,0 31.4,-20.6 41.2,-52.2 h 0.2 C 123.4,163 143.2,145 143.4,119.2 c 0,-19.2 -11,-34.2 -27,-40.4 4.8,-24.4 11.2,-45.4 24,-45.4 5,0 6.8,1.2 6.8,1.2 z m -13,83.6 c 0,20.6 -13.8,34.8 -33.2,36 3.8,-13.2 6.8,-28 9.6,-43.8 1.4,-7.8 2.8,-16.2 4.4,-24.4 11.6,5.8 19.2,17.6 19.2,32.2 z m -71.000002,0 c 0,-20.4 13.8,-34.8 33,-35.8 -3.4,12.2 -6,25.2 -8.2,37.2 l -5.6,31 c -11.6,-5.8 -19.2,-17.8 -19.2,-32.4 z"/>
+  </g>
+
+  <!-- 4. Outer hairline frame — pure black at low opacity, defines the panel edge crisply. -->
+  <rect x="0.5" y="0.5" width="127" height="127" rx="21.5"
+        fill="none" stroke="#000000" stroke-opacity="0.55" stroke-width="1"/>
+</svg>

@@ -1,0 +1,12 @@
+--- text
+alpha [beta] gamma
+--- keys
+Cmd+X
+--- expect
+alpha | gamma
+--- note
+Cut deletes exactly the selection and nothing else, then collapses the caret
+to the gap the text left behind. "beta" and its two bracketing spaces are the
+whole story: after the cut the caret sits between the leading space and the
+trailing space, at the offset the selection started from. No trailing
+fragment of the cut word is left, and neither surrounding space is consumed.

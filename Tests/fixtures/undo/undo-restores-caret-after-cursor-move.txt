@@ -1,0 +1,16 @@
+--- text
+foo| bar baz
+--- keys
+Type(X) End Cmd+Z
+--- expect
+foo| bar baz
+--- note
+Undo restores the caret to where it sat BEFORE the edit, not to wherever the
+caret happens to be at the moment of undo. Typing X at column 3 makes
+"fooX bar baz"; End then parks the caret at the line end (column 12). A single
+undo removes the X and returns the caret to column 3, the spot it was typed
+at, because each change records the selection that preceded it and undo
+reinstates that selection. The intervening End is a selection-only move: it
+carries no change of its own, so undo steps straight past it to the insertion.
+Leaving the caret at column 12 would mean undo ignored the stored pre-edit
+selection.

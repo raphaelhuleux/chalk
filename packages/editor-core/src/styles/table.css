@@ -1,0 +1,110 @@
+/* WYSIWYG markdown table widget (table-widget.ts) */
+
+.cm-live-table-wrap {
+  position: relative;
+  /* PADDING, not margin: a vertical margin desyncs CM6's height map for
+     everything below, and clicks and Up/Down land rows away. */
+  padding: 0.6em 0;
+}
+
+/* Keeps a wide table from widening .cm-content, as on display math. */
+.cm-live-table-scroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  contain: inline-size;
+}
+
+.cm-live-table {
+  border-collapse: collapse;
+  font-family: var(--vscode-editor-font-family, inherit);
+  font-size: 0.95em;
+  color: inherit;
+  /* Auto side margins center it; they resolve to 0 when it overflows. */
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.cm-live-table th,
+.cm-live-table td {
+  border: 1px solid var(--divider, var(--vscode-editorWidget-border, #8884));
+  padding: 0.3em 0.6em;
+  min-width: 2.5em;
+  vertical-align: top;
+  outline: none;
+}
+
+.cm-live-table th {
+  font-weight: 600;
+  background-color: color-mix(in srgb, var(--vscode-editor-foreground, currentColor) 6%, transparent);
+}
+
+.cm-live-table td:empty::after,
+.cm-live-table th:empty::after {
+  /* keep empty cells clickable and visible */
+  content: '\200b';
+}
+
+/* Column alignment */
+.cm-live-table-cell--left {
+  text-align: left;
+}
+.cm-live-table-cell--center {
+  text-align: center;
+}
+.cm-live-table-cell--right {
+  text-align: right;
+}
+
+/* Focused cell ring */
+.cm-live-table th:focus,
+.cm-live-table td:focus {
+  box-shadow: inset 0 0 0 2px var(--syntax-link, var(--vscode-textLink-foreground, #4488ff));
+}
+
+/* Floating hover toolbar */
+.cm-live-table-toolbar {
+  position: absolute;
+  top: -1.9em;
+  left: 0;
+  display: none;
+  gap: 2px;
+  align-items: center;
+  padding: 2px 4px;
+  background-color: var(--vscode-editorWidget-background, #2a2a2a);
+  border: 1px solid var(--vscode-editorWidget-border, #8884);
+  border-radius: 5px;
+  z-index: 5;
+  font-family: var(--vscode-editor-font-family, sans-serif);
+  box-shadow: 0 2px 6px #0004;
+}
+
+.cm-live-table-wrap:hover .cm-live-table-toolbar,
+.cm-live-table-wrap:focus-within .cm-live-table-toolbar {
+  display: flex;
+}
+
+.cm-live-table-btn {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 5px;
+  cursor: pointer;
+  color: var(--vscode-editor-foreground, inherit);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.cm-live-table-btn:hover {
+  background-color: color-mix(in srgb, var(--syntax-link, #4488ff) 22%, transparent);
+  border-color: var(--vscode-editorWidget-border, #8884);
+}
+
+.cm-live-table-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background-color: var(--divider, #8884);
+}

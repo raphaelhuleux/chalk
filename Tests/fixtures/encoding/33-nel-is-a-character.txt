@@ -1,0 +1,8 @@
+--- text
+foo|bar
+--- keys
+Right
+--- expect
+foo|bar
+--- note
+The two words are joined by U+0085 (NEL, Next Line), a Unicode line control that CodeMirror's split pattern does not treat as a break. So this is a single line and NEL is an ordinary character within it. One Right moves the caret across NEL by one code unit, and the stored text keeps the NEL unchanged. If the editor treated NEL as a line break, the character would be replaced by a newline and the result would differ.

@@ -1,0 +1,24 @@
+/*
+ * Page-level shell sizing, imported by each host entry (not by mount.ts, so a
+ * partial-page embedder doesn't get it). The editor MUST be height-constrained
+ * so `.cm-scroller` is the scroll container: otherwise the scroll-past-end
+ * spacer, sized from the editor's height, grows without bound.
+ * `#root` is the native mount id, `#editor-root` VS Code's.
+ */
+
+html,
+body,
+#root,
+#editor-root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  /* No rubber-band overscroll; selection is the editor's job, not the page's. */
+  overflow: hidden;
+}
+
+.cm-editor {
+  height: 100%;
+}

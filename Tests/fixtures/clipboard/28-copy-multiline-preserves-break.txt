@@ -1,0 +1,17 @@
+--- text
+[alpha
+beta]
+--- keys
+Cmd+C Right Cmd+V
+--- expect
+alpha
+betaalpha
+beta|
+--- note
+A copied selection that spans a line break must carry the "\n" with it. The
+selection covers both lines, "alpha\nbeta". Right collapses it to its right
+edge, the end of the document, and the paste appends the copied block there.
+For the second line to appear, the clipboard had to preserve the internal
+newline: "beta" then the pasted "alpha", a break, then "beta", with the caret
+at the very end. A clipboard that flattened the break would append "alphabeta"
+on one line and drop a row.

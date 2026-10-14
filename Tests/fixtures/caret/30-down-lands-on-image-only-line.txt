@@ -1,0 +1,16 @@
+--- text
+park |park park park park one
+\includegraphics{fig.png}
+park park park park park two
+--- language
+tex
+--- keys
+Down
+--- expect
+park park park park park one
+\includegraphics{fig.png}|
+park park park park park two
+--- note
+Promoted from matrix cell tex/includegraphics/own-line/w80/desktop (FINDINGS.md #4, rule R-V1).
+CM6's moveVertically probes textHeight/2 past the current row's edge, so an image-only line whose rendered box was shorter than that was stepped over entirely: zero-height while the asset is unresolved (this harness resolves nothing), tiny for a small image, and Down from the line above landed on the line below.
+.cm-live-image now keeps a minimum caret-sized box (1lh tall, 1ch wide), so the press lands ON the image line, at the widget edge nearest the goal x.

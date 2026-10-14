@@ -1,0 +1,12 @@
+--- text
+alp|ha beta
+gamma delta
+epsilon
+--- keys
+Shift+Down
+--- expect
+alp[ha beta
+gam]ma delta
+epsilon
+--- note
+Shift+Down extends from the anchor to the same column one line down.

@@ -1,0 +1,9 @@
+--- text
+|alphabeta
+--- keys
+Down
+--- expect
+alpha
+|beta
+--- note
+The two words are joined by a bare carriage return (a classic Mac line ending), with no line feed after it. CodeMirror's split pattern treats a lone CR as a line break, so once loaded this is a two-line document. Down from column 0 of line 1 must land on column 0 of line 2, and the stored text must use a newline in place of the CR. Treating the CR as an ordinary character (one line, Down clamping to its end) would fail.

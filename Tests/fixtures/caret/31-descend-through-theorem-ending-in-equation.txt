@@ -1,0 +1,25 @@
+--- text
+|park park park park park one
+\begin{theorem}
+lead body line
+\begin{equation}
+E = mc^2
+\end{equation}
+\end{theorem}
+park park park park park two
+--- language
+tex
+--- keys
+Down Down Down Down Down Down Down
+--- expect
+park park park park park one
+\begin{theorem}
+lead body line
+\begin{equation}
+E = mc^2
+\end{equation}
+\end{theorem}
+|park park park park park two
+--- note
+Promoted from matrix cell tex/display-3/absorb-callout/w80/desktop (FINDINGS.md #1, rule O-3: the phantom row under an absorbed callout fence, tex side).
+Walks the caret down through the whole construct one press per document line: onto the revealed open fence, the body line, into the display block (R-V4 stop, which reveals it and drops the preview widget AFTER the collapsed \end{theorem} — the fix keeps the fence hide's merge host so no stray empty row renders), through the block, onto the collapsed fence (R-V3 stop), and out to the bottom park line at the run's column.

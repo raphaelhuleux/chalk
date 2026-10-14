@@ -1,0 +1,8 @@
+--- text
+alpha |beta gamma
+--- keys
+Shift+End
+--- expect
+alpha [beta gamma]
+--- note
+Shift+End selects from the caret to the end of the row.

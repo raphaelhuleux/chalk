@@ -1,0 +1,36 @@
+# macOS cruft
+.DS_Store
+
+# Node / web bundling
+node_modules/
+web/dist/
+web/.cache/
+
+# Built engine artifacts (produced from packages/editor-core by the web build)
+mac/Chalk/Resources/editor/
+
+# VS Code extension build artifacts
+vscode/dist/
+*.vsix
+
+# Xcode / XcodeGen (the project + Info.plist are generated from mac/project.yml;
+# run `xcodegen generate` after cloning).
+*.xcodeproj/
+*.xcworkspace/
+mac/Chalk/Info.plist
+DerivedData/
+build/
+mac/build/
+.build/
+.build-claude*/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+
+# Misc
+*.log
+# one-off preview screenshots dropped at the repo root by editor sessions
+/pv*.png
+
+# scripts/check.sh step logs
+.harness/

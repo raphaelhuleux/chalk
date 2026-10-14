@@ -1,0 +1,6 @@
+--- text
+|alpha beta gamma
+--- keys
+Shift+Right
+--- expect
+[a]lpha beta gamma

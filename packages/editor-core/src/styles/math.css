@@ -1,0 +1,105 @@
+.cm-math-rendered {
+  cursor: pointer;
+}
+
+.cm-math-inline {
+  /* Atomic inline: see .cm-tex-math-inline in editor.css (WKWebView stale paint). */
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+/* Keeps trailing punctuation glued to an inline formula (`$x$.`): an atomic
+ * inline box always gets a wrap opportunity after it (see punctuation-glue.ts). */
+.cm-math-glue {
+  white-space: nowrap;
+}
+
+.cm-math-editing {
+  background-color: color-mix(in srgb, var(--cursor-color) 5%, transparent);
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.cm-math-error {
+  color: #e53e3e;
+  text-decoration: underline wavy #e53e3e;
+}
+
+.cm-math-display {
+  display: block;
+  text-align: center;
+  /* PADDING, never margin: block-widget margins are invisible to CM6's height map. */
+  padding: 1.5em 0;
+}
+
+/* Paragraph-interior `$$…$$`: an inline replace that makes its own row (<br> +
+   full-width inline-block). See KaTeXInlineDisplayWidget in md-math-plugin.ts. */
+.cm-math-inline-display {
+  display: inline;
+}
+
+.cm-math-display.cm-math-inline-display-row {
+  display: inline-block;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+/* Restart KaTeX's equation counters from the block's document-order offset:
+   CM6 only keeps visible widgets in the DOM. Tex twin in editor.css. */
+.cm-math-display,
+.cm-math-preview {
+  counter-reset: katexEqnNo var(--chalk-eq-offset, 0) mmlEqnNo var(--chalk-eq-offset, 0);
+  /* Don't remove `contain: inline-size`: KaTeX descendants would force
+   * `.cm-content` wider than the viewport (editor-wide scrollbar). `overflow-x:
+   * clip` hides residual overflow without a per-widget scrollbar; `max-width`
+   * is the fallback for engines without `contain: inline-size`. */
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  contain: inline-size;
+  overflow-x: clip;
+}
+
+/* Numbered `$$ … $$ {#eq-…}`: containing block for the absolute `(N)` tag. */
+.cm-math-display.cm-math-numbered {
+  position: relative;
+}
+
+.cm-eq-number {
+  position: absolute;
+  right: 0.15em;
+  top: 50%;
+  transform: translateY(-50%);
+  color: inherit;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+/* The Quarto id, mirrored opposite the number. */
+.cm-eq-id {
+  position: absolute;
+  left: 0.15em;
+  top: 50%;
+  transform: translateY(-50%);
+  user-select: none;
+}
+
+/* Live preview below the source while the cursor is inside. */
+.cm-math-preview {
+  display: block;
+  text-align: center;
+  padding: 0.5em 0;
+  border-top: 1px dashed var(--border);
+  opacity: 0.6;
+}
+
+/* All KaTeX elements take the editor's foreground color. */
+.cm-math-rendered,
+.cm-math-rendered .katex,
+.cm-math-rendered .katex *,
+.cm-math-preview .katex,
+.cm-math-preview .katex * {
+  color: inherit !important;
+}

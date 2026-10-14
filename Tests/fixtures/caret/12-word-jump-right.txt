@@ -1,0 +1,8 @@
+--- text
+|alpha beta gamma
+--- keys
+Alt+Right
+--- expect
+alpha| beta gamma
+--- note
+Alt+Right is cursorGroupForward on macOS: to the end of the current word.

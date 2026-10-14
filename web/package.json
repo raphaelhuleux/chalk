@@ -1,0 +1,20 @@
+{
+  "name": "chalk-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Builds @chalk/editor-core (from packages/editor-core) into the WKWebView editor bundle for the Mac app.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chalk/editor-core": "workspace:*",
+    "@fontsource/ibm-plex-mono": "^5.2.7"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.3"
+  }
+}

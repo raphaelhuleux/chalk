@@ -1,0 +1,728 @@
+/*
+ * Base palette + layout for the WKWebView editor. editor-core/theme.ts reads
+ * these `--vscode-*` / `--chalk-*` properties as it does in the VS Code
+ * webview. The native shell sets `data-theme` (dark/light) and
+ * `data-palette` (the ChalkTheme raw value) on <html>; heading-colors
+ * messages can override heading colors at runtime. No chrome variables: the
+ * sidebar and tab strip are native UIKit.
+ *
+ * Bare :root and [data-theme="light"] are the Ink theme. Every other theme
+ * is two blocks, dark then light, that each redefine the whole colour set.
+ * The --ink-* values of every block must equal ChalkKit's ThemePalette
+ * (PaletteParityTests reads these selectors verbatim).
+ */
+
+:root {
+  /* ---- Ink palette (handoff/chalk-design.css) ---- */
+  --ink-text-primary: #f2efe9;
+  /* A step below primary so headings/bold still read heavier. */
+  --ink-text-body: #e6e2da;
+  --ink-text-secondary: #a5a19a;
+  --ink-text-muted: #8f8b84;
+  --ink-text-faint: #6b6862;
+  --ink-text-ghost: #57534c;
+  --ink-accent: #e2955c;
+  --ink-bg-editor: #1b1a18;
+
+  /* editor surface */
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editor-font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  --vscode-editor-font-size: 17px;
+  --vscode-editorCursor-foreground: var(--ink-accent);
+  /* Selection colours are used exactly: editor-core's layer opacity is
+     switched off. Keep them opaque: CM6's overlapping selection rectangles
+     would stack any alpha here. */
+  --chalk-selection-opacity: 1;
+  --vscode-editor-selectionBackground: rgb(52, 84, 122);
+  --vscode-editor-inactiveSelectionBackground: rgb(58, 56, 52);
+  --vscode-editor-lineHighlightBackground: #201f1c;
+
+  /* gutter */
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: var(--ink-text-muted);
+
+  /* widgets / autocomplete (system UI font, warm chrome tones) */
+  --vscode-font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+  --vscode-font-size: 13px;
+  --vscode-descriptionForeground: var(--ink-text-secondary);
+  --vscode-errorForeground: #e0584f;
+  --vscode-textLink-foreground: #7ea6d6;
+  --vscode-widget-border: #2a2825;
+  --vscode-editorWidget-border: #2a2825;
+  --vscode-list-activeSelectionBackground: #2a2825;
+  --vscode-list-activeSelectionForeground: var(--ink-text-primary);
+  --vscode-editorHint-foreground: var(--ink-text-muted);
+
+  --vscode-editorSuggestWidget-background: #161513;
+  --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
+  --vscode-editorSuggestWidget-border: #2a2825;
+  --vscode-editorSuggestWidget-selectedBackground: #2a2825;
+  --vscode-editorSuggestWidget-selectedForeground: var(--ink-text-primary);
+  --vscode-editorSuggestWidget-highlightForeground: var(--ink-accent);
+  --vscode-editorSuggestWidget-focusHighlightForeground: var(--ink-accent);
+
+  /* LaTeX / syntax — warm-shifted, low-chroma */
+  --chalk-syntax-keyword: #7ea6d6;
+  --chalk-syntax-tag: #5e9d95;
+  --chalk-syntax-comment: var(--ink-text-ghost);
+  --chalk-syntax-number: #8fa15a;
+  --chalk-syntax-atom: #7ea6d6;
+  --chalk-syntax-bracket: var(--ink-text-body);
+  --chalk-syntax-special-variable: #c2995f;
+  --chalk-syntax-invalid: #e0584f;
+
+  /* Headings: monochrome — same size as body, weight + brightness only
+     (spec .md-h1/.md-h2: bold text-primary, no per-level hues). */
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-text-secondary);
+
+  /* Inline-emphasis colors (spec .md-italic); light mode overrides below. */
+  --chalk-italic: #e8e5df;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  /* ---- Ink palette (handoff/chalk-design.css) ----
+     Editor bg must equal chalkEditorBackground light in
+     mac/Chalk/App/ChalkPalette.swift. */
+  --ink-bg-editor: #f8f5ee;
+  --ink-text-primary: #1f1e24;
+  --ink-text-body: #3a3942;
+  --ink-text-secondary: #6f6a61;
+  --ink-text-muted: #8a857d;
+  --ink-text-faint: #a39d92;
+  --ink-text-ghost: #b8b1a2;
+  --ink-accent: #d24a3e;
+
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editorCursor-foreground: var(--ink-accent);
+  /* See the dark block's comment. */
+  --vscode-editor-selectionBackground: rgb(184, 214, 250);
+  --vscode-editor-inactiveSelectionBackground: rgb(226, 222, 214);
+  --vscode-editor-lineHighlightBackground: #f2efea;
+
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: #8a857d;
+
+  --vscode-descriptionForeground: #8a857d;
+  --vscode-errorForeground: #c43b30;
+  --vscode-textLink-foreground: #3f5f9a;
+  --vscode-widget-border: #e3e0db;
+  --vscode-editorWidget-border: #e3e0db;
+  --vscode-list-activeSelectionBackground: #ece8e2;
+  --vscode-list-activeSelectionForeground: #1f1e24;
+  --vscode-editorHint-foreground: #8a857d;
+
+  --vscode-editorSuggestWidget-background: #f8f5ee;
+  --vscode-editorSuggestWidget-foreground: #3a3942;
+  --vscode-editorSuggestWidget-border: #e3e0db;
+  --vscode-editorSuggestWidget-selectedBackground: #ece8e2;
+  --vscode-editorSuggestWidget-selectedForeground: #1f1e24;
+  --vscode-editorSuggestWidget-highlightForeground: #d24a3e;
+  --vscode-editorSuggestWidget-focusHighlightForeground: #d24a3e;
+
+  --chalk-syntax-keyword: #3f5f9a;
+  --chalk-syntax-tag: #2f7e74;
+  --chalk-syntax-comment: #9a978f;
+  --chalk-syntax-number: #5f7d3a;
+  --chalk-syntax-atom: #3f5f9a;
+  --chalk-syntax-bracket: #3a3942;
+  --chalk-syntax-special-variable: #a9762c;
+  --chalk-syntax-invalid: #c43b30;
+
+  /* Headings monochrome, matching the dark block. */
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-text-secondary);
+  /* Emphasis brightens to primary ink, like dark's near-white. */
+  --chalk-italic: var(--ink-text-primary);
+
+  color-scheme: light;
+}
+
+/* ---- Atom: One Dark / One Light (kognise/obsidian-atom) ---- */
+:root[data-palette="atom"]:not([data-theme="light"]) {
+  --ink-bg-editor: #272b34;
+  --ink-text-primary: #e6e7e9;
+  --ink-text-body: #dcddde;
+  --ink-text-secondary: #abb2bf;
+  --ink-text-muted: #828997;
+  --ink-text-faint: #5c6370;
+  --ink-text-ghost: #4b5263;
+  --ink-accent: #61afef;
+
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editorCursor-foreground: #528bff;
+  --vscode-editor-selectionBackground: #3e4451;
+  --vscode-editor-inactiveSelectionBackground: #353b45;
+  --vscode-editor-lineHighlightBackground: #2c313c;
+
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: var(--ink-text-muted);
+
+  --vscode-descriptionForeground: var(--ink-text-secondary);
+  --vscode-errorForeground: #e06c75;
+  --vscode-textLink-foreground: #61afef;
+  --vscode-widget-border: #181a1f;
+  --vscode-editorWidget-border: #181a1f;
+  --vscode-list-activeSelectionBackground: #2c313a;
+  --vscode-list-activeSelectionForeground: var(--ink-text-primary);
+  --vscode-editorHint-foreground: var(--ink-text-muted);
+
+  --vscode-editorSuggestWidget-background: #20242b;
+  --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
+  --vscode-editorSuggestWidget-border: #181a1f;
+  --vscode-editorSuggestWidget-selectedBackground: #2c313a;
+  --vscode-editorSuggestWidget-selectedForeground: var(--ink-text-primary);
+  --vscode-editorSuggestWidget-highlightForeground: var(--ink-accent);
+  --vscode-editorSuggestWidget-focusHighlightForeground: var(--ink-accent);
+
+  --chalk-syntax-keyword: #c678dd;
+  --chalk-syntax-tag: #e06c75;
+  --chalk-syntax-comment: #5c6370;
+  --chalk-syntax-number: #d19a66;
+  --chalk-syntax-atom: #61afef;
+  --chalk-syntax-bracket: var(--ink-text-body);
+  --chalk-syntax-special-variable: #e5c07b;
+  --chalk-syntax-invalid: #e06c75;
+
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-text-secondary);
+  --chalk-italic: var(--ink-text-primary);
+
+  color-scheme: dark;
+}
+
+:root[data-palette="atom"][data-theme="light"] {
+  --ink-bg-editor: #fafafa;
+  --ink-text-primary: #24262d;
+  --ink-text-body: #383a42;
+  --ink-text-secondary: #696c77;
+  --ink-text-muted: #8e8e90;
+  --ink-text-faint: #a0a1a7;
+  --ink-text-ghost: #c2c2c3;
+  --ink-accent: #1592ff;
+
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editorCursor-foreground: #526fff;
+  --vscode-editor-selectionBackground: #e5e5e6;
+  --vscode-editor-inactiveSelectionBackground: #eeeeee;
+  --vscode-editor-lineHighlightBackground: #f0f0f1;
+
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: var(--ink-text-muted);
+
+  --vscode-descriptionForeground: var(--ink-text-muted);
+  --vscode-errorForeground: #e45649;
+  --vscode-textLink-foreground: #4078f2;
+  --vscode-widget-border: #dbdbdc;
+  --vscode-editorWidget-border: #dbdbdc;
+  --vscode-list-activeSelectionBackground: #dbdbdc;
+  --vscode-list-activeSelectionForeground: var(--ink-text-primary);
+  --vscode-editorHint-foreground: var(--ink-text-muted);
+
+  --vscode-editorSuggestWidget-background: #eaeaeb;
+  --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
+  --vscode-editorSuggestWidget-border: #dbdbdc;
+  --vscode-editorSuggestWidget-selectedBackground: #dbdbdc;
+  --vscode-editorSuggestWidget-selectedForeground: var(--ink-text-primary);
+  --vscode-editorSuggestWidget-highlightForeground: var(--ink-accent);
+  --vscode-editorSuggestWidget-focusHighlightForeground: var(--ink-accent);
+
+  --chalk-syntax-keyword: #a626a4;
+  --chalk-syntax-tag: #e45649;
+  --chalk-syntax-comment: #a0a1a7;
+  --chalk-syntax-number: #986801;
+  --chalk-syntax-atom: #4078f2;
+  --chalk-syntax-bracket: var(--ink-text-body);
+  --chalk-syntax-special-variable: #c18401;
+  --chalk-syntax-invalid: #e45649;
+
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-text-secondary);
+  --chalk-italic: var(--ink-text-primary);
+
+  color-scheme: light;
+}
+
+/* ---- Catppuccin: Frappé / Latte, mauve accent (catppuccin/obsidian) ---- */
+:root[data-palette="catppuccin"]:not([data-theme="light"]) {
+  --ink-bg-editor: #303446;
+  --ink-text-primary: #c6d0f5;
+  --ink-text-body: #b5bfe2;
+  --ink-text-secondary: #a5adce;
+  --ink-text-muted: #949cbb;
+  --ink-text-faint: #737994;
+  --ink-text-ghost: #626880;
+  --ink-accent: #ca9ee6;
+
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editorCursor-foreground: #f2d5cf;
+  --vscode-editor-selectionBackground: #51576d;
+  --vscode-editor-inactiveSelectionBackground: #414559;
+  --vscode-editor-lineHighlightBackground: #363a4f;
+
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: var(--ink-text-muted);
+
+  --vscode-descriptionForeground: var(--ink-text-secondary);
+  --vscode-errorForeground: #e78284;
+  --vscode-textLink-foreground: #8caaee;
+  --vscode-widget-border: #414559;
+  --vscode-editorWidget-border: #414559;
+  --vscode-list-activeSelectionBackground: #414559;
+  --vscode-list-activeSelectionForeground: var(--ink-text-primary);
+  --vscode-editorHint-foreground: var(--ink-text-muted);
+
+  --vscode-editorSuggestWidget-background: #292c3c;
+  --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
+  --vscode-editorSuggestWidget-border: #414559;
+  --vscode-editorSuggestWidget-selectedBackground: #414559;
+  --vscode-editorSuggestWidget-selectedForeground: var(--ink-text-primary);
+  --vscode-editorSuggestWidget-highlightForeground: var(--ink-accent);
+  --vscode-editorSuggestWidget-focusHighlightForeground: var(--ink-accent);
+
+  --chalk-syntax-keyword: #ca9ee6;
+  --chalk-syntax-tag: #81c8be;
+  --chalk-syntax-comment: #838ba7;
+  --chalk-syntax-number: #ef9f76;
+  --chalk-syntax-atom: #8caaee;
+  --chalk-syntax-bracket: #949cbb;
+  --chalk-syntax-special-variable: #e5c890;
+  --chalk-syntax-invalid: #e78284;
+
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-accent);
+  --chalk-italic: var(--ink-text-primary);
+
+  color-scheme: dark;
+}
+
+:root[data-palette="catppuccin"][data-theme="light"] {
+  --ink-bg-editor: #eff1f5;
+  --ink-text-primary: #4c4f69;
+  --ink-text-body: #5c5f77;
+  --ink-text-secondary: #6c6f85;
+  --ink-text-muted: #7c7f93;
+  --ink-text-faint: #9ca0b0;
+  --ink-text-ghost: #acb0be;
+  --ink-accent: #8839ef;
+
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editorCursor-foreground: #dc8a78;
+  --vscode-editor-selectionBackground: #ccd0da;
+  --vscode-editor-inactiveSelectionBackground: #dce0e8;
+  --vscode-editor-lineHighlightBackground: #e9ecf2;
+
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: var(--ink-text-muted);
+
+  --vscode-descriptionForeground: var(--ink-text-muted);
+  --vscode-errorForeground: #d20f39;
+  --vscode-textLink-foreground: #1e66f5;
+  --vscode-widget-border: #ccd0da;
+  --vscode-editorWidget-border: #ccd0da;
+  --vscode-list-activeSelectionBackground: #ccd0da;
+  --vscode-list-activeSelectionForeground: var(--ink-text-primary);
+  --vscode-editorHint-foreground: var(--ink-text-muted);
+
+  --vscode-editorSuggestWidget-background: #e6e9ef;
+  --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
+  --vscode-editorSuggestWidget-border: #ccd0da;
+  --vscode-editorSuggestWidget-selectedBackground: #ccd0da;
+  --vscode-editorSuggestWidget-selectedForeground: var(--ink-text-primary);
+  --vscode-editorSuggestWidget-highlightForeground: var(--ink-accent);
+  --vscode-editorSuggestWidget-focusHighlightForeground: var(--ink-accent);
+
+  --chalk-syntax-keyword: #8839ef;
+  --chalk-syntax-tag: #179299;
+  --chalk-syntax-comment: #8c8fa1;
+  --chalk-syntax-number: #fe640b;
+  --chalk-syntax-atom: #1e66f5;
+  --chalk-syntax-bracket: #7c7f93;
+  --chalk-syntax-special-variable: #df8e1d;
+  --chalk-syntax-invalid: #d20f39;
+
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-accent);
+  --chalk-italic: var(--ink-text-primary);
+
+  color-scheme: light;
+}
+
+/* ---- LaTeX: prose in Palatino, as LaTeX's mathpazo sets it, on the
+   neutral page of benf2004/Obsidian-LaTeX-Theme. Palatino ships with macOS,
+   so nothing is bundled. Rendered math keeps KaTeX's faces (see
+   the Math note below); code and math source keep editor-core's monospace. */
+:root[data-palette="latex"] {
+  --vscode-editor-font-family: Palatino, "Palatino Linotype", "TeX Gyre Pagella", "URW Palladio L", "Book Antiqua", serif;
+}
+
+/* Set like TeX: standard ligatures (fi, fl, ffi) and kerning. The general rule
+   below turns ligatures off for IBM Plex Mono, so monospace runs keep it. */
+:root[data-palette="latex"] .editor-host .cm-content {
+  font-variant-ligatures: common-ligatures;
+  font-kerning: normal;
+}
+
+:root[data-palette="latex"] .editor-host :is(.cm-codeblock, .cm-live-code, .cm-tex-tt, .cm-math-editing) {
+  font-variant-ligatures: none;
+}
+
+/* One left edge, as on a typeset page: every text starts on the body column
+   and every block's rule sits in the same gutter left of it, the way callouts
+   already hang their bar (callout.css). The gutter is a length, not `em`, so
+   blocks set smaller (code) line up with the rest. */
+:root[data-palette="latex"] {
+  --chalk-callout-outdent: calc(0.75 * var(--vscode-editor-font-size, 17px));
+}
+
+/* The hung marks and bars need that gutter on a narrow window too: there the
+   column gives up 1.6em a side instead of letting the shell's side buffer
+   clip them. Wide windows keep the full measure. */
+:root[data-palette="latex"] .editor-host .cm-content {
+  max-width: calc(min(var(--chalk-measure, 960px), 100% - 3.2em) - 2 * var(--chalk-side-pad, 20px));
+}
+
+:root[data-palette="latex"] .editor-host .cm-line.cm-codeblock {
+  margin-left: calc(-3px - var(--chalk-callout-outdent));
+  padding-left: calc(6px + var(--chalk-callout-outdent) + var(--chalk-hang, 0px));
+}
+
+/* A Markdown heading's `#` run: quiet syntax in the system face (Palatino's
+   `#` is spindly), hung in the gutter so the heading text starts on the body
+   column at every level. Still text, still visible: a zero-width box whose
+   content overflows to the left (flex-end). */
+:root[data-palette="latex"] .editor-host .cm-md-header-mark {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 0;
+  white-space: pre;
+  font-family: var(--vscode-font-family);
+  font-weight: 400;
+  font-size: 0.95em;
+  color: var(--ink-text-faint);
+}
+
+:root[data-palette="latex"]:not([data-theme="light"]) {
+  --ink-bg-editor: #1e1e1e;
+  --ink-text-primary: #ededed;
+  --ink-text-body: #dadada;
+  --ink-text-secondary: #b3b3b3;
+  --ink-text-muted: #999999;
+  --ink-text-faint: #666666;
+  --ink-text-ghost: #4d4d4d;
+  --ink-accent: #4f8fe6;
+
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editorCursor-foreground: var(--ink-text-primary);
+  --vscode-editor-selectionBackground: #264f78;
+  --vscode-editor-inactiveSelectionBackground: #3a3a3a;
+  --vscode-editor-lineHighlightBackground: #252525;
+
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: var(--ink-text-muted);
+
+  --vscode-descriptionForeground: var(--ink-text-secondary);
+  --vscode-errorForeground: #ef6b6b;
+  --vscode-textLink-foreground: var(--ink-accent);
+  --vscode-widget-border: #3a3a3a;
+  --vscode-editorWidget-border: #3a3a3a;
+  --vscode-list-activeSelectionBackground: #363636;
+  --vscode-list-activeSelectionForeground: var(--ink-text-primary);
+  --vscode-editorHint-foreground: var(--ink-text-muted);
+
+  --vscode-editorSuggestWidget-background: #262626;
+  --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
+  --vscode-editorSuggestWidget-border: #3a3a3a;
+  --vscode-editorSuggestWidget-selectedBackground: #363636;
+  --vscode-editorSuggestWidget-selectedForeground: var(--ink-text-primary);
+  --vscode-editorSuggestWidget-highlightForeground: var(--ink-accent);
+  --vscode-editorSuggestWidget-focusHighlightForeground: var(--ink-accent);
+
+  --chalk-syntax-keyword: #7aa7e8;
+  --chalk-syntax-tag: #c792a0;
+  --chalk-syntax-comment: #6a6a6a;
+  --chalk-syntax-number: #9ac08a;
+  --chalk-syntax-atom: #7aa7e8;
+  --chalk-syntax-bracket: var(--ink-text-body);
+  --chalk-syntax-special-variable: #d4a65a;
+  --chalk-syntax-invalid: #ef6b6b;
+
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-accent);
+  --chalk-italic: var(--ink-text-body);
+
+  color-scheme: dark;
+}
+
+:root[data-palette="latex"][data-theme="light"] {
+  --ink-bg-editor: #ffffff;
+  --ink-text-primary: #000000;
+  --ink-text-body: #1a1a1a;
+  --ink-text-secondary: #5c5c5c;
+  --ink-text-muted: #808080;
+  --ink-text-faint: #ababab;
+  --ink-text-ghost: #c8c8c8;
+  --ink-accent: #2875d9;
+
+  --vscode-editor-background: var(--ink-bg-editor);
+  --vscode-editor-foreground: var(--ink-text-body);
+  --vscode-editorCursor-foreground: var(--ink-text-primary);
+  --vscode-editor-selectionBackground: #b4d5fe;
+  --vscode-editor-inactiveSelectionBackground: #e5e5e5;
+  --vscode-editor-lineHighlightBackground: #f7f7f7;
+
+  --vscode-editorGutter-background: var(--ink-bg-editor);
+  --vscode-editorLineNumber-foreground: var(--ink-text-ghost);
+  --vscode-editorLineNumber-activeForeground: var(--ink-text-muted);
+
+  --vscode-descriptionForeground: var(--ink-text-muted);
+  --vscode-errorForeground: #c62828;
+  --vscode-textLink-foreground: var(--ink-accent);
+  --vscode-widget-border: #dadada;
+  --vscode-editorWidget-border: #dadada;
+  --vscode-list-activeSelectionBackground: #e8e7e7;
+  --vscode-list-activeSelectionForeground: var(--ink-text-primary);
+  --vscode-editorHint-foreground: var(--ink-text-muted);
+
+  --vscode-editorSuggestWidget-background: #f6f6f6;
+  --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
+  --vscode-editorSuggestWidget-border: #dadada;
+  --vscode-editorSuggestWidget-selectedBackground: #e8e7e7;
+  --vscode-editorSuggestWidget-selectedForeground: var(--ink-text-primary);
+  --vscode-editorSuggestWidget-highlightForeground: var(--ink-accent);
+  --vscode-editorSuggestWidget-focusHighlightForeground: var(--ink-accent);
+
+  --chalk-syntax-keyword: #2a5db0;
+  --chalk-syntax-tag: #8e3b46;
+  --chalk-syntax-comment: #8a8a8a;
+  --chalk-syntax-number: #3c6e3c;
+  --chalk-syntax-atom: #2a5db0;
+  --chalk-syntax-bracket: var(--ink-text-body);
+  --chalk-syntax-special-variable: #8a5a00;
+  --chalk-syntax-invalid: #c62828;
+
+  --chalk-heading-1: var(--ink-text-primary);
+  --chalk-heading-2: var(--ink-text-primary);
+  --chalk-heading-3: var(--ink-text-primary);
+  --chalk-heading-4: var(--ink-text-primary);
+  --chalk-heading-5: var(--ink-text-primary);
+  --chalk-heading-6: var(--ink-text-primary);
+  --chalk-list-mark: var(--ink-accent);
+  --chalk-italic: var(--ink-text-body);
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Page-level sizing comes from editor-core's styles/host-shell.css, imported
+   by native-host.ts and shared with the VS Code host. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+/*
+ * Writing surface. --chalk-line-height is the single source of truth for row
+ * height, applied to both .cm-content and .cm-line so every line box matches.
+ */
+.editor-host {
+  /* The shell pushes --chalk-line-height-pref on :root
+     (WebEditorSurface.setLineHeight). The indirection is required: a custom
+     property declared HERE shadows the same name set on :root, so the shell
+     could never win by writing --chalk-line-height directly. */
+  --chalk-line-height: var(--chalk-line-height-pref, 1.6);
+  height: 100%;
+}
+
+/* Centered measure; the shell pushes --chalk-measure, --chalk-side-pad and
+   --chalk-text-align (Settings), and the fallbacks only cover the beat before
+   the first `ready`. --chalk-text-align inherits into .cm-line; display math
+   and table columns set text-align explicitly. No ligatures: IBM Plex Mono
+   would otherwise join sequences like `--—` into one glyph run. */
+.editor-host .cm-content {
+  /* The side buffers are subtracted from the box, NOT applied as horizontal
+     padding. CM6's drawSelection measures `contentDOM.getBoundingClientRect()`
+     (a border box) corrected only by `.cm-line`'s padding, so padding here
+     makes the selection band paint --chalk-side-pad too wide on both sides.
+     A gutter, if ever needed, belongs on `.cm-line`. Pinned by the
+     "selection band stays inside the text column" browser scenario. */
+  max-width: calc(min(var(--chalk-measure, 960px), 100%) - 2 * var(--chalk-side-pad, 20px));
+  margin: 0 auto;
+  text-align: var(--chalk-text-align, start);
+  padding: 2px 0 48px;
+  /* The shell sets --chalk-chrome-top to the tab band's height so the text
+     rests below the band but scrolls under it (overlay chrome). */
+  padding-top: var(--chalk-chrome-top, 2px);
+  font-size: var(--vscode-editor-font-size);
+  line-height: var(--chalk-line-height);
+  font-variant-ligatures: none;
+}
+
+.editor-host .cm-line {
+  line-height: var(--chalk-line-height);
+}
+
+/* The I-beam belongs to text: `.cm-content` fills the scroller, so without
+ * this the blank area below the last line shows an I-beam. Only the pointer
+ * shape changes; a click there still lands at the end of the document. */
+.editor-host .cm-content {
+  cursor: default;
+}
+
+.editor-host .cm-line {
+  cursor: text;
+}
+
+/* Rendered display math shouldn't disturb the line grid. */
+.editor-host .katex-display {
+  margin: 0 !important;
+}
+
+/* Display-math vertical padding comes from editor-core; don't override it
+   here. Spacing must stay PADDING (never margin) or CM6's height map desyncs. */
+
+/* Inline emphasis (spec .md-bold / .md-italic): content brightens, style
+   applies; the emphasis markers are editor-core's cursor-reveal behavior. */
+.editor-host .cm-live-bold,
+.editor-host .cm-tex-strong {
+  font-weight: 600;
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.editor-host .cm-live-italic,
+.editor-host .cm-tex-em {
+  font-style: italic;
+  color: var(--chalk-italic);
+}
+
+/* Caret spans the full line box, grown 15% symmetrically from the center. */
+.editor-host .cm-cursor {
+  border-left-width: 2.5px;
+  border-radius: 1.25px;
+  transform: scaleY(1.15);
+  transform-origin: center;
+}
+
+/* Soft, slow caret fade instead of CodeMirror's hard steps() blink. */
+@keyframes chalk-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.editor-host .cm-cursorLayer {
+  animation: none !important;
+}
+
+.editor-host .cm-focused .cm-cursor {
+  animation: chalk-caret 1.8s ease-in-out infinite;
+}
+
+/* No placeholder text: an empty document shows a blank surface. Hidden on
+   the host side so editor-core stays untouched. */
+.editor-host .cm-placeholder {
+  display: none;
+}
+
+/* Headings: same size as body, bold (spec .md-h1/.md-h2 — headings differ by
+   weight only). editor-core sets 600/500; the spec wants 700 for h1/h2. */
+.editor-host .cm-h1,
+.editor-host .cm-h2 {
+  font-weight: 700;
+}
+
+.editor-host .cm-h3,
+.editor-host .cm-h4,
+.editor-host .cm-h5,
+.editor-host .cm-h6 {
+  font-weight: 600;
+}
+
+/* List markers at medium weight (a bundled Plex Mono face). Their colour is
+   secondary ink, not the spec's ghost tier, which sits near 2:1 contrast. */
+.editor-host .cm-live-list-mark,
+.editor-host .cm-tex-item-marker {
+  font-weight: 500;
+}
+
+/* Math keeps KaTeX's own fonts in every theme. KaTeX places accents and
+   sub/superscripts from its fonts' metrics, so swapping the letter face
+   (STIX, Palatino) put hats beside letters and subscripts into them. */
+
+/* Inline math tracks the body size. Display math uses KaTeX's natural display
+   size (1.21em) so the rendered block matches the live preview shown while
+   editing it (.cm-*-math-preview leaves the size alone). */
+.editor-host .cm-math-inline .katex,
+.editor-host .cm-tex-math-inline .katex {
+  font-size: 1.02em;
+}
+
+.editor-host .cm-math-display .katex,
+.editor-host .cm-tex-math-display .katex {
+  font-size: 1.21em;
+}

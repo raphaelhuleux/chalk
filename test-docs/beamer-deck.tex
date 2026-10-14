@@ -1,0 +1,112 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{metropolis}
+
+\title{Instrumental Variables}
+\subtitle{identification, estimation, evidence}
+\author{R. Huleux}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}{Roadmap}
+    \begin{itemize}
+        \item identification
+        \item estimation
+        \item evidence
+    \end{itemize}
+\end{frame}
+
+\section{Estimation}
+
+\begin{frame}{Bayesian updating}{a worked example}\label{frm:bayes}
+
+    \begin{itemize}
+        \item prior $p(\theta)$
+        \item likelihood $p(y \mid \theta)$
+    \end{itemize}
+    \[ p(\theta \mid y) \propto p(y \mid \theta)\, p(\theta) \]
+
+    \begin{block}{Takeaway}
+        the posterior is conjugate
+    \end{block}
+
+\end{frame}
+
+\begin{frame}[t]
+    \frametitle{Identification}
+    \framesubtitle{three conditions}
+    \begin{enumerate}
+        \item relevance
+        \pause
+        \item exogeneity
+        \pause
+        \item monotonicity
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}{Caveats}
+    \begin{itemize}
+        \item<2-> weak instruments bite first
+        \item<3-> and the LATE is local
+    \end{itemize}
+
+    \begin{alertblock}{Warning}
+        the prior is not innocuous
+    \end{alertblock}
+
+\begin{exampleblock}{Example}
+        a compliers-only interpretation
+\end{exampleblock}
+
+\end{frame}
+
+\begin{frame}{A result}
+   
+\begin{theorem}[Wald]
+Under relevance and exogeneity the Wald estimand equals the LATE.
+\end{theorem}
+
+\begin{proof}
+Immediate from the definition.
+\end{proof}
+
+\end{frame}
+
+\begin{frame}{Main estimates}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            OLS is biased upward
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            IV halves the estimate
+        \end{column}
+    \end{columns}
+\end{frame}
+
+
+\begin{frame}[fragile]{How to write a frame}
+\begin{verbatim}
+\begin{frame}{Not a real frame}
+    this is a code sample
+\end{frame}
+\end{verbatim}
+\end{frame}
+
+% --- TRAP: a commented-out frame must not be scanned.
+% \begin{frame}{Cut for time}
+%     dropped from the talk
+% \end{frame}
+
+% --- TRAP: `frame` inside a macro definition is quoted, not structure.
+\newcommand{\quickframe}[1]{\begin{frame}{#1}\end{frame}}
+
+% --- TRAP: an unclosed frame at the end of the file must decorate nothing.
+%     Everything below this line should render as ordinary source.
+\begin{frame}{Work in progress}
+    still typing
+
+\end{document}

@@ -1,0 +1,17 @@
+--- text
+alpha beta gamma
+
+delta epsi|lon zeta
+--- keys
+Up Up
+--- expect
+alpha beta| gamma
+
+delta epsilon zeta
+--- note
+The inverse of 22. Motion bugs are frequently one-directional, so Up must be
+asserted separately from Down rather than trusted to follow from it. Column 10
+up onto the empty middle line clamps to column 0; the second Up must restore
+column 10 on the top line, landing after "beta" and before its trailing space.
+Returning to column 0 would mean the empty line consumed the goal column on
+the way up.

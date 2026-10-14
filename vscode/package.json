@@ -1,0 +1,166 @@
+{
+  "name": "chalk-math",
+  "displayName": "Chalk",
+  "description": "Live-preview editor for LaTeX (.tex) and Markdown (.md) files with first-class math support, running inside VS Code.",
+  "version": "0.8.0",
+  "publisher": "RaphalHuleux",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raphaelhuleux/chalk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/raphaelhuleux/chalk/issues"
+  },
+  "homepage": "https://github.com/raphaelhuleux/chalk",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "icon": "assets/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "categories": [
+    "Programming Languages",
+    "Formatters",
+    "Other"
+  ],
+  "keywords": [
+    "latex",
+    "tex",
+    "markdown",
+    "math",
+    "katex",
+    "live preview",
+    "snippets",
+    "hsnips"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "qna": "marketplace",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "chalk.texEditor",
+        "displayName": "Chalk",
+        "selector": [
+          {
+            "filenamePattern": "*.tex"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "chalk.markdownEditor",
+        "displayName": "Chalk",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          },
+          {
+            "filenamePattern": "*.qmd"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "chalk.diagnoseTheme",
+        "title": "Diagnose Theme Resolution",
+        "category": "Chalk"
+      },
+      {
+        "command": "chalk.editorHandledKey",
+        "title": "Key Handled by the Chalk Editor",
+        "category": "Chalk"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "chalk.editorHandledKey",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "workbench.action.reopenWithEditor",
+        "key": "ctrl+shift+;",
+        "mac": "cmd+shift+;",
+        "when": "(resourceExtname == .tex || resourceExtname == .md || resourceExtname == .qmd) && activeCustomEditorId != chalk.texEditor && activeCustomEditorId != chalk.markdownEditor"
+      },
+      {
+        "command": "workbench.action.reopenWithEditor",
+        "key": "ctrl+alt+;",
+        "mac": "cmd+alt+;",
+        "when": "activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor"
+      },
+      {
+        "command": "chalk.editorHandledKey",
+        "key": "ctrl+z",
+        "mac": "cmd+z",
+        "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"
+      },
+      {
+        "command": "chalk.editorHandledKey",
+        "key": "ctrl+y",
+        "mac": "cmd+shift+z",
+        "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"
+      },
+      {
+        "command": "chalk.editorHandledKey",
+        "key": "ctrl+shift+z",
+        "mac": "cmd+shift+z",
+        "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Chalk",
+      "properties": {
+        "chalk.latex.buildOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Build the LaTeX project when saving a .tex file from a Chalk editor. Only fires in the gap LaTeX Workshop cannot cover (no active text editor); runs your latex-workshop recipe, so the LaTeX Workshop PDF viewer refreshes as usual."
+        },
+        "chalk.latex.rootFile": {
+          "type": "string",
+          "default": "",
+          "description": "LaTeX root file for Chalk-triggered builds, relative to the workspace folder. Normally unnecessary: a % !TEX root magic comment, a \\documentclass in the saved file, or the include-graph scan finds the root automatically."
+        },
+        "chalk.viewMode": {
+          "type": "string",
+          "enum": ["preview", "mixed", "source"],
+          "enumDescriptions": [
+            "Live preview: syntax is hidden and revealed under the caret.",
+            "Mixed: syntax stays visible and styled; math, images and tables render.",
+            "Source: nothing is rendered."
+          ],
+          "default": "preview",
+          "description": "The view mode a Chalk editor opens in. Cmd+: (Ctrl+: elsewhere) cycles the current editor without changing this default."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "watch": "node esbuild.config.js --watch",
+    "package": "node esbuild.config.js --prod && vsce package --no-dependencies",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chalk/editor-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.24.2",
+    "jsdom": "^28.1.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.0.18"
+  }
+}

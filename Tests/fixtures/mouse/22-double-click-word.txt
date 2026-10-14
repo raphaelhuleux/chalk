@@ -1,0 +1,9 @@
+--- text
+|alpha beta gamma
+--- keys
+DoubleClick(1,7)
+--- expect
+alpha [beta] gamma
+--- note
+Column 7 of row 1 is inside 'beta'. A double click selects the whole word
+and nothing around it: no leading space, no trailing space.

@@ -1,0 +1,10 @@
+--- text
+The quick brown fox jumps ov|er the lazy dog
+--- width
+20
+--- keys
+Cmd+Left
+--- expect
+The quick brown fox |jumps over the lazy dog
+--- note
+Cmd+Left is cursorLineBoundaryLeft on macOS, so it agrees with Home.

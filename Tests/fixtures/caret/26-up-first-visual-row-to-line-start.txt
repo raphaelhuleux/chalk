@@ -1,0 +1,21 @@
+--- text
+The quick b|rown fox jumps over the lazy dog
+--- width
+20
+--- keys
+Up
+--- expect
+|The quick brown fox jumps over the lazy dog
+--- note
+The exact inverse of fixture 21. There, Down on the LAST visual row (which has
+no row below) falls back to moveToLineBoundary forward and lands at the line
+end. Up on the FIRST visual row (which has no row above) is the mirror: it must
+fall back to moveToLineBoundary backward and land at the line start.
+
+At width 20 the line wraps to three rows and the caret sits on row 1 ("The
+quick brown fox "). mdVerticalArrowKeymap tries moveVertically up, gets the same
+head (document top), and returns false, so CM6's default cursorByLine runs; its
+own moveVertically also cannot move, so it falls back to
+moveToLineBoundary(range, false), the start of row 1, which is offset 0. This
+matches macOS moveUp on the first line. The caret must reach offset 0, not stay
+put at column 11, and not jump elsewhere.

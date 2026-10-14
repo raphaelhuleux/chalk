@@ -1,0 +1,17 @@
+# Browser-harness checks that fail today on a given engine lane, accepted as
+# a baseline rather than fixed. Read by run.mjs via Tests/runner/lib/known-failures.mjs.
+#
+# One entry per line:
+#
+#   scenario :: check-message [@tag,tag]
+#
+# Tags are the lanes from Tests/runner/lib/browser.mjs (chromium,
+# webkit); an untagged entry applies to every lane. `#` starts a comment.
+# A listed check that FAILS prints `xfail` and does not fail the run; a listed
+# check that PASSES prints XPASS and fails the run, so entries cannot go stale.
+#
+# Every entry needs a comment above it saying why it is an engine-behavior
+# difference (or a recorded product bug) and not a harness assumption.
+# Harness assumptions get fixed in run.mjs, not listed here.
+
+

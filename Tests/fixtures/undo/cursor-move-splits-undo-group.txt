@@ -1,0 +1,16 @@
+--- text
+X|Y
+--- keys
+Type(a) Left Type(b) Cmd+Z
+--- expect
+X|aY
+--- note
+Consecutive typing joins into one undo group, but a caret move between
+keystrokes ends that group. Type a into "X|Y" gives "XaY" with the caret at
+column 2; Left moves the caret to column 1; typing b there gives "XbaY". Had
+the two letters been typed without moving, one undo would erase both, because
+adjacent insertions typed in quick succession are a single group. The Left is
+a selection change, and a selection change closes the current group, so one
+undo removes only the b, leaving "XaY" with the caret at column 1 where b was
+inserted. Removing the a as well would mean the caret move failed to break the
+run.

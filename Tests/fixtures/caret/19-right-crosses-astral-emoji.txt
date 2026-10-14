@@ -1,0 +1,13 @@
+--- text
+a|😀b
+--- keys
+Right
+--- expect
+a😀|b
+--- note
+One ArrowRight moves by grapheme cluster, not by UTF-16 code unit. The
+grinning-face emoji U+1F600 is a single astral code point stored as a
+surrogate pair (two code units), so it is one cluster. CodeMirror's default
+cursorCharRight runs @marijn/find-cluster-break, which advances over the whole
+code point (codePointSize 2) and then stops before 'b'. The caret must land at
+offset 3, never between the two surrogate halves at offset 2.

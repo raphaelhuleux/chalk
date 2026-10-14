@@ -1,0 +1,10 @@
+--- text
+|first line
+second line
+--- keys
+Down
+--- expect
+first line
+|second line
+--- note
+The two text lines are joined by a CRLF (carriage return then line feed), not a bare LF. The editor sets no lineSeparator, so CodeMirror treats CRLF, a lone CR, and LF alike as one line break and keeps only LF in the stored text. Down from column 0 of line 1 must land on column 0 of line 2, and the reported document must show a single newline with no carriage return. A surviving CR, or the pair counted as two stops, would fail here.

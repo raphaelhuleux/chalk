@@ -1,0 +1,14 @@
+--- text
+x🇫🇷|y
+--- keys
+Left
+--- expect
+x|🇫🇷y
+--- note
+A flag is two Regional Indicator symbols (U+1F1EB U+1F1F7), each a surrogate
+pair, together one grapheme cluster under UAX#29 rules GB12/GB13: do not break
+between regional indicators when an even number of them precede the boundary.
+The caret starts just after the flag (offset 5). One ArrowLeft must cross all
+four UTF-16 code units back to just after 'x' (offset 1). find-cluster-break's
+backward walk counts the indicators before the break and refuses to stop at
+offset 3, which would sit inside the single cluster and paint half a flag.

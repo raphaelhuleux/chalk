@@ -1,0 +1,12 @@
+--- text
+The quick brown fox jumps ov|er the lazy dog
+--- width
+20
+--- keys
+Down
+--- expect
+The quick brown fox jumps over the lazy dog|
+--- note
+Row 2 col 8 down to row 3, which is only 'dog'. There is no column 8 to
+land on, so the caret clamps to the end of the row, which is also the end
+of the document.

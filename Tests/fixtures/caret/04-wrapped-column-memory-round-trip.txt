@@ -1,0 +1,13 @@
+--- text
+The quick brown fox jumps ov|er the lazy dog
+--- width
+20
+--- keys
+Down Up
+--- expect
+The quick brown fox jumps ov|er the lazy dog
+--- note
+The target-column invariant across a soft wrap. Down clamps to the short
+last row, Up must return to the column the run started from, not to the
+column the clamp landed on. This is the 'Down doesn't go where I aimed'
+report in its simplest form.

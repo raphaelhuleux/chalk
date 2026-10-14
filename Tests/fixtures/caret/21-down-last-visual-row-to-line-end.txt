@@ -1,0 +1,16 @@
+--- text
+The quick brown fox jumps over the lazy do|g
+--- width
+20
+--- keys
+Down
+--- expect
+The quick brown fox jumps over the lazy dog|
+--- note
+At width 20 the line wraps to three visual rows: "The quick brown fox ",
+"jumps over the lazy ", and "dog". The caret sits on the last visual row,
+which has no row below it. CodeMirror's cursorByLine, when a vertical move
+cannot leave the current row, falls back to moveToLineBoundary in the same
+direction, so Down moves to the end of the row, which here is the end of the
+document. This matches macOS moveDown on the last line. The caret must reach
+offset 43, not stay put at offset 42.

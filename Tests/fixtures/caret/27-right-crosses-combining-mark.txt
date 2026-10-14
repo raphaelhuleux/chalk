@@ -1,0 +1,20 @@
+--- text
+c|a̲t
+--- keys
+Right
+--- expect
+ca̲|t
+--- note
+One ArrowRight moves by grapheme cluster, not by code unit. The middle glyph is
+"a" followed by U+0332 (COMBINING LOW LINE), two code units that form a single
+extended grapheme cluster under UAX#29 rule GB9 (do not break before an Extend
+character). U+0332 has no precomposed form, so the pair is guaranteed to be
+stored as two code units.
+
+The caret starts before the "a" (offset 1). CodeMirror's cursorCharRight runs
+@marijn/find-cluster-break, which advances over the base AND its combining mark
+and stops at offset 3, before "t". The caret must never land at offset 2,
+between "a" and its combining mark, which would paint the caret through the
+middle of one rendered glyph. Fixtures 19 and 20 assert the same for astral and
+regional-indicator clusters; a base-plus-combining-mark cluster is the third
+GB rule family and was untested.

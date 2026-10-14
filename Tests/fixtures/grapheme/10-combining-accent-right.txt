@@ -1,0 +1,9 @@
+--- text
+a|éb
+--- keys
+Right
+--- expect
+aé|b
+--- note
+e followed by U+0301 renders as one accented glyph. Right must step over
+the pair, or the caret sits between a letter and its own accent.

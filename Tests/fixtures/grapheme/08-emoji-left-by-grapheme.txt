@@ -1,0 +1,8 @@
+--- text
+a😀|b
+--- keys
+Left
+--- expect
+a|😀b
+--- note
+Leftward twin of 07.

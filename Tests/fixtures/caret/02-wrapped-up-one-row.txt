@@ -1,0 +1,10 @@
+--- text
+The quick brown fox jump|s over the lazy dog
+--- width
+20
+--- keys
+Up
+--- expect
+The |quick brown fox jumps over the lazy dog
+--- note
+The exact inverse of 01. Up across a soft wrap must be symmetric with Down.

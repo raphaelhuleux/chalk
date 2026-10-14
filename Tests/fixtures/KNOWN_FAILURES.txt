@@ -1,0 +1,31 @@
+# Fixtures that fail today, accepted as a baseline rather than fixed.
+#
+# One repo-relative fixture path per line; `#` starts a comment.
+# The runner (Tests/runner/caret-fixtures.mjs) reports these as "known" and
+# does not fail the run on them, the same convention as docs/known-failing-tests.md.
+# If a listed fixture starts passing, the runner says so and asks for the line
+# to be deleted.
+#
+# Adding a line here silences a failure, so add one only deliberately.
+# Deletions are always fine: deleting a line is what fixing the bug looks like.
+
+# ---------------------------------------------------------------------------
+# Tests/fixtures/mouse/23-triple-click-line.txt
+#
+# NOT A CONFIRMED BUG. An unresolved design question, recorded so the harness
+# does not quietly adopt either answer.
+#
+# Expected: a triple click selects "alpha beta", the paragraph text.
+# Actual:   it selects "alpha beta\n", the paragraph plus its line break.
+#
+# CodeMirror's behaviour matches VS Code and most code editors, where a triple
+# click plus Cmd+X is meant to lift the whole line out. Chalk is not a code
+# editor: the writing surface is modelled on iA Writer (see the .editor-host
+# comments in web/src/chalk-theme.css), and prose editors in that family
+# select the paragraph without the break, so that pasting it does not
+# introduce a blank line.
+#
+# The fixture encodes the prose-editor answer because that is what Chalk is.
+# If the owner prefers the code-editor answer, change the fixture's expect
+# block and delete this entry. Do not "fix" it in code without that decision.
+Tests/fixtures/mouse/23-triple-click-line.txt

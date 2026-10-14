@@ -1,0 +1,25 @@
+{
+  "name": "chalk",
+  "version": "0.1.0",
+  "description": "Chalk: live-preview editor for .tex and .md with KaTeX math. A Mac app and a VS Code extension built on the shared @chalk/editor-core.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "pnpm -r run test",
+    "test:swift": "swift test --package-path mac/ChalkKit",
+    "typecheck": "pnpm -r run typecheck && node scripts/check-diagnostics-purity.mjs",
+    "web:build": "node web/build.mjs",
+    "test:browser": "node Tests/browser/run.mjs",
+    "open:editor": "node Tests/browser/open.mjs",
+    "test:browser:webkit": "CHALK_BROWSER=webkit node Tests/browser/run.mjs",
+    "test:caret": "node Tests/runner/caret-fixtures.mjs",
+    "test:caret:webkit": "CHALK_BROWSER=webkit node Tests/runner/caret-fixtures.mjs",
+    "check:diag": "node scripts/check-diagnostics-purity.mjs",
+    "test:matrix": "pnpm --filter @chalk/editor-core exec vitest run test/matrix-structural.test.ts",
+    "test:matrix:geo": "node Tests/matrix/run-geometric.mjs",
+    "test:matrix:geo:webkit": "CHALK_BROWSER=webkit node Tests/matrix/run-geometric.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

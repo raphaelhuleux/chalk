@@ -1,0 +1,14 @@
+--- text
+a|b
+--- keys
+Type(X) Cmd+Z Type(Y) Cmd+Shift+Z
+--- expect
+aY|b
+--- note
+A new edit after an undo discards the redo stack. Type X gives "aXb"; undo
+returns to "ab" with the caret at column 1; typing Y there gives "aYb". That
+fresh insertion replaces the future that redo would otherwise restore, so the
+redo stack is now empty and the following redo has nothing to do. The result
+must stay "aYb" with the caret after Y (column 2). If the redo were to bring
+the X back, that would be the classic bug of a redo branch that a new edit
+failed to clear.

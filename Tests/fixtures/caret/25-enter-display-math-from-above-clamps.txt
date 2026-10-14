@@ -1,0 +1,25 @@
+--- text
+abcde|fghij
+$$
+x^2
+$$
+--- keys
+Down
+--- expect
+abcdefghij
+$$|
+x^2
+$$
+--- note
+One Down from the prose line directly above a `$$` block must step ONTO the
+opening `$$` line, column-preserving, not skip the whole rendered block. This
+is mdEnterDisplayMathFromAbove (md-math-plugin.ts), whose own comment states the
+rule: "entering math must not drift the caret horizontally". It lands via
+sameColumnOnLine(state, head, startLine).
+
+The caret starts at column 5 ("abcde|fghij"). The opening delimiter line "$$"
+is only two characters, so sameColumnOnLine clamps the landing to column 2, the
+line end: "motion never drifts horizontally beyond what a shorter target line
+forces" (callout-core.ts). So the caret must land after the "$$" on line 2,
+which also reveals the block source. Landing at column 0, or on the content line
+"x^2", or past the block, would each be wrong.

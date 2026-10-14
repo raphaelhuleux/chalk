@@ -1,0 +1,6 @@
+--- text
+alpha be|ta gamma
+--- keys
+End
+--- expect
+alpha beta gamma|

@@ -1,0 +1,18 @@
+--- text
+alpha beta| gamma
+
+delta epsilon zeta
+--- keys
+Down Down
+--- expect
+alpha beta gamma
+
+delta epsi|lon zeta
+--- note
+The goal column is a remembered x, and it must survive a line too short to
+hold it. Column 10 down onto the empty middle line clamps to column 0, its
+only column; the second Down must restore column 10 on the long line below,
+landing before the 'l' of "epsilon". Carrying column 0 forward instead is the
+"Down doesn't go where I aimed" bug. This is fixture 05 with a zero-length
+intermediate line rather than a two-character one: the goal session must not
+re-measure the caret on the empty line.

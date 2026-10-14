@@ -1,0 +1,12 @@
+--- text
+The quick brown fox jumps ov|er the lazy dog
+--- width
+20
+--- keys
+Home
+--- expect
+The quick brown fox |jumps over the lazy dog
+--- note
+Home on a soft-wrapped line goes to the start of the VISUAL row, not the
+start of the logical line. Going to the logical start would be a long
+unexpected jump on a paragraph that wraps many times.

@@ -1,0 +1,13 @@
+--- text
+hello wor|ld
+--- keys
+Cmd+Z
+--- expect
+hello wor|ld
+--- note
+Undo with nothing to undo is a no-op. The document was opened and the caret
+placed, but no edit has been made, so the history holds no change to reverse.
+Undo must leave the text and the caret exactly as they are: it must not move
+the caret, must not mutate the document, and must not swallow the placement as
+if it were an undoable action. Any change to the rendered state here would mean
+undo acted on an empty history.

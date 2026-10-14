@@ -1,0 +1,14 @@
+--- text
+alpha beta| gamma delta
+xy
+epsilon zeta eta theta
+--- keys
+Down Down
+--- expect
+alpha beta gamma delta
+xy
+epsilon ze|ta eta theta
+--- note
+Column 10 down over a two-character line. The short line cannot hold
+column 10, but it must not consume the goal: the second Down lands back
+on column 10 of the long line below.

@@ -1,0 +1,17 @@
+--- text
+park park p|ark park park one
+lead words \textbf{\emph{xy}} tail words
+park park park park park two
+--- language
+tex
+--- keys
+Down
+--- expect
+park park park park park one
+lead words \textbf{\emph{|xy}} tail words
+park park park park park two
+--- note
+Promoted from matrix cell tex/nested-bf-em/mid/w80/desktop (FINDINGS.md #5, rule R-V5).
+A vertical landing that falls inside the merged hidden prefix run of a nested command (\textbf{\emph{) must settle on the first genuinely visible argument character.
+The one-shot snap parked the caret between the two hidden prefixes (the outer argument start IS the inner \emph{'s own prefix) and both commands popped open; the snap now iterates to a fixpoint.
+WebKit's moveVertically lands mid-prefix routinely while chromium's raw landing tends to resolve to the boundary already, so the webkit lanes are the ones this fixture bites on.

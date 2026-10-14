@@ -1,0 +1,69 @@
+/* Preview lays a list body line out from its depth (tex-list-plugin.ts, and
+ * md-typeset.ts for typeset Markdown): the plugin sets `--chalk-hang` in em on
+ * the line, and the shared `.cm-line` rule
+ * (hanging-indent.ts) pads every row by it with the first row pulled back. An
+ * item line fills that first-row gap with its marker; a continuation line has
+ * no marker, so its first row starts at the text column too. */
+.cm-editor .cm-line.cm-tex-list-cont,
+.cm-editor .cm-line.cm-md-list-cont {
+  text-indent: 0;
+}
+
+/* The `\item` marker widget fills the hang, right-aligned, so the item text
+ * starts where its wrapped rows do. Colour and weight match the md
+ * `.cm-live-list-mark`. */
+.cm-tex-item-marker {
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--chalk-hang, 2.5em);
+  text-align: right;
+  padding-right: 0.5em;
+  white-space: pre;
+  color: var(--chalk-list-mark, var(--vscode-textLink-foreground));
+  font-weight: 600;
+}
+
+/* Preview, caret on the token: the raw `\item ` keeps at least the marker's
+ * width, so the text after it doesn't jump when the marker opens. */
+.cm-tex-item-revealed {
+  display: inline-block;
+  min-width: var(--chalk-hang, 2.5em);
+  white-space: pre;
+  color: var(--chalk-list-mark, var(--vscode-textLink-foreground));
+  font-weight: 600;
+}
+
+/* Mixed mode: the `\item` token kept as source, styled like the marker. */
+.cm-tex-item-source {
+  color: var(--chalk-list-mark, var(--vscode-textLink-foreground));
+  font-weight: 600;
+}
+
+/* Typeset Markdown quotes (md-typeset.ts): the rule hangs in the gutter like a
+ * callout's bar (callout.css), so the quote text keeps the body's left edge.
+ * Line-level, so wrapped rows keep it too; the inline blockquote mark's own
+ * edge and padding stand down. */
+.cm-editor .cm-line.cm-md-quote-line {
+  margin-left: calc(-3px - var(--chalk-callout-outdent, 0.75em));
+  padding-left: calc(6px + var(--chalk-callout-outdent, 0.75em));
+  text-indent: 0;
+  border-left: 3px solid var(--chalk-list-mark, currentColor);
+  opacity: 0.85;
+}
+
+.cm-md-quote-line .cm-live-blockquote {
+  border-left: none;
+  padding-left: 0;
+  opacity: 1;
+}
+
+/* Typeset Markdown keeps the source marker (`-`, `1.`) as text at the start of
+ * the hang; the box fills the rest, so the item text starts where its wrapped
+ * rows do. A marker wider than one step (`10.`) pushes only its own line.
+ * Colour and weight come from `.cm-live-list-mark` inside it. */
+.cm-md-item-mark {
+  display: inline-block;
+  margin-left: var(--chalk-md-list-outer, 0em);
+  min-width: calc(var(--chalk-hang, 1.1em) - var(--chalk-md-list-outer, 0em));
+  white-space: pre;
+}

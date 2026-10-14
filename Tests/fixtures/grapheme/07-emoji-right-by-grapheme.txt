@@ -1,0 +1,9 @@
+--- text
+a|😀b
+--- keys
+Right
+--- expect
+a😀|b
+--- note
+U+1F600 is two UTF-16 code units. One Right must cross the whole emoji,
+never land between its surrogates.

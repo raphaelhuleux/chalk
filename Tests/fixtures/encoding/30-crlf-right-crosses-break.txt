@@ -1,0 +1,10 @@
+--- text
+first|
+second
+--- keys
+Right
+--- expect
+first
+|second
+--- note
+The caret starts at the end of line 1, just before the CRLF joining it to line 2. The editor normalizes CRLF to a single newline, so one Right must cross the break and land at the start of line 2. If the carriage return survived as its own character, one Right would stop inside the break region and a second Right would be needed. Exactly one Right is correct.

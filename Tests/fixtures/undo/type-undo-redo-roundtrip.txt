@@ -1,0 +1,14 @@
+--- text
+foo| bar
+--- keys
+Type(X) Cmd+Z Cmd+Shift+Z
+--- expect
+fooX| bar
+--- note
+Type / undo / redo must round-trip to the exact state that existed right after
+the edit. Typing X gives "fooX bar" with the caret after the X (column 4).
+Undo removes it; redo re-applies that same insertion and places the caret back
+where the edit left it, after the X. Redo reinstates a change together with the
+selection that change produced, so it is not a second undo: landing the caret
+at the pre-edit column 3 would be wrong. The document and caret after redo have
+to match the state immediately after the original Type.

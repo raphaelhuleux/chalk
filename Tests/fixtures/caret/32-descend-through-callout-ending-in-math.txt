@@ -1,0 +1,25 @@
+--- text
+|park park park park park one
+::: {.callout-note}
+lead body line
+$$
+E = mc^2
+$$
+:::
+park park park park park two
+--- language
+md
+--- keys
+Down Down Down Down Down Down Down
+--- expect
+park park park park park one
+::: {.callout-note}
+lead body line
+$$
+E = mc^2
+$$
+:::
+|park park park park park two
+--- note
+Promoted from matrix cell md/display-3/absorb-callout/w80/desktop (FINDINGS.md #2, rule O-3: the phantom row, md twin).
+Same walk as fixture 31 through the Quarto callout: open fence, body, into the revealed $$ block (preview widget placed after the collapsed ::: so the fence hide keeps its merge host — no phantom row), through the block, onto the collapsed fence, out to the bottom park line.

@@ -1,0 +1,52 @@
+/* Fenced code blocks: line classes from md-code-block-plugin.ts.
+ * NO vertical margins inside .cm-content (CM6 height map): padding only. */
+
+.cm-line.cm-codeblock {
+  background: var(--chalk-codeblock-bg, var(--vscode-textCodeBlock-background, rgba(110, 118, 129, 0.08)));
+  border-left: 3px solid var(--chalk-codeblock-accent, #8250df);
+  /* Keep `--chalk-hang` here: hanging-indent.ts pairs it with a negative
+     text-indent, and dropping it swallows code indentation. */
+  padding-left: calc(1em + var(--chalk-hang, 0px));
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 0.9em;
+}
+
+.cm-line.cm-codeblock-top {
+  padding-top: 0.65em;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+  position: relative; /* anchor for the language label */
+}
+
+.cm-line.cm-codeblock-bottom {
+  padding-bottom: 0.65em;
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+
+.cm-codeblock-fence {
+  opacity: 0.45;
+}
+
+/* Absolutely positioned: no height-map impact, no caret surface. In em, so it
+   tracks the text and the font-size slider. */
+.cm-line.cm-codeblock-top[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0.45em;
+  right: 0.6em;
+  font-family: var(--chalk-ui-font, -apple-system, system-ui, sans-serif);
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--chalk-codeblock-accent, #8250df);
+  opacity: 0.75;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Inside a callout the code accent wins the shared border-left. */
+.cm-line.cm-callout.cm-codeblock {
+  border-left-color: var(--chalk-codeblock-accent, #8250df);
+}

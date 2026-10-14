@@ -1,0 +1,41 @@
+{
+  "name": "@chalk/editor-core",
+  "version": "0.4.0",
+  "description": "Host-agnostic Chalk editor (CodeMirror 6 + KaTeX + hsnips) used by the Mac app and the VS Code extension via a HostPort seam.",
+  "license": "MIT",
+  "private": true,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./default-hsnips": "./src/default-hsnips.ts",
+    "./mermaid-entry": "./src/mermaid-entry.ts",
+    "./styles/host-shell.css": "./src/styles/host-shell.css"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/commands": "^6.10.2",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.12.2",
+    "@codemirror/legacy-modes": "^6.4.0",
+    "@codemirror/search": "^6.6.0",
+    "@codemirror/state": "^6.5.4",
+    "@codemirror/view": "^6.39.15",
+    "@lezer/highlight": "^1.2.3",
+    "@lezer/markdown": "^1.6.3",
+    "katex": "^0.16.33",
+    "mermaid": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.8",
+    "@types/node": "^22.20.1",
+    "jsdom": "^28.1.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.0.18"
+  }
+}

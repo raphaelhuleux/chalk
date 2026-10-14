@@ -1,0 +1,246 @@
+.cm-tex-math-inline {
+  /* inline-block, not KaTeX's plain relative inline: WKWebView caches paint
+   * offsets for relative inline fragments and repaints them at their OLD x
+   * after a reveal reflows the line. Also stops mid-formula wrapping. */
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.cm-tex-math-display {
+  display: block;
+  text-align: center;
+  /* PADDING, never vertical margin, on lines and block widgets: margins are
+   * invisible to CM6's height map and desync clicks and Up/Down below. */
+  padding: 1.5em 0;
+}
+
+/* KaTeX's equation counter is DOM-order and CM6 renders only visible widgets,
+ * so each widget restarts it from its document-order `--chalk-eq-offset`
+ * (tex-math.ts). The md twin lives in math.css. */
+.cm-tex-math-display,
+.cm-tex-math-preview {
+  counter-reset: katexEqnNo var(--chalk-eq-offset, 0) mmlEqnNo var(--chalk-eq-offset, 0);
+  /* Keep `contain: inline-size`: without it numbered equations and wide
+   * KaTeX force `.cm-content` wider than the viewport (a horizontal
+   * scrollbar). `overflow: clip` alone doesn't stop the width propagating. */
+  width: 100%;
+  min-width: 0;
+  max-width: 100%; /* fallback for hosts without `contain: inline-size` */
+  contain: inline-size;
+  overflow-x: clip;
+}
+
+/* Parse error: the raw LaTeX, subtly marked. */
+.cm-tex-math-error {
+  color: var(--vscode-errorForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Preview below display math while the caret is inside the source. */
+.cm-tex-math-preview {
+  display: block;
+  text-align: center;
+  padding: 0.75em 0 0.5em;
+  border-top: 1px dashed var(--vscode-editorWidget-border, var(--vscode-editor-foreground));
+  opacity: 0.75;
+}
+
+/* Native ::selection stays OFF: CM6's layered selection (theme.ts, Prec.highest)
+ * is the only intended paint; the native one draws opaque over text and math
+ * widgets. Universal because the webview holds nothing else; the math widgets
+ * sit outside `.cm-line`, hence listed. */
+::selection,
+.cm-editor ::selection,
+.cm-content ::selection,
+.cm-line ::selection,
+.cm-tex-math-display ::selection,
+.cm-tex-math-display::selection,
+.cm-tex-math-inline ::selection,
+.cm-tex-math-inline::selection,
+.cm-tex-math-preview ::selection,
+.cm-tex-math-preview::selection {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* --------------------------------------------------------------------------
+   Headings
+   -------------------------------------------------------------------------- */
+
+/* --chalk-heading-N come from the host's `heading-colors` message (mount.ts);
+ * the link accent covers themes that don't colour headings per level. */
+.cm-h1, .cm-h2, .cm-h3 { font-weight: 600; }
+.cm-h4, .cm-h5, .cm-h6 { font-weight: 500; }
+.cm-h1 { color: var(--chalk-heading-1, var(--vscode-textLink-foreground)); }
+.cm-h2 { color: var(--chalk-heading-2, var(--vscode-textLink-foreground)); }
+.cm-h3 { color: var(--chalk-heading-3, var(--vscode-textLink-foreground)); }
+.cm-h4 { color: var(--chalk-heading-4, var(--vscode-textLink-foreground)); }
+.cm-h5 { color: var(--chalk-heading-5, var(--vscode-textLink-foreground)); }
+.cm-h6 { color: var(--chalk-heading-6, var(--vscode-textLink-foreground)); }
+
+/* --------------------------------------------------------------------------
+   Inline formatting
+   -------------------------------------------------------------------------- */
+
+.cm-live-bold { font-weight: 700; }
+.cm-live-italic { font-style: italic; }
+.cm-live-bold-italic { font-weight: 700; font-style: italic; }
+.cm-live-strikethrough { text-decoration: line-through; }
+
+/* Keeps trailing punctuation on the row of the construct before it (`*x*,`):
+ * the concealed delimiter's `.cm-widgetBuffer` is a break opportunity
+ * (punctuation-glue.ts; math twin .cm-math-glue). `nowrap` alone fails in
+ * WebKit, which still breaks before replaced content; `inline-block` is safe
+ * because the mark spans only the last word plus the punctuation. */
+.cm-live-glue {
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+/* LaTeX text-command argument marks (tex-decorations.ts); sectioning reuses .cm-hN. */
+.cm-tex-strong { font-weight: 600; }
+.cm-tex-em { font-style: italic; }
+.cm-tex-tt { font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace; }
+.cm-tex-underline { text-decoration: underline; }
+.cm-tex-sc { font-variant-caps: small-caps; }
+.cm-tex-runin { font-weight: 600; }
+/* \ref/\cite/\label/\footnote arguments while their source is visible. */
+.cm-tex-ref-arg { color: var(--syntax-link); }
+.cm-tex-label-arg { opacity: 0.6; }
+.cm-tex-footnote-text { opacity: 0.7; }
+
+/* Concealed-mode widgets (tex-conceal-plugin.ts). */
+
+.cm-tex-secnum { margin-right: 0.45em; }
+
+/* Reference pills, tex and Quarto alike; labels dimmed. */
+.cm-tex-ref-pill,
+.cm-tex-label-pill,
+.cm-md-label-pill,
+.cm-md-ref-pill {
+  color: var(--syntax-link);
+  background: var(--chalk-refpill-bg, rgba(100, 148, 237, 0.13));
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+  font-size: 0.92em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cm-tex-label-pill,
+.cm-md-label-pill {
+  color: inherit;
+  opacity: 0.55;
+}
+
+/* The Quarto id's hide swallows the space before `{#…}`, so the gap is here. */
+.cm-md-label-pill { margin-left: 0.4em; }
+
+.cm-tex-footnote-mark {
+  color: var(--syntax-link);
+  vertical-align: super;
+  font-size: 0.75em;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* `clone` keeps rounded ends on each row of a wrapped highlight. */
+.cm-live-highlight {
+  background: var(--chalk-highlight-bg, rgba(255, 214, 0, 0.32));
+  border-radius: 3px;
+  padding: 0.05em 0.15em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.cm-live-code {
+  background: var(--syntax-code-bg);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 0.9em;
+}
+
+.cm-live-link {
+  color: var(--syntax-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cm-crossref {
+  color: var(--syntax-link);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cm-crossref-unresolved {
+  color: var(--chalk-crossref-unresolved, #c53030);
+  opacity: 0.85;
+}
+
+/* YAML preamble, independent of focus mode's `.cm-dim`. */
+.cm-frontmatter-dim {
+  opacity: 0.5;
+}
+
+.cm-live-image {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+  /* At least caret-sized: CM6's moveVertically steps over rows shorter than
+     half a text line, so an unresolved or tiny image line was unreachable by
+     Up/Down (Tests/matrix/FINDINGS.md #4). */
+  min-width: 1ch;
+  min-height: 1.2em;
+  min-height: 1lh;
+}
+
+.cm-live-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.cm-live-image-missing {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+/* --------------------------------------------------------------------------
+   Blockquote
+   -------------------------------------------------------------------------- */
+
+.cm-live-blockquote {
+  border-left: 3px solid var(--syntax-markup);
+  padding-left: 1em;
+  opacity: 0.85;
+}
+
+.cm-live-quote-mark {
+  opacity: 0.3;
+}
+
+/* --------------------------------------------------------------------------
+   List markers
+   -------------------------------------------------------------------------- */
+
+.cm-live-list-mark {
+  color: var(--chalk-list-mark, var(--vscode-textLink-foreground));
+  font-weight: 600;
+}
+
+/* Mixed mode: syntax the live preview would hide, kept but subdued. */
+.cm-syntax-dim {
+  opacity: 0.45;
+}
+
+/* Mixed mode: a resolved `@key` kept as source. */
+.cm-crossref-key {
+  font-weight: 600;
+  opacity: 0.85;
+}

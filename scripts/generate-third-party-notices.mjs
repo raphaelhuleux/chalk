@@ -1,0 +1,151 @@
+#!/usr/bin/env node
+// Regenerates THIRD-PARTY-NOTICES at the repo root from the license files of
+// every package shipped in the app's editor bundle (web/dist, built from
+// web/src + packages/editor-core/src). The list is maintained by hand below;
+// the script fails loudly if a listed package (or its LICENSE) is missing so
+// dependency bumps keep it honest. Run: node scripts/generate-third-party-notices.mjs
+import { readFileSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+
+/** The installed dir of `name` as seen from `fromDir` (Node's upward walk). */
+function findPackage(name, fromDir) {
+  for (let dir = fromDir; ; dir = dirname(dir)) {
+    const candidate = join(dir, 'node_modules', name);
+    if (existsSync(join(candidate, 'package.json'))) return realpathSync(candidate);
+    if (dirname(dir) === dir) return null;
+  }
+}
+
+// pnpm keeps transitive deps out of web/node_modules, so walk the runtime
+// dependency graph from web/ (following each package's real location) to find
+// the exact copy of every package the bundle resolves.
+const installed = new Map();
+const queue = [join(root, 'web')];
+while (queue.length > 0) {
+  const dir = queue.shift();
+  const deps = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).dependencies ?? {};
+  for (const name of Object.keys(deps)) {
+    const found = findPackage(name, dir);
+    if (!found || installed.has(name)) continue;
+    installed.set(name, found);
+    queue.push(found);
+  }
+}
+
+// Everything esbuild pulls into the shipped bundle: the runtime deps of
+// web/package.json (editor-core's included) plus their transitives, and the
+// font package whose files ship as assets. IBM Plex Mono also ships natively as .ttf in
+// mac/Chalk/Resources/fonts (same OFL license, second delivery path).
+const shipped = [
+  '@codemirror/autocomplete',
+  '@codemirror/commands',
+  '@codemirror/lang-css',
+  '@codemirror/lang-html',
+  '@codemirror/lang-javascript',
+  '@codemirror/lang-markdown',
+  '@codemirror/language',
+  '@codemirror/legacy-modes',
+  '@codemirror/lint',
+  '@codemirror/search',
+  '@codemirror/state',
+  '@codemirror/view',
+  '@lezer/common',
+  '@lezer/css',
+  '@lezer/highlight',
+  '@lezer/html',
+  '@lezer/javascript',
+  '@lezer/lr',
+  '@lezer/markdown',
+  '@marijn/find-cluster-break',
+  'crelt',
+  'katex',
+  'style-mod',
+  'w3c-keyname',
+  '@fontsource/ibm-plex-mono',
+];
+
+// Code adapted into the repo rather than depended on: the hsnips parser
+// (packages/editor-core/src/editor/hsnips-parser.ts) derives from
+// draivin/hsnips (HyperSnips for VS Code). MIT text reproduced verbatim.
+const vendored = [
+  {
+    title: 'hsnips (HyperSnips for VS Code) — adapted code',
+    homepage: 'https://github.com/draivin/hsnips',
+    note:
+      'packages/editor-core/src/editor/hsnips-parser.ts is adapted from the\n' +
+      'hsnips parser and snippet model, stripped of VS Code dependencies.',
+    license: `MIT License
+
+Copyright (c) 2019 Ian Ornelas
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`,
+  },
+];
+
+// The Atom, Catppuccin and LaTeX themes take their colours from these
+// Obsidian themes. No code is copied; credited all the same.
+vendored.push({
+  title: 'Theme palettes after Obsidian themes',
+  homepage: 'https://github.com/kognise/obsidian-atom',
+  note:
+    'Atom: kognise/obsidian-atom (public domain).\n' +
+    'Catppuccin: catppuccin/obsidian, Copyright (c) 2021 Catppuccin (MIT).\n' +
+    'LaTeX: benf2004/Obsidian-LaTeX-Theme, Copyright (c) 2023 Ben Finch (MIT).',
+  license: 'Colour values only; see each project for its license text.',
+});
+
+const divider = '\n' + '-'.repeat(72) + '\n';
+let out =
+  'THIRD-PARTY NOTICES\n\n' +
+  'Chalk bundles the following third-party software. Each component is the\n' +
+  'property of its copyright holders and is used under the license reproduced\n' +
+  'with it below. This file is generated by\n' +
+  'scripts/generate-third-party-notices.mjs — edit that script, not this file.\n';
+
+for (const name of shipped) {
+  const dir = installed.get(name);
+  if (!dir) {
+    console.error(`error: ${name} is not a runtime dependency of web/ (run pnpm install at the repo root)`);
+    process.exit(1);
+  }
+  const pkgPath = join(dir, 'package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  const licensePath = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license']
+    .map((f) => join(dir, f))
+    .find(existsSync);
+  if (!licensePath) {
+    console.error(`error: no LICENSE file for ${name}`);
+    process.exit(1);
+  }
+  out += divider;
+  out += `${name} ${pkg.version} (${pkg.license ?? 'see text'})\n`;
+  if (pkg.homepage) out += `${pkg.homepage}\n`;
+  out += '\n' + readFileSync(licensePath, 'utf8').trim() + '\n';
+}
+
+for (const v of vendored) {
+  out += divider;
+  out += `${v.title}\n${v.homepage}\n\n${v.note}\n\n${v.license}\n`;
+}
+
+writeFileSync(join(root, 'THIRD-PARTY-NOTICES'), out);
+console.log(`wrote THIRD-PARTY-NOTICES (${shipped.length} packages + ${vendored.length} vendored)`);

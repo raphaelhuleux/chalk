@@ -1,0 +1,29 @@
+{
+  "_comment": "Recorded by scripts/bench.sh --record. Medians from this machine; a metric fails when its median exceeds the value here by more than 10 percent. These are headless-Chromium numbers for the web engine, not whole-app numbers. Re-record only on a deliberate, reviewed performance decision.",
+  "_recorded": {
+    "runs": 5,
+    "node": "v26.3.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "_noise_floor": {
+    "key_to_model_p95_ms": 3,
+    "render_200_math_ms": 0,
+    "idle_cpu_percent": 0.15,
+    "peak_heap_mb": 1,
+    "key_to_model_500_p95_ms": 2,
+    "key_to_model_scaling": 0.9,
+    "md_key_to_model_p95_ms": 4,
+    "md_long_paragraph_p95_ms": 20,
+    "tex_scroll_p95_ms": 3
+  },
+  "key_to_model_p95_ms": 20.2,
+  "key_to_model_500_p95_ms": 6.1,
+  "key_to_model_scaling": 3.44,
+  "md_key_to_model_p95_ms": 13.9,
+  "md_long_paragraph_p95_ms": 92.8,
+  "tex_scroll_p95_ms": 17.8,
+  "render_200_math_ms": 1914,
+  "idle_cpu_percent": 0.13,
+  "peak_heap_mb": 12.36
+}

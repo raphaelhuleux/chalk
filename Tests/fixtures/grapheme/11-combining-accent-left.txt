@@ -1,0 +1,8 @@
+--- text
+aé|b
+--- keys
+Left
+--- expect
+a|éb
+--- note
+Leftward twin of 10.

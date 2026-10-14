@@ -1,0 +1,8 @@
+--- text
+alpha beta gamma|
+--- keys
+Alt+Left
+--- expect
+alpha beta |gamma
+--- note
+Alt+Left from the end of the document stops at the start of 'gamma'.

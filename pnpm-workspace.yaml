@@ -1,0 +1,8 @@
+packages:
+  - 'packages/editor-core'
+  - 'vscode'
+  - 'web'
+allowBuilds:
+  '@vscode/vsce-sign': true
+  esbuild: true
+  keytar: true

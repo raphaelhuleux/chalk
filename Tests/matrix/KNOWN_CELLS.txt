@@ -1,0 +1,11 @@
+# Accepted-failure baseline for the geometric matrix lane
+# (Tests/matrix/run-geometric.mjs). One entry per line:
+#
+#   cellId ruleId [@tag,tag]
+#
+# Tags are the engine lanes from Tests/runner/lib/browser.mjs (chromium,
+# webkit); an untagged entry applies to every lane. A listed
+# entry that fails prints xfail; a listed entry that PASSES prints XPASS and
+# fails the run, so entries cannot go stale. Shrink-only by convention:
+# every addition needs a comment naming its FINDINGS.md item and a one-line
+# repro; delete the entry the moment the fix lands.

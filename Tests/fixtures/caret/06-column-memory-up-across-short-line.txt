@@ -1,0 +1,12 @@
+--- text
+alpha beta gamma delta
+xy
+epsilon ze|ta eta theta
+--- keys
+Up Up
+--- expect
+alpha beta| gamma delta
+xy
+epsilon zeta eta theta
+--- note
+Upward twin of 05.

@@ -1,0 +1,13 @@
+--- text
+[alpha] beta
+--- keys
+Cmd+C DoubleClick(1,8) Cmd+V
+--- expect
+alpha alpha|
+--- note
+Paste overwrites an active selection; it does not insert beside it. Cmd+C
+captures "alpha". The double click at column 8 lands inside "beta" and selects
+that whole word. Pasting onto that non-empty selection replaces "beta" with
+"alpha", leaving the caret at the end of the pasted text. If paste inserted at
+the caret instead of replacing, the result would keep "beta" and read
+"alpha alphabeta".

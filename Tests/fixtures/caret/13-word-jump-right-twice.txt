@@ -1,0 +1,8 @@
+--- text
+|alpha beta gamma
+--- keys
+Alt+Right Alt+Right
+--- expect
+alpha beta| gamma
+--- note
+The second jump crosses the space and stops at the end of 'beta'.

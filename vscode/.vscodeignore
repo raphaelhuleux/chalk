@@ -1,0 +1,14 @@
+.vscode/
+.claude/
+.remember/
+node_modules/
+src/
+test/
+esbuild.config.js
+tsconfig.json
+vitest.config.ts
+**/*.ts
+# Source maps: `package` builds with --prod, which emits none, but a dev
+# build's maps would otherwise ship. No `!` re-include may cover dist/: vsce
+# applies every negation after all the ignores, whatever the order.
+**/*.map

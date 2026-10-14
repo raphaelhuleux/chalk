@@ -1,0 +1,36 @@
+--- text
+alpha beta gamma
+$$
+xy
+$$
+delta epsi|lon zeta
+--- keys
+Up Up Up Up
+--- expect
+alpha beta| gamma
+$$
+xy
+$$
+delta epsilon zeta
+--- note
+The goal column must survive an UPWARD crossing of a rendered `$$` block, the
+same invariant fixtures 05/06/22/23 assert across short and empty lines, now
+across display math instead. The caret starts at column 10 of the bottom prose
+line ("delta epsi|lon zeta").
+
+Up #1 is claimed by mdEnterDisplayMathFromBelow (md-math-plugin.ts): the caret
+sits on the line directly below the block, so it lands column-preserving on the
+closing `$$` line via dispatchVerticalStop, which CAPTURES the goal x (column
+10) into the vertical-motion session (callout-core.ts). "$$" is two characters,
+so sameColumnOnLine clamps the landing to column 2, but the session keeps the
+column-10 x alive.
+
+Ups #2-#4 are mdVerticalArrowKeymap presses. Each reads verticalGoalX from the
+live session (still column 10), so the landings on "xy" and "$$" clamp to column
+2 without consuming the goal. The final Up reaches the top prose line "alpha
+beta gamma", which is long enough to hold column 10, so the caret must land
+after "alpha beta" (offset 10). Landing at column 2 there would be the
+"Down doesn't go where I aimed" decay bug that md-vertical-motion.ts exists to
+prevent. The upward direction is chosen because the edit-mode preview widget
+renders below the block, so it never sits in the upward path; the whole crossing
+is a clean line-by-line reveal.

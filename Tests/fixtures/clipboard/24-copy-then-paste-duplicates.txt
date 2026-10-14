@@ -1,0 +1,12 @@
+--- text
+[alpha] beta
+--- keys
+Cmd+C End Space Cmd+V
+--- expect
+alpha beta alpha|
+--- note
+Copy is a read, not a write. A non-empty selection copies character-wise, so
+Cmd+C must leave both the document and the selected text untouched. End moves
+the caret to the end of the line, Space appends one space, and pasting the
+copied "alpha" inserts it there with the caret after the pasted run. The only
+edits come from Space and the paste, never from the copy itself.

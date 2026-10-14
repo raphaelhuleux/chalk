@@ -1,0 +1,12 @@
+--- text
+alpha [beta] gamma
+--- keys
+Cmd+X Cmd+V
+--- expect
+alpha beta| gamma
+--- note
+Cut then an immediate paste is an identity on the text. The cut removes "beta"
+and leaves the caret at the gap; the paste reinserts the same characters at
+that gap, so the document returns byte-for-byte to its starting state. The one
+lasting change is the caret, which a character-wise paste places at the end of
+the reinserted run, right after "beta" and before the space.

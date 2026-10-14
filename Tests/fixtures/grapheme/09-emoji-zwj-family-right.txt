@@ -1,0 +1,10 @@
+--- text
+|👨‍👩‍👧x
+--- keys
+Right
+--- expect
+👨‍👩‍👧|x
+--- note
+A zero-width-joiner sequence is one extended grapheme cluster: man, ZWJ,
+woman, ZWJ, girl, eight UTF-16 code units, one caret step. Stopping inside
+it splits a single rendered glyph.

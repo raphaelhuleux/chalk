@@ -1,0 +1,16 @@
+--- text
+ca̲|t
+--- keys
+Left
+--- expect
+c|a̲t
+--- note
+The backward twin of fixture 27. Motion bugs are frequently one-directional, so
+Left across a combining-mark cluster must be asserted separately from Right.
+
+The middle glyph is "a" followed by U+0332 (COMBINING LOW LINE): two code units,
+one extended grapheme cluster (UAX#29 GB9). The caret starts after the combining
+mark (offset 3, before "t"). One ArrowLeft runs find-cluster-break backward,
+which counts the combining mark as part of the "a" cluster and lands at offset
+1, before "a". It must not stop at offset 2, between the combining mark and its
+base, which would sit inside a single rendered glyph.

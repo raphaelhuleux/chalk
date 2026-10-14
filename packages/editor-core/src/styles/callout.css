@@ -1,0 +1,157 @@
+/* Callout boxes (callout-core.ts line decorations): each row gets
+ * `.cm-callout .cm-callout-<type>` plus `-top`/`-bottom` on the ends.
+ * Display math and tables inside a callout are block widgets, not `.cm-line`s,
+ * so their plugins tag them `.cm-callout…` (calloutBlockAt) and the box
+ * selectors list all three widget classes. Every accent/tint has a
+ * `--chalk-callout-*` override with a hardcoded fallback. */
+
+.cm-line.cm-callout,
+.cm-math-display.cm-callout,
+.cm-tex-math-display.cm-callout,
+.cm-live-table-wrap.cm-callout {
+  background: var(--callout-bg);
+  border-left: 3px solid var(--callout-accent);
+  /* The bar hangs in the left margin so callout text lines up with ordinary
+     text. It must stay a BORDER, not a ::before: the math widgets are
+     `overflow-x: clip` and would clip a positioned bar. Horizontal margins are
+     safe (only vertical ones break the height map). The 6px restores CM6's
+     base `.cm-line` padding-left; `--chalk-hang` balances hanging-indent.ts's
+     `text-indent: -hang` on list lines. */
+  margin-left: calc(-3px - var(--chalk-callout-outdent, 0.75em));
+  padding-left: calc(6px + var(--chalk-callout-outdent, 0.75em) + var(--chalk-hang, 0px));
+}
+
+/* The math widgets' `width/max-width: 100%` ignore the negative margin, so
+   their right edge would fall short of the line rows: widen by the hang. */
+.cm-math-display.cm-callout,
+.cm-tex-math-display.cm-callout {
+  width: calc(100% + 3px + var(--chalk-callout-outdent, 0.75em));
+  max-width: calc(100% + 3px + var(--chalk-callout-outdent, 0.75em));
+}
+
+/* NO VERTICAL MARGINS on lines or block widgets inside .cm-content: CM6's
+   height map can't see margins, so everything below drifts and clicks and
+   Up/Down land lines off. All vertical spacing is PADDING. */
+.cm-line.cm-callout-top {
+  padding-top: 0.75em;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+}
+
+.cm-line.cm-callout-bottom,
+.cm-math-display.cm-callout-bottom,
+.cm-tex-math-display.cm-callout-bottom,
+.cm-live-table-wrap.cm-callout-bottom {
+  padding-bottom: 0.75em;
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+
+.cm-callout-label {
+  font-weight: 600;
+  color: var(--callout-accent);
+  letter-spacing: 0.01em;
+}
+
+.cm-callout-title {
+  font-style: italic;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* Per-type palette, one accent per semantic group. Every LABELS type needs
+   both variables here or its box renders invisible (css-guardrails.test.ts). */
+
+/* Theorem family. */
+.cm-callout-theorem,
+.cm-callout-lemma,
+.cm-callout-corollary,
+.cm-callout-proposition,
+.cm-callout-conjecture {
+  --callout-accent: var(--chalk-callout-theorem-accent, #3b6ea5);
+  --callout-bg: var(--chalk-callout-theorem-bg, rgba(59, 110, 165, 0.07));
+}
+
+/* An assumption is a premise, not a proved claim, so it groups with
+   definitions. */
+.cm-callout-definition,
+.cm-callout-assumption,
+.cm-callout-example,
+.cm-callout-exercise {
+  --callout-accent: var(--chalk-callout-definition-accent, #2f855a);
+  --callout-bg: var(--chalk-callout-definition-bg, rgba(47, 133, 90, 0.07));
+}
+
+.cm-callout-proof,
+.cm-callout-remark,
+.cm-callout-solution {
+  --callout-accent: var(--chalk-callout-proof-accent, #9aa0a6);
+  --callout-bg: var(--chalk-callout-proof-bg, transparent);
+}
+
+/* No fill: a tint would fight the image. */
+.cm-callout-figure,
+.cm-callout-table {
+  --callout-accent: var(--chalk-callout-figure-accent, #9aa0a6);
+  --callout-bg: var(--chalk-callout-figure-bg, transparent);
+}
+
+/* beamer's block family: block blue, alertblock red, exampleblock green. */
+.cm-callout-block {
+  --callout-accent: var(--chalk-callout-block-accent, #3b6ea5);
+  --callout-bg: var(--chalk-callout-block-bg, rgba(59, 110, 165, 0.07));
+}
+
+.cm-callout-alertblock {
+  --callout-accent: var(--chalk-callout-alertblock-accent, #c53030);
+  --callout-bg: var(--chalk-callout-alertblock-bg, rgba(197, 48, 48, 0.07));
+}
+
+.cm-callout-exampleblock {
+  --callout-accent: var(--chalk-callout-exampleblock-accent, #2f855a);
+  --callout-bg: var(--chalk-callout-exampleblock-bg, rgba(47, 133, 90, 0.07));
+}
+
+/* Quarto admonitions. */
+.cm-callout-note {
+  --callout-accent: var(--chalk-callout-note-accent, #3b6ea5);
+  --callout-bg: var(--chalk-callout-note-bg, rgba(59, 110, 165, 0.07));
+}
+
+.cm-callout-tip {
+  --callout-accent: var(--chalk-callout-tip-accent, #2f855a);
+  --callout-bg: var(--chalk-callout-tip-bg, rgba(47, 133, 90, 0.07));
+}
+
+.cm-callout-warning,
+.cm-callout-caution {
+  --callout-accent: var(--chalk-callout-warning-accent, #b7791f);
+  --callout-bg: var(--chalk-callout-warning-bg, rgba(183, 121, 31, 0.08));
+}
+
+.cm-callout-important {
+  --callout-accent: var(--chalk-callout-important-accent, #c53030);
+  --callout-bg: var(--chalk-callout-important-bg, rgba(197, 48, 48, 0.07));
+}
+
+/* Mixed mode's label chip. A `::after` on a data attribute, not text or a
+   widget: no height, no caret stop, no reflow (same trick as slide.css's
+   slide number). A wrapping fence runs under it; accepted. Sized in em so it
+   tracks the text and the font-size slider; rem would pin it to the page. */
+.cm-line.cm-callout-top[data-callout] {
+  position: relative;
+}
+
+.cm-line.cm-callout-top[data-callout]::after {
+  content: attr(data-callout);
+  position: absolute;
+  top: 0.8em;
+  right: 0.85em;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--callout-accent);
+  opacity: 0.8;
+  pointer-events: none;
+  user-select: none;
+}

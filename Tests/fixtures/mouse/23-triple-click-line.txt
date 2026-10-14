@@ -1,0 +1,15 @@
+--- text
+|alpha beta
+gamma delta
+epsilon
+--- keys
+TripleClick(1,3)
+--- expect
+[alpha beta]
+gamma delta
+epsilon
+--- note
+A triple click selects the paragraph, which here is the logical line, and
+stops at the line end rather than swallowing the newline. If the engine
+includes the break this is a convention call rather than a defect: see
+KNOWN_FAILURES.txt.
