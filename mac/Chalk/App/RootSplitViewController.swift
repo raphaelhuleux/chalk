@@ -170,7 +170,7 @@ final class RootSplitViewController: UISplitViewController {
     }
 
     /// `locationStore` is this window's own folder list (SceneDelegate builds it from the scene session);
-    /// the detached default keeps windows built in tests off the installed app's bookmarks.
+    /// the detached default keeps windows built in tests off the persisted bookmarks.
     init(locationStore: LocationStore = .detached(), initialContent: SceneConnectContent = .openWelcome) {
         self.locationStore = locationStore
         // Seed before the sidebar's view loads so its first enumeration sees the

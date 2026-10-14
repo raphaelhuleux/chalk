@@ -2,30 +2,17 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// Guards the REAL app's preferences against the test bundle.
+/// Guards the test host's preferences against leaks from earlier suites.
 ///
-/// ## Why this exists
-///
-/// `Preferences` is backed by `UserDefaults.standard`, and an app-hosted test
-/// bundle shares that domain with the INSTALLED app. Anything a test writes
-/// lands on the machine the owner actually uses.
-///
-/// On 2026-08-19 that cost an afternoon. `ChromeInvariantMatrixTests` drives zen
-/// states; two runs were interrupted before their `defer` restored the value, so
-/// `chalk.editingMode` stayed `"zen"`. Zen hides the tab band and closes the
-/// Library BY DESIGN, so the installed app launched with no tabs and no sidebar
-/// and read as a completely broken build. Hours went into bisecting branches,
-/// sandbox containers, bundle loading and scene-restore races; the answer was
-/// one string in a plist, and no test said so.
-///
-/// The same runs also left `chalk.locations` an empty array. Those
-/// security-scoped bookmarks were NOT recoverable — every Library folder had to
-/// be re-added by hand.
-///
-/// ## What it checks
+/// `Preferences` is backed by `UserDefaults.standard`. The test host is a Debug
+/// build (`com.huleux.chalk.debug`, see mac/project.yml), so tests cannot reach
+/// the installed app's settings, but every suite and every Debug launch shares
+/// this one domain. A run killed before its `tearDown` leaves its writes behind,
+/// and a leaked `chalk.editingMode = zen` hides the tab band and the Library, so
+/// unrelated suites fail at once (docs/known-failing-tests.md, 2026-08-23).
 ///
 /// Absolute rules, not a diff, so the result cannot depend on which suite ran
-/// first. Each one is a state the machine should never be left in by a test.
+/// first. Each one is a state no test should leave behind.
 final class PreferencePollutionGuardTests: XCTestCase {
 
     /// The exact leak that broke the app. Zen is a mode a person chooses; no
@@ -34,10 +21,9 @@ final class PreferencePollutionGuardTests: XCTestCase {
         XCTAssertNotEqual(
             Preferences.editingMode, .zen,
             """
-            chalk.editingMode is "zen" in UserDefaults.standard, which the \
-            INSTALLED app reads. It will launch with no tab band and no \
-            Library and look broken. Reset it with:
-                defaults write com.huleux.chalk chalk.editingMode -string normal
+            chalk.editingMode is "zen" in the Debug domain, so Debug launches \
+            and later suites come up with no tab band and no Library. Reset it with:
+                defaults write com.huleux.chalk.debug chalk.editingMode -string normal
             Then find the suite that leaked it: restoring in a test's `defer` \
             does not survive an interrupted run, so it must snapshot in setUp \
             and restore in tearDown.

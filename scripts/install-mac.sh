@@ -46,8 +46,9 @@ case "$CONFIG" in
     cat <<'WARN'
 warning: installing a Debug build over your daily app. It carries
          Chalk.debug.dylib, an unminified ~2 MB editor bundle and no
-         optimisation. Correct for chasing a bug in the app itself, wrong
-         for the copy you actually write in.
+         optimisation, and its own settings (bundle ID com.huleux.chalk.debug).
+         Correct for chasing a bug in the app itself, wrong for the copy
+         you actually write in.
 WARN
     ;;
   *) die "--config takes Debug or Release, not '$CONFIG'" ;;

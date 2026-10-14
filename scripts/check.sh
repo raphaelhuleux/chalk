@@ -60,7 +60,7 @@ caret-fixtures   Tests/fixtures/caret, headless Chromium
 browser-tests    Tests/browser/run.mjs, pointer and motion over real geometry
 geometric-matrix Tests/matrix/run-geometric.mjs, the caret/reveal discovery matrix
 snapshots        Tests/__Snapshots__, the 16-case layout matrix
-pref-guard       the test bundle did not change the real app's preferences
+pref-guard       no earlier run left a test preference in the Debug domain
 ui-invariants    chrome geometry asserted across the 32-state matrix
 mac-tests        the rest of ChalkTests on Mac Catalyst
 bench            scripts/bench.sh against thresholds.json
@@ -148,9 +148,9 @@ run_step snapshots node Tests/runner/snapshots.mjs --no-build
 
 # --- Xcode test suites (Mac Catalyst) ---------------------------------------
 if [ "$RUN_XCTEST" = "1" ]; then
-  # pref-guard runs BEFORE the matrix suite: the matrix once leaked a test
-  # preference into the real app's defaults, so the guard should report a
-  # dirty machine before another run muddies it further.
+  # pref-guard runs BEFORE the matrix suite: a killed run can leave a test
+  # preference in the Debug domain (com.huleux.chalk.debug), and the guard
+  # should name it before more suites fail because of it.
   run_step pref-guard xcode_test -only-testing:ChalkTests/PreferencePollutionGuardTests
   run_step ui-invariants xcode_test -only-testing:ChalkTests/ChromeInvariantMatrixTests
   # The whole bundle minus the two classes the steps above already ran:

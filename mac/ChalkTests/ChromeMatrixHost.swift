@@ -27,14 +27,11 @@ final class ChromeMatrixHost {
 
     /// The editing mode as the machine had it before the suite ran.
     ///
-    /// `Preferences` is backed by `UserDefaults.standard`, and an app-hosted
-    /// test bundle shares that domain with the REAL app. Driving zen states
-    /// therefore writes zen into the user's own settings, and on 2026-08-19
-    /// an interrupted run left it there: the installed app came up with no
-    /// tab band and no Library, which read as a broken build rather than a
-    /// leaked preference. Snapshotting here and restoring in `tearDown`
-    /// closes the case where a test throws; a killed process can still leak,
-    /// which is why the leak-guard test exists to catch it on the next run.
+    /// `Preferences` is backed by `UserDefaults.standard`, which every suite
+    /// and Debug launch shares, and a leaked zen hides the tab band and the
+    /// Library. Snapshotting here and restoring in `tearDown` closes the case
+    /// where a test throws; a killed process can still leak, which is why
+    /// `PreferencePollutionGuardTests` catches it on the next run.
     let incomingEditingMode: EditingMode
 
     /// The RAW persisted sidebar width (nil when the user never resized), so

@@ -174,6 +174,12 @@ targets:
         # App Sandbox.
         CODE_SIGN_ENTITLEMENTS: Chalk/Chalk-macCatalyst.entitlements
         ENABLE_USER_SCRIPT_SANDBOXING: false # the pre-build phase runs node over web/ and node_modules/
+      configs:
+        # Debug builds, and so the ChalkTests host, get their own preferences
+        # domain: tests write UserDefaults.standard, and with the Release ID they
+        # would rewrite the installed app's settings and Library bookmarks.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.debug
     preBuildScripts:
       - name: Build web editor bundle
         # Keeps the in-app editor current. Cheap when nothing changed:

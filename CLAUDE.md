@@ -64,7 +64,10 @@ accepted-failure format). jsdom unit tests stay beside their package, in
 step: build-web, typecheck, xcodegen, build-mac, invariants-doc,
 engine-tests, chalkkit-tests, caret-fixtures, browser-tests,
 geometric-matrix, snapshots, pref-guard, ui-invariants, mac-tests, bench.
-`--fast` skips the three Xcode test steps and the benchmarks. It parses each
+`--fast` skips the three Xcode test steps and the benchmarks.
+Debug builds, and so the ChalkTests host, use the bundle ID
+`com.huleux.chalk.debug`: tests write `UserDefaults.standard`, and must never
+share a domain with the installed Release app (`com.huleux.chalk`). It parses each
 runner's output with a fixed extractor, so a runner that changes its failure
 lines must change the extractor with it.
 
