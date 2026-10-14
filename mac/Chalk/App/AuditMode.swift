@@ -117,6 +117,33 @@ enum AuditMode {
     The moment condition is $\\mathbb{E}[z_i \\varepsilon_i] = 0$, which gives $k$
     restrictions for $\\ell$ parameters. Identification requires
     $\\operatorname{rank}(\\mathbb{E}[z_i x_i']) = \\ell$.
+
+    \\begin{theorem}[Consistency of GMM]
+    Let $W_n \\xrightarrow{p} W$ with $W$ positive definite. Then
+    \\begin{equation}
+      \\hat\\beta_{\\text{GMM}}
+      = \\left( X'Z \\, W_n \\, Z'X \\right)^{-1} X'Z \\, W_n \\, Z'y
+      \\xrightarrow{p} \\beta .
+    \\end{equation}
+    \\end{theorem}
+
+    \\begin{proof}
+    Substitute $y = X\\beta + \\varepsilon$ and apply the law of large numbers:
+    \\begin{align}
+      \\hat\\beta_{\\text{GMM}} - \\beta
+      &= \\left( \\tfrac{1}{n} X'Z \\, W_n \\, \\tfrac{1}{n} Z'X \\right)^{-1}
+         \\tfrac{1}{n} X'Z \\, W_n \\, \\tfrac{1}{n} Z'\\varepsilon \\\\
+      &\\xrightarrow{p} \\left( Q' W Q \\right)^{-1} Q' W \\cdot 0 = 0 ,
+    \\end{align}
+    where $Q = \\mathbb{E}[z_i x_i']$ has full column rank.
+    \\end{proof}
+
+    \\subsection{Efficient weighting}
+
+    The variance is smallest when $W = S^{-1}$, with
+    $S = \\mathbb{E}[\\varepsilon_i^2 \\, z_i z_i']$. In practice we use the
+    two-step estimator and report the Hansen $J$ statistic,
+    $J \\sim \\chi^2_{k - \\ell}$ under the null.
     """
 
     /// A plot-looking png (axes plus a rising line) for the asset-row and

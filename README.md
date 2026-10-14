@@ -2,14 +2,42 @@
 
 Chalk is a live-preview editor for `.tex` and `.md` files.
 Math renders in place with KaTeX while you type, and HyperSnips-style snippets (hsnips) expand as you write.
+Your files stay plain text: Chalk only changes how they look while you edit them.
 
-There are two products, built on one editor engine:
+![Chalk for Mac, with the Library sidebar and a Markdown note full of math](docs/images/mac-library.png)
 
-- **Chalk for Mac** ([mac/](mac/)): a native app (UIKit through Mac Catalyst) that hosts the editor in a `WKWebView`.
-- **Chalk for VS Code** ([vscode/](vscode/)): a custom-editor extension that hosts the same editor in a webview.
+It comes in two forms, built on one editor engine:
+
+- **Chalk for Mac** ([mac/](mac/)): a native app with tabs, a folder sidebar and an outline panel.
+- **Chalk for VS Code** ([vscode/](vscode/)): the same editor as a custom editor for `.tex`, `.md` and `.qmd` files.
+
+## What it does
+
+![Typing in Chalk: each formula renders as soon as the cursor leaves it](docs/images/live-preview.gif)
+
+- **Live math.** Inline and display math render with KaTeX as soon as the cursor leaves them. Move back in and you edit the source.
+- **LaTeX that reads like the PDF.** Sections, theorem and proof environments, numbered `equation` and `align` blocks, and lists render in place.
+- **Markdown and Quarto.** Headings, lists, tables, callouts, images and Mermaid diagrams.
+- **Snippets.** HyperSnips-style snippets for fast math typing, with a default set included.
+- **Three view modes.** Preview, mixed, or plain source.
+- **Writing modes.** Zen, typewriter and focus.
+- **Colour themes.** Atom (the default), Ink, Catppuccin and LaTeX, each in light and dark.
+
+| LaTeX | Outline panel |
+| --- | --- |
+| ![A .tex file with a theorem, a proof and numbered equations](docs/images/mac-tex.png) | ![The outline panel next to a Markdown note](docs/images/mac-outline.png) |
+
+### In VS Code
+
+![The Chalk editor showing a .tex file inside VS Code](docs/images/vscode.png)
+
+The extension can also build your LaTeX project on save (`chalk.latex.buildOnSave`).
+
+## How it is built
 
 The engine, [`@chalk/editor-core`](packages/editor-core/), is CodeMirror 6 plus KaTeX plus a self-contained hsnips port.
 It knows nothing about its host. Each host talks to it through the same small `HostPort` protocol.
+The Mac app is UIKit through Mac Catalyst and hosts the editor in a `WKWebView`; the VS Code extension hosts it in a webview.
 
 ## Repository layout
 

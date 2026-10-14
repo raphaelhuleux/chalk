@@ -2654,7 +2654,8 @@ extension RootSplitViewController {
 
 extension RootSplitViewController {
     /// Applies CHALK_AUDIT_STATE after first layout. States: tabs1 tabs5 tabs12
-    /// tabs12to3 longtabs | promo-editor promo-library promo-outline |
+    /// tabs12to3 longtabs | promo-editor promo-library promo-outline promo-panel
+    /// promo-tex |
     /// sidebar-deep sidebar-empty | tabs6-sidebar | preview | quickopen
     /// quickopen-long outline fsoutline fstabs5 | settings | empty | stressdoc
     /// | scale06 scale25 | narrow
@@ -2712,6 +2713,17 @@ extension RootSplitViewController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
                     cmdToggleOutline()
                 }
+            case "promo-panel":
+                editor.closeAllTabsForAudit()
+                editor.open(url: AuditMode.seedPromoContent()
+                    .appendingPathComponent("Panel bias/estimator-bias.md"))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+                    cmdToggleOutlinePanel()
+                }
+            case "promo-tex":
+                editor.closeAllTabsForAudit()
+                editor.open(url: AuditMode.seedPromoContent()
+                    .appendingPathComponent("Panel bias/identification.tex"))
             case "sidebar-deep":
                 locationStore.add(url: fixtures.appendingPathComponent("deep"))
                 sidebar.reload(); setSidebarVisible(true); sidebar.expandAll()
