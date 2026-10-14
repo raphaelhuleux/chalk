@@ -173,16 +173,20 @@ enum Preferences {
         }
     }
 
+    /// Dark until the user picks otherwise.
     static var themePreference: ThemePreference {
-        get { ThemePreference(rawValue: UserDefaults.standard.integer(forKey: themeKey)) ?? .auto }
+        get {
+            guard UserDefaults.standard.object(forKey: themeKey) != nil else { return .dark }
+            return ThemePreference(rawValue: UserDefaults.standard.integer(forKey: themeKey)) ?? .dark
+        }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: themeKey) }
     }
 
-    /// The colour theme. Unknown raw values (from a future build) fall back to Ink.
+    /// The colour theme, Atom by default. Unknown raw values (from a future build) fall back to it.
     static var colorTheme: ChalkTheme {
         get {
             let raw = UserDefaults.standard.string(forKey: colorThemeKey) ?? ""
-            return ChalkTheme(rawValue: raw) ?? .ink
+            return ChalkTheme(rawValue: raw) ?? .atom
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: colorThemeKey) }
     }
