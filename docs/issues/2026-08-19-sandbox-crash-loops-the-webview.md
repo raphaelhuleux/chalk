@@ -1,6 +1,6 @@
 # The App Sandbox crash-loops WKWebView's content process
 
-**Status:** confirmed, cause not yet found. Blocks the Mac App Store, not the alpha.
+**Status:** cause found 2026-10-15 (see "Resolution" below). Blocks the Mac App Store, not the alpha; the fix is a product decision, not code.
 **Answers:** Phase 0 of `docs/plans/2026-08-19-mac-alpha-and-waitlist.md` (removed 2026-09-28; in git history).
 
 ## What happens
@@ -104,3 +104,24 @@ sandbox. They cannot be exercised until this is solved, and
 Purge both saved-state stores first, `~/Library/Containers/com.huleux.chalk/
 Data/Library/Saved Application State/` and `~/Library/Saved Application State/`,
 because which one wins flips with the sandbox entitlement.
+
+## Resolution (2026-10-15)
+
+Reproduced on the AppKit shell (`ChalkMac`, plan phase 1) with the same
+symptom, so it is not Catalyst and not the iPad idiom. A minimal AppKit app
+with one `WKWebView` loading one bundled HTML file, signed with the same
+development identity, settles it on macOS 27.0:
+
+| Entitlements | Result |
+| --- | --- |
+| none | renders |
+| `app-sandbox` only | `webViewWebContentProcessDidTerminate` fires once, nothing renders |
+| `app-sandbox` + `network.client` | renders |
+
+WKWebView's content process does not survive the App Sandbox without
+`com.apple.security.network.client`, even for `file://` content. That is the
+one entitlement the Privacy screen's "no network connections" claim rules out,
+so the sandboxed App Store build stays blocked until the owner decides between
+the claim and the entitlement. Nothing in Chalk's code is involved; local and
+direct-download builds keep shipping unsandboxed. Probe source: scratch, not
+kept; it is twenty lines of `WKWebView.loadFileURL` plus a status file.

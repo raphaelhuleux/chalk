@@ -17,10 +17,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.minSize = EditorWindowController.minimumSize
+        window.backgroundColor = .chalkEditorBackground
         window.center()
         super.init(window: window)
         window.delegate = self
         window.contentViewController = RootViewController()
+        // Assigning a content view controller resizes the window to its view's
+        // frame (zero here, clamped to minSize); restore the opening size.
+        window.setContentSize(EditorWindowController.defaultSize)
+        window.center()
     }
 
     @available(*, unavailable)
@@ -36,12 +41,39 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-/// The window's content. Empty in phase 0; the split view, the strip and the
-/// editor column arrive in phases 1 to 3.
+/// The window's content. Phase 1: one web surface on one document (Welcome),
+/// enough to prove the sandboxed bundle load and the transport. The editor
+/// container with tabs replaces this in phase 2.
 final class RootViewController: NSViewController {
+    private let surface = WebEditorSurface()
+    private lazy var document = DocumentController(surface: surface)
+
     override func loadView() {
         let view = NSView()
         view.wantsLayer = true
         self.view = view
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let editor = surface.view
+        editor.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(editor)
+        NSLayoutConstraint.activate([
+            editor.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            editor.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            editor.topAnchor.constraint(equalTo: view.topAnchor),
+            editor.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        surface.setAppearance(
+            dark: NSApp.effectiveAppearance.isChalkDark, theme: Preferences.colorTheme)
+        surface.setChromeTopInset(ChromeMetrics.headerHeight + ChromeMetrics.editorRestingPad)
+        document.open(url: SampleContent.ensureSeeded())
+        surface.bootIfNeeded()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        surface.focusEditor()
     }
 }

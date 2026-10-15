@@ -259,6 +259,18 @@ Exit: Catalyst app unchanged in behaviour, ChalkKit tests cover the moved code, 
 
 Exit: every `DocumentController*`, `WebEditorSurface*`, `ChalkDocumentLoadTests` and `DraftSaveFileTypeTests` green.
 
+Done 2026-10-15. 95 tests green on `ChalkMacTests` (one skipped: the known reopen wedge, carried over as is). What the port taught:
+
+- `@main` on the `NSApplicationDelegate` class never attached the delegate: the app sat in its run loop with no window and no breadcrumbs. The entry point is an explicit `main.swift` that creates the delegate and calls `NSApplicationMain`.
+- Setting `contentViewController` resizes the window to the view's frame, so the opening size is set after it.
+- `ChalkDocumentLoadTests` became `ChalkDocumentTests`: the directory and UTF-8 refusals now live in the read path, since there is no `load(fromContents:)`.
+- `ShellShortcutTableTests` and the `pressesBegan` table are deleted, not ported. AppKit's menu bar handles the key equivalents, and the four keys the page consumes (`SHELL_COMMANDS` in native-host.ts) arrive only over the `command` message, so no keystroke reaches the shell twice and nothing needs deduping. The phase 6 keystroke test confirms this on a real window.
+- `NativeSelectionHighlight` has no AppKit counterpart: WebKit on macOS paints the selection in the web process. Deleted with its test.
+- The `UIPasteboard` copy workaround is dropped; copy and paste are checked by hand in phase 2 and by the cutover script.
+- AppKit's `WKWebView` has no public opaque switch. The under-page colour is the editor background and the page's own `:root` paints the theme from the document-start seed; no private `drawsBackground` call.
+- `DraftSaveFileTypeTests` waits for the editor container (phase 2).
+- The sandbox risk is settled: the blank sandboxed editor reproduces on AppKit, and a minimal probe shows WKWebView's content process needs `com.apple.security.network.client` under the App Sandbox even for local files. Not a port concern; the decision is recorded in `docs/issues/2026-08-19-sandbox-crash-loops-the-webview.md`.
+
 ### Phase 2: tabs, container, pill, chrome
 
 - `TabStripView` in the titlebar, both window modes.
@@ -339,7 +351,7 @@ New tests the port adds: `ChromeReferenceParityTests`, a clipboard round-trip th
 ## Risks
 
 - **Keyboard routing in the AppKit `WKWebView`.** Menu key equivalents run before the web view's `keyDown`, which is what the glue's Cmd P monitor emulated. The reverse risk is the menu eating an editor shortcut; the menu deliberately omits Cmd B and Cmd Colon today and must keep doing so. Decide per shortcut in phase 2 with a test that types into the web view and checks who handled it.
-- **Sandbox and the file-URL load.** Unknown whether the 2026-08-19 crash loop was Catalyst-specific. Phase 1 tests a sandboxed Release build first.
+- **Sandbox and the file-URL load.** Settled in phase 1: not Catalyst-specific, and not code. See the phase 1 notes.
 - **`NSOutlineView` and the Paper look.** Row height 30, no source-list tint, flat background and custom disclosure need a custom `NSTableRowView` and `outlineView(_:rowViewForItem:)`; budget a day.
 - **Pasteboard drag types.** Sidebar drops carry file URLs; tab drags carry a private type. Both go through `NSPasteboardItem` and the decision code stays in ChalkKit.
 - **Full screen is manual.** Every phase that touches the strip, the Library or the outline panel ends with the manual full-screen round trip from `docs/issues/2026-08-18-sidebar-gap-after-fullscreen.md`.
