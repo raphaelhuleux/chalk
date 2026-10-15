@@ -279,6 +279,18 @@ Done 2026-10-15. 95 tests green on `ChalkMacTests` (one skipped: the known reope
 
 Exit: tab, chrome, auto-hide, editing mode and transition contract tests green, except the Library and outline cells.
 
+Done 2026-10-15. 213 tests green on `ChalkMacTests`. What the port taught:
+
+- The window carries an empty unified `NSToolbar` with no items: that is what gives the transparent titlebar its tall form with the traffic lights centred, while the band in the content view under it takes the clicks. `BandLayout.resolve` runs in its overlay branch (`glueAvailable: true`) with the titlebar height read live from `contentLayoutRect`; the band owns the tab row in both window modes, so `TabChromeOwnership` reduces to "zen stands down".
+- A theme is not an `NSAppearance`, so `viewDidChangeEffectiveAppearance` never fires for it. `ChalkAppearance.theme` posts `themeDidChange` and every view that caches a resolved `CGColor` re-resolves on it; the tab names rebuild their attributed titles.
+- The tab label is a custom view drawing the attributed string: an `NSTextField` adds 2 pt of cell padding on each side, which broke every gap and underline measurement by 4 pt.
+- The oblique tab font goes through `CTFontCreateCopyWithAttributes` with a unit shear. `NSFont(descriptor:textTransform:)` reports a 1 pt font for the bundled face, and a descriptor `.matrix` beside a size does the same.
+- A scroll view's document view needs its origin pinned to the clip view, or Auto Layout leaves its width ambiguous and low-resistance labels collapse to nothing.
+- The zen chrome-top glide is armed before the Library and outline closes, because on AppKit those run a synchronous layout pass that would consume it.
+- The column widths live under AppKit keys (`chalk.sidebarWidth.appkit`, `chalk.outlinePanelWidth.appkit`), converted once from the Catalyst values; the two shells never fight over one key during the dual-target period.
+- `EditorSafeAreaTests` is replaced by `EditorColumnLayoutTests`: the horizontal safe-area carve was a macOS 27 Catalyst split-view behaviour. The two Catalyst-only strip tests and the Settings-row halves of two suites are left for their phases.
+- `ChalkGlassView` takes `NSGlassEffectView` on macOS 26 and the blur before it, as the UIKit one did with `UIGlassEffect`.
+
 ### Phase 3: Library
 
 - `NSOutlineView` sidebar, Locations, bookmarks, headers, menus, rename, file operations with undo, drag and drop, watcher reload, asset rows, open panels.

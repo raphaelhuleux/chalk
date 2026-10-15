@@ -1,11 +1,22 @@
 import AppKit
+import CoreText
 import ChalkKit
 
 /// The colour theme every themed colour resolves against. AppKit has no custom trait, and the
 /// theme is one preference for the whole app, so it is process state: the shell writes it when the
 /// preference changes and redraws, and the dynamic providers below read it at resolve time.
 enum ChalkAppearance {
-    static var theme: ChalkTheme = Preferences.colorTheme
+    static var theme: ChalkTheme = Preferences.colorTheme {
+        didSet {
+            guard theme != oldValue else { return }
+            NotificationCenter.default.post(name: themeDidChange, object: nil)
+        }
+    }
+
+    /// Posted on the main thread when `theme` changes. A theme is not an
+    /// `NSAppearance`, so `viewDidChangeEffectiveAppearance` never fires for
+    /// it: every view that caches a resolved colour re-resolves on this.
+    static let themeDidChange = Notification.Name("chalk.appearance.themeDidChange")
 }
 
 extension NSAppearance {
@@ -162,17 +173,20 @@ extension NSFont {
     static func chalkMono(
         size: CGFloat, weight: NSFont.Weight = .regular, oblique: Bool = false
     ) -> NSFont {
-        let name: String
+        let names: [String]
         switch weight {
-        case .semibold, .bold: name = "IBMPlexMono-SemiBold"
-        case .medium: name = "IBMPlexMono-Medium"
-        default: name = "IBMPlexMono"
+        case .semibold, .bold: names = ["IBMPlexMono-SemiBold"]
+        case .medium: names = ["IBMPlexMono-Medium"]
+        default: names = ["IBMPlexMono-Regular", "IBMPlexMono"] // the regular face's PostScript name first
         }
-        let upright = NSFont(name: name, size: size)
+        let upright = names.lazy.compactMap { NSFont(name: $0, size: size) }.first
             ?? .monospacedSystemFont(ofSize: size, weight: weight)
         guard oblique else { return upright }
-        let slanted = upright.fontDescriptor.addingAttributes(
-            [.matrix: NSAffineTransform(transform: chalkObliqueTransform())])
-        return NSFont(descriptor: slanted, size: size) ?? upright
+        // Through Core Text: `NSFont(descriptor:textTransform:)` reports a
+        // 1pt font for a bundled face under a unit shear and squares the size
+        // under a sized one, while a descriptor `.matrix` beside a size
+        // reports 1pt too (TabLabelFontTests pins the size and the shear).
+        var shear = CGAffineTransform(a: 1, b: 0, c: TabStripMetrics.obliqueSlant, d: 1, tx: 0, ty: 0)
+        return CTFontCreateCopyWithAttributes(upright as CTFont, size, &shear, nil) as NSFont
     }
 }
