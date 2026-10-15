@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// WebKit's own text-selection highlight, switched off, since CodeMirror draws the selection.
 /// CSS cannot hide it: WebKit paints it above the page in `caret-color` at alpha 0.2, which with

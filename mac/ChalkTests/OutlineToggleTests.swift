@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Shell wiring for the outline palette on a live RootSplitViewController:

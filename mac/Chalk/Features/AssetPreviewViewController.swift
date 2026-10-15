@@ -1,4 +1,5 @@
 import PDFKit
+import ChalkKit
 import UIKit
 
 /// The preview an asset row opens (image or PDF), presented as a sheet.

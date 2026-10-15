@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// The tab name row's host.
 ///

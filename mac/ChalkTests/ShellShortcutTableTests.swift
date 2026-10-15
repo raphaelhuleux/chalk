@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The `pressesBegan` shortcut table (`WebEditorSurface`), which is the lane a

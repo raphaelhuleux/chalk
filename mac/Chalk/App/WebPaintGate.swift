@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// The covered-reflow settle of docs/motion.md, shared by the transitions that
 /// reflow or restyle the webview (the sidebar slide, the appearance flip).

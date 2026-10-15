@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// The utility pill (VisualGlass .utility-strip): a floating glass capsule in
 /// the window's bottom-leading corner holding the chrome actions (toggle

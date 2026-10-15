@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The macOS 27 Catalyst split view keeps the secondary column's view

@@ -1,4 +1,5 @@
 import CoreText
+import ChalkKit
 import XCTest
 @testable import Chalk
 

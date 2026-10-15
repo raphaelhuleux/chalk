@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The Library's rows must not move when the titlebar comes and goes

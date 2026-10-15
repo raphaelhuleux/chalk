@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Who is subscribed to the outline push: exactly the active tab, exactly

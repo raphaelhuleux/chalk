@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// ⌘K is claimed at the scene level with system priority, for the same

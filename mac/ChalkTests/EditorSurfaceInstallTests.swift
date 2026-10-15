@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The view-install invariant behind the P0 "blank editor with a live chip"

@@ -3,10 +3,10 @@ import Foundation
 /// Seeds a small sample tree on first launch and exposes the app's home folder. The Welcome files
 /// are the whole onboarding, so every feature and shortcut they claim must match the engine. Raw
 /// string literals keep LaTeX backslashes undoubled.
-enum SampleContent {
+public enum SampleContent {
     /// The app's home folder, in Application Support: ~/Documents is TCC-protected and reads fail
     /// silently until consent. `static let` so the mkdir runs once.
-    static let documentsURL: URL = {
+    public static let documentsURL: URL = {
         // Under the bundle id: Application Support/Chalk may hold the retired desktop app's data.
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.huleux.chalk", isDirectory: true)
@@ -18,7 +18,7 @@ enum SampleContent {
     /// Gated on Welcome.md alone, so deleted samples never come back. Existing installs never see
     /// revised copy.
     @discardableResult
-    static func ensureSeeded() -> URL {
+    public static func ensureSeeded() -> URL {
         let docs = documentsURL
         let welcome = docs.appendingPathComponent("Welcome.md")
         guard !FileManager.default.fileExists(atPath: welcome.path) else { return welcome }

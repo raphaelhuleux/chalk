@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// One palette overlay: dim backdrop, glass card, tap-to-dismiss, and the reveal/hide animation.
 /// Quick Open (⌘O) and the outline palette (⌘P) each own one. In-window overlays, not sheets: on

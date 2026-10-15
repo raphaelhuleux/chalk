@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// M-10: the sidebar's move/rename collision guard must let a case-only

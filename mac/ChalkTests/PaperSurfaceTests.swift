@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Paper's surfaces (2026-08-24): the Library separates from the paper by TONE

@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Liquid Glass adoption (2026-07-27 modernization pass): on OS 26 the panel

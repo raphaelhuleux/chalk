@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The floating utility pill's resting corner. Since Paper (2026-08-24) it is

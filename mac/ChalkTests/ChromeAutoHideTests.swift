@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The shell's half of auto-hiding chrome: the preference that governs it,

@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// `load(fromContents:)` is the last gate before a file's bytes become the

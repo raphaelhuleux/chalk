@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import ChalkKit
 import UIKit
 
 /// Debug-only fixtures and named UI states, picked with CHALK_AUDIT_STATE

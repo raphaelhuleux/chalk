@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// The chrome icon button (VisualGlass .footer-btn): 30×26, radius 7, tertiary
 /// tint idle → chrome foreground over a faint fill on hover/press. Every

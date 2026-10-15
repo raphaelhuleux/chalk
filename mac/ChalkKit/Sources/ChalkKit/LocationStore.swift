@@ -1,37 +1,43 @@
 import Foundation
-import ChalkKit
 import os
 
 private let log = Logger(subsystem: "com.huleux.chalk", category: "library")
 
 /// A folder the sidebar roots a tree at. One that lost access or failed to resolve stays listed,
 /// flagged `needsReauthorization`, so the user can re-grant it instead of it vanishing.
-struct Location: Hashable {
-    let id: String
-    let name: String
-    let url: URL
-    var needsReauthorization: Bool = false
+public struct Location: Hashable {
+    public let id: String
+    public let name: String
+    public let url: URL
+    public var needsReauthorization: Bool = false
+
+    public init(id: String, name: String, url: URL, needsReauthorization: Bool = false) {
+        self.id = id
+        self.name = name
+        self.url = url
+        self.needsReauthorization = needsReauthorization
+    }
 }
 
 /// One window's Locations: the folders the user added to it, persisted as security-scoped bookmarks
 /// (`WindowLocations` picks the per-window BookmarkStore). Mutations post `.chalkLibraryDidChange`.
-final class LocationStore {
+public final class LocationStore {
     private let bookmarks: BookmarkStore
     /// Bookmarks resolved by this window, by record id. `locations()` runs on every reload and each
     /// unbalanced `startAccessingSecurityScopedResource()` leaks a sandbox extension; `releaseScopes()`
     /// gives them back when the window goes away.
     private var resolved: [String: Location] = [:]
 
-    init(bookmarks: BookmarkStore) {
+    public init(bookmarks: BookmarkStore) {
         self.bookmarks = bookmarks
     }
 
     /// For a window built outside a scene (tests): nothing is read from or written to UserDefaults.
-    static func detached() -> LocationStore { LocationStore(bookmarks: .inMemory()) }
+    public static func detached() -> LocationStore { LocationStore(bookmarks: .inMemory()) }
 
     /// Records that fail to resolve or grant no access are flagged `needsReauthorization` and never
     /// cached, so a re-grant heals them on next reload.
-    func locations() -> [Location] {
+    public func locations() -> [Location] {
         var result: [Location] = []
         for record in bookmarks.records() {
             if let cached = resolved[record.id] {
@@ -66,7 +72,7 @@ final class LocationStore {
     /// Persist a folder the user picked; false when it could not be added. A folder that is already a
     /// Location is re-granted in place rather than added twice.
     @discardableResult
-    func add(url: URL) -> Bool {
+    public func add(url: URL) -> Bool {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         defer { NotificationCenter.default.post(name: .chalkLibraryDidChange, object: self) }
@@ -95,7 +101,7 @@ final class LocationStore {
     }
 
     /// Replace a Location's bookmark with the re-picked folder and drop its session cache.
-    func reauthorize(id: String, with url: URL) {
+    public func reauthorize(id: String, with url: URL) {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         bookmarks.refresh(id: id, with: url)
@@ -105,7 +111,7 @@ final class LocationStore {
         NotificationCenter.default.post(name: .chalkLibraryDidChange, object: self)
     }
 
-    func remove(id: String) {
+    public func remove(id: String) {
         defer { NotificationCenter.default.post(name: .chalkLibraryDidChange, object: self) }
         if let location = resolved.removeValue(forKey: id) {
             location.url.stopAccessingSecurityScopedResource()
@@ -114,7 +120,7 @@ final class LocationStore {
     }
 
     /// Window teardown: end every scope this store entered. The next `locations()` re-enters them.
-    func releaseScopes() {
+    public func releaseScopes() {
         for location in resolved.values { location.url.stopAccessingSecurityScopedResource() }
         resolved.removeAll()
     }

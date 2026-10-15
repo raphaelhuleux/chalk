@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// U12 drag-move landing zones. The reported bug: a file dragged out of a

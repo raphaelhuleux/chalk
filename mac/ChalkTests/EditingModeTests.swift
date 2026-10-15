@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Editing-mode logic that doesn't need pixels: the enum's cycle/wire mapping,

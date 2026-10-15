@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Middle-click closes a tab (browser convention, 2026-08-18). On Mac the

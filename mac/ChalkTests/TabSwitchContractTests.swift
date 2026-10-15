@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// docs/motion.md "Tab switch" (C2): switching tabs cross-fades the two

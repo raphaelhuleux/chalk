@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Since Paper (2026-08-24) the Library panel has no insets: a flat surface

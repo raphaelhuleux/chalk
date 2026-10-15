@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// Settings layout rules, as pure functions so they are unit-testable without
 /// presenting anything.

@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// The launch banner: "you crashed last time, may I have a report?".
 ///

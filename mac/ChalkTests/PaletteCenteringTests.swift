@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Both palettes float centered in the window on BOTH axes (the iA Writer

@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The scene-level outline key command — the 2026-08-17 full-screen-drop fix.

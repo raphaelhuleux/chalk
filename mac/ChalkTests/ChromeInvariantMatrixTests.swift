@@ -111,10 +111,12 @@ final class ChromeInvariantMatrixTests: XCTestCase {
         // absent, so every state scored at least 1 by construction and the
         // guard below could never fire (finding 2 of the 2026-08-19 review).
         var coverage: [(id: String, names: [String])] = []
+        var records: [ChromeLayoutRecord] = []
         for state in UIState.matrix {
             let controller = root(in: state)
             let layout = controller.chromeLayout(for: state)
             configFaults += configurationFaults(state, layout, controller)
+            records.append(ChromeLayoutRecord(layout, scale: ChalkMetrics.displayScale))
 
             var asserted: [String] = []
             for invariant in ChromeInvariant.catalogue
@@ -180,6 +182,25 @@ final class ChromeInvariantMatrixTests: XCTestCase {
 
         XCTAssertTrue(failures.isEmpty,
                       "\(failures.count) invariant violation(s):\n" + failures.joined(separator: "\n\n"))
+
+        writeReferenceIfRequested(records)
+    }
+
+    /// The AppKit port's reference (plan: "UI parity method"): every cell's
+    /// layout in Mac points, written when the runner sets
+    /// `TEST_RUNNER_CHALK_CHROME_REFERENCE_OUT=<path>`. Off otherwise, so the
+    /// suite never writes into the repo on its own.
+    private func writeReferenceIfRequested(_ records: [ChromeLayoutRecord]) {
+        guard let path = ProcessInfo.processInfo.environment["CHALK_CHROME_REFERENCE_OUT"],
+              !path.isEmpty else { return }
+        let today = ISO8601DateFormatter.string(
+            from: Date(), timeZone: .current, formatOptions: [.withFullDate])
+        let reference = ChromeLayoutReference(shell: "catalyst", captured: today, cells: records)
+        do {
+            try reference.encoded().write(to: URL(fileURLWithPath: path))
+        } catch {
+            XCTFail("could not write the chrome reference to \(path): \(error)")
+        }
     }
 
     /// The matrix is worthless if the states do not actually differ. This

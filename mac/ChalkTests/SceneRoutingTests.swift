@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 import XCTest
 @testable import Chalk
 

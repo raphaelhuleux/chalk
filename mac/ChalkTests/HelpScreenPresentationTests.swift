@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Report a Problem and Privacy are sheets like Settings and the asset

@@ -68,6 +68,16 @@ const swiftFiles = [];
     }
   }
 })(join(root, 'mac/Chalk'));
+// Both shells, and ChalkKit now that Diagnostics and LocationStore live there.
+for (const dir of ['mac/ChalkMac', 'mac/ChalkKit/Sources']) {
+  (function walkMore(d) {
+    for (const entry of readdirSync(d)) {
+      const full = join(d, entry);
+      if (statSync(full).isDirectory()) walkMore(full);
+      else if (entry.endsWith('.swift')) swiftFiles.push(full);
+    }
+  })(join(root, dir));
+}
 
 for (const file of swiftFiles) {
   const lines = readFileSync(file, 'utf8').split('\n');

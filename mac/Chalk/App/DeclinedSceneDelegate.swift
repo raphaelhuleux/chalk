@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 import os
 
 /// The delegate for session roles Chalk does not support (`SceneRouting

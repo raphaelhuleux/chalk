@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// M-8: the tab-close fade completion must rebuild from the NEWEST model

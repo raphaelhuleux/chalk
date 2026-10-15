@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The tab row's anatomy, as Paper draws it (2026-08-24): names on the paper,

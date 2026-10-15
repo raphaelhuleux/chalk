@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 extension UIWindow {
     /// A window on the test host's scene, sized to `frame`. Replaces `UIWindow(frame:)`, deprecated

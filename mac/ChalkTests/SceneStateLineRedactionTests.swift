@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The scene state line goes to the unified system log with `privacy: .public`

@@ -104,7 +104,7 @@ targets:
         # us even if the user picks Chalk in "Open With". The exported UTIs below
         # own the extensions (all plain-text); the doc types claim them as an
         # editor. SceneDelegate consumes the resulting openURLContexts.
-        CFBundleDocumentTypes:
+        CFBundleDocumentTypes: &chalkDocumentTypes
           - CFBundleTypeName: Markdown Document
             CFBundleTypeRole: Editor
             LSHandlerRank: Alternate
@@ -131,7 +131,7 @@ targets:
         # Chalk defines the com.huleux.chalk.* identifiers, so they are
         # *exported* type declarations (imported is for describing UTIs some
         # other app owns; LaunchServices and App Review both care).
-        UTExportedTypeDeclarations:
+        UTExportedTypeDeclarations: &chalkExportedTypes
           - UTTypeIdentifier: com.huleux.chalk.markdown
             UTTypeDescription: Markdown Document
             UTTypeConformsTo:
@@ -181,7 +181,8 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.debug
     preBuildScripts:
-      - name: Build web editor bundle
+      - &buildWebEditorBundle
+        name: Build web editor bundle
         # Keeps the in-app editor current. Cheap when nothing changed:
         # build.mjs bundles in memory and rewrites only files whose bytes
         # differ, so Resources/editor keeps its mtimes and Xcode recopies
@@ -299,5 +300,72 @@ targets:
         TARGETED_DEVICE_FAMILY: "2"
         MACOSX_DEPLOYMENT_TARGET: "14.0" # match the app; else defaults to the SDK's macOS
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Chalk.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Chalk"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        GENERATE_INFOPLIST_FILE: true
+
+  # --- The AppKit shell (docs/specs/2026-10-15-appkit-shell-rewrite-plan.md) --
+  # Built beside the Catalyst app until parity; shares ChalkKit, the web
+  # bundle, the fonts, the icon and the UTIs. Bundle IDs carry a `.mac` suffix
+  # until cutover so the two apps never share a preferences domain.
+  ChalkMac:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ChalkMac
+      - path: Chalk/Assets.xcassets
+      - path: Chalk/PrivacyInfo.xcprivacy
+      - path: Chalk/Resources/fonts
+      - path: Chalk/Resources/editor
+        type: folder
+        buildPhase: resources
+        optional: true
+      - path: ../THIRD-PARTY-NOTICES
+        buildPhase: resources
+    dependencies:
+      - package: ChalkKit
+        product: ChalkKit
+    scheme:
+      testTargets:
+        - ChalkMacTests
+    info:
+      path: ChalkMac/Info.plist
+      properties:
+        CFBundleDisplayName: Chalk
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CHALKGitCommit: $(CHALK_GIT_COMMIT)
+        LSApplicationCategoryType: public.app-category.productivity
+        ITSAppUsesNonExemptEncryption: false
+        NSPrincipalClass: NSApplication
+        # XcodeGen flattens Resources/fonts into the bundle's Resources root.
+        ATSApplicationFontsPath: "."
+        CFBundleDocumentTypes: *chalkDocumentTypes
+        UTExportedTypeDeclarations: *chalkExportedTypes
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.mac
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: ChalkMac/Chalk-mac.entitlements
+        ENABLE_USER_SCRIPT_SANDBOXING: false
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.mac.debug
+    preBuildScripts:
+      - *buildWebEditorBundle
+
+  ChalkMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - ChalkMacTests
+    dependencies:
+      - target: ChalkMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.mac.unittests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ChalkMac.app/Contents/MacOS/ChalkMac"
         BUNDLE_LOADER: "$(TEST_HOST)"
         GENERATE_INFOPLIST_FILE: true

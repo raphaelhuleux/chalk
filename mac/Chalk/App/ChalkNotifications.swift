@@ -1,46 +1,6 @@
 import Foundation
 import UIKit
-
-/// Cross-window signals. Every window observes these so state that is shared
-/// across scenes (the Location library, files open in more than one window)
-/// stays live everywhere, not just in the window that made the change.
-extension Notification.Name {
-    /// The Location library changed (add/remove/reauthorize, or a draft was
-    /// saved into a Location). Windows respond by reloading their sidebar tree.
-    static let chalkLibraryDidChange = Notification.Name("chalk.libraryDidChange")
-    /// A document was saved. `object` is the posting DocumentController;
-    /// userInfo carries `ChalkNotificationKey.url`. Other windows with the same
-    /// file open reload if their buffer is clean.
-    static let chalkDocumentDidSave = Notification.Name("chalk.documentDidSave")
-    /// A file or folder was renamed/moved from a sidebar. userInfo carries
-    /// `ChalkNotificationKey.fromURL`/`.toURL`; every window remaps its tabs.
-    static let chalkFileDidMove = Notification.Name("chalk.fileDidMove")
-}
-
-enum ChalkNotificationKey {
-    static let url = "url"
-    static let fromURL = "fromURL"
-    static let toURL = "toURL"
-}
-
-enum ChalkActivity {
-    /// Scene-restoration snapshot (a `WindowSession` in userInfo["state"]).
-    static let windowType = "com.huleux.chalk.window"
-    /// File > New Window: a deliberately fresh window (empty, no Welcome).
-    static let newWindowType = "com.huleux.chalk.newWindow"
-    static let stateKey = "state"
-    /// The file a New Window request should open, if any (a file URL). Absent
-    /// for File > New Window, present for the sidebar's "Open in New Window".
-    static let urlKey = "url"
-    /// A folder the new window opens on (bookmark data, minted while the sender held its scope), for a
-    /// folder handed to the app from outside (`ExternalOpenRouter`).
-    static let folderBookmarkKey = "folderBookmark"
-    /// Marks the Settings scene on Mac, where Settings is a real resizable
-    /// window rather than a sheet. Deliberately absent from
-    /// `stateRestorationActivity`: a Settings window must not come back on
-    /// relaunch.
-    static let settingsType = "com.huleux.chalk.settings"
-}
+import ChalkKit
 
 /// Which scene delegate a connecting session gets. Pure so the routing rule is
 /// testable without a GUI.

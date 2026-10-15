@@ -1,0 +1,1734 @@
+{
+  "captured" : "2026-10-15",
+  "cells" : [
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 77.77,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-nooutline-normal-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 77.77,
+        "y" : 19.25
+      }
+    },
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 77.77,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-nooutline-normal-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 77.77,
+        "y" : 19.25
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-nooutline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-nooutline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 77.77,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintTrailingHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1072.61,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-outline-normal-dark",
+      "outlinePanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 77.77,
+        "y" : 19.25
+      }
+    },
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 77.77,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 85.47,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintTrailingHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1072.61,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-outline-normal-light",
+      "outlinePanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 77.77,
+        "y" : 19.25
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-outline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-nosidebar-outline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 271.81,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1072.61,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-nooutline-normal-dark",
+      "libraryPanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 271.81,
+        "y" : 19.25
+      }
+    },
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 271.81,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1072.61,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-nooutline-normal-light",
+      "libraryPanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 271.81,
+        "y" : 19.25
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-nooutline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-nooutline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 271.81,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintTrailingHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 814.66,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-outline-normal-dark",
+      "libraryPanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 271.81,
+        "y" : 19.25
+      }
+    },
+    {
+      "activeChip" : {
+        "height" : 46.2,
+        "width" : 110.11,
+        "x" : 271.81,
+        "y" : 19.25
+      },
+      "activeTabLabel" : {
+        "height" : 15.4,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 34.65
+      },
+      "activeTabUnderline" : {
+        "height" : 2.0000000000000067,
+        "width" : 72.38,
+        "x" : 279.51,
+        "y" : 57.050000000000004
+      },
+      "band" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 65.45,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaintTrailingHole" : {
+        "height" : 65.45,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 814.66,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-outline-normal-light",
+      "libraryPanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanel" : {
+        "height" : 831.6,
+        "width" : 257.95,
+        "x" : 1072.61,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 46.2,
+        "width" : 157.85,
+        "x" : 271.81,
+        "y" : 19.25
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-outline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 20.79,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 783.86
+      },
+      "id" : "fullscreen-sidebar-outline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 0,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 831.6,
+        "width" : 1330.56,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-nooutline-normal-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-nooutline-normal-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-nooutline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-nooutline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 666.05,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-outline-normal-dark",
+      "outlinePanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 666.05,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 666.05,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-outline-normal-light",
+      "outlinePanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 666.05,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-outline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-nosidebar-outline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 666.05,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-nooutline-normal-dark",
+      "libraryPanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 666.05,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-nooutline-normal-light",
+      "libraryPanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-nooutline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-nooutline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 666.05,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-outline-normal-dark",
+      "libraryPanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 666.05,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : true,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 666.05,
+        "x" : 257.95,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-outline-normal-light",
+      "libraryPanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 0,
+        "y" : 0
+      },
+      "outlinePanel" : {
+        "height" : 616,
+        "width" : 257.95,
+        "x" : 666.05,
+        "y" : 0
+      },
+      "outlinePanelIsOverlay" : true,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 257.95,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-outline-zen-dark",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    },
+    {
+      "band" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "bandPaint" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorContent" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "editorRestingTop" : 86.24,
+      "footerPill" : {
+        "height" : 36.19,
+        "width" : 175.56,
+        "x" : 12.32,
+        "y" : 568.26
+      },
+      "id" : "windowed-sidebar-outline-zen-light",
+      "outlinePanelIsOverlay" : false,
+      "reserveTop" : 65.45,
+      "restingPad" : 27,
+      "root" : {
+        "height" : 616,
+        "width" : 924,
+        "x" : 0,
+        "y" : 0
+      },
+      "safeLeading" : 0,
+      "stripDividerX" : 0,
+      "tabStrip" : {
+        "height" : 0,
+        "width" : 0,
+        "x" : 0,
+        "y" : 0
+      }
+    }
+  ],
+  "shell" : "catalyst"
+}

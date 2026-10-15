@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The Editor rows put controls in `accessoryView`, where a UISlider is a trap:

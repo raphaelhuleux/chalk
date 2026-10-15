@@ -1,29 +1,28 @@
 import Foundation
-import ChalkKit
 
 /// What the app knows about this run: how the last session ended, and
 /// whether to ask about crashes.
 ///
 /// One object so the crash prompt fires once, not once per window. `defaults`
 /// is injected for tests.
-final class AlphaSession {
+public final class AlphaSession {
     private enum Key {
         static let declines = "chalk.crashPromptDeclines"
         static let promptEnabled = "chalk.crashPromptEnabled"
         static let launchMarker = "chalk.launchMarker"
     }
 
-    static let shared = AlphaSession()
+    public static let shared = AlphaSession()
 
-    let build: BuildInfo
+    public let build: BuildInfo
     /// Read once, at construction: `beginSession` clears the marker, so a
     /// second read would report a clean exit.
-    let verdict: LaunchVerdict
+    public let verdict: LaunchVerdict
 
     private let defaults: UserDefaults
     private let integrity: LaunchIntegrity
 
-    init(build: BuildInfo = .current,
+    public init(build: BuildInfo = .current,
          defaults: UserDefaults = .standard) {
         self.build = build
         self.defaults = defaults
@@ -36,16 +35,16 @@ final class AlphaSession {
 
     /// A window is on screen. From `sceneWillEnterForeground` and
     /// `sceneDidBecomeActive`.
-    func markForeground() { integrity.markForeground() }
+    public func markForeground() { integrity.markForeground() }
 
     /// An orderly exit from the foreground. From `sceneDidEnterBackground` and
     /// `applicationWillTerminate`.
-    func markClean() { integrity.markClean() }
+    public func markClean() { integrity.markClean() }
 
     // MARK: - The crash prompt
 
     /// The Settings switch. The app never sets this back to true.
-    var isCrashPromptEnabled: Bool {
+    public var isCrashPromptEnabled: Bool {
         get {
             guard defaults.object(forKey: Key.promptEnabled) != nil else { return true }
             return defaults.bool(forKey: Key.promptEnabled)
@@ -53,7 +52,7 @@ final class AlphaSession {
         set { defaults.set(newValue, forKey: Key.promptEnabled) }
     }
 
-    var shouldPromptAboutCrash: Bool {
+    public var shouldPromptAboutCrash: Bool {
         CrashPromptPolicy.shouldPrompt(
             verdict: verdict,
             declines: defaults.integer(forKey: Key.declines),
@@ -65,13 +64,13 @@ final class AlphaSession {
     /// decline count alone: that moves only when the user answers.
     private var crashPromptClaimed = false
 
-    func claimCrashPrompt() -> Bool {
+    public func claimCrashPrompt() -> Bool {
         guard shouldPromptAboutCrash, !crashPromptClaimed else { return false }
         crashPromptClaimed = true
         return true
     }
 
-    func recordCrashPromptOutcome(_ outcome: CrashPromptOutcome) {
+    public func recordCrashPromptOutcome(_ outcome: CrashPromptOutcome) {
         defaults.set(
             CrashPromptPolicy.declines(after: outcome,
                                        from: defaults.integer(forKey: Key.declines)),

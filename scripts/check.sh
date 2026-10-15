@@ -53,6 +53,7 @@ build-web        esbuild bundle the editor ships
 typecheck        tsc across editor-core, vscode, web
 xcodegen         regenerate mac/Chalk.xcodeproj from mac/project.yml
 build-mac        xcodebuild build-for-testing, Mac Catalyst, warnings as errors
+build-mac-appkit xcodebuild build-for-testing, the AppKit shell (ChalkMac), warnings as errors
 invariants-doc   docs/ui-invariants.md matches the Swift catalogue
 engine-tests     vitest, the editor engine in jsdom
 chalkkit-tests   swift test, the Foundation-only module
@@ -120,6 +121,21 @@ xcode_build() {
     "$@"
 }
 
+# The AppKit shell (docs/specs/2026-10-15-appkit-shell-rewrite-plan.md). Built
+# in every run so it never rots between port phases; its tests join the
+# mac-tests step as they are ported.
+xcode_build_appkit() {
+  # shellcheck disable=SC2086
+  xcodebuild build-for-testing \
+    -project mac/Chalk.xcodeproj \
+    -scheme ChalkMac \
+    -destination "platform=macOS" \
+    -derivedDataPath "$DD" \
+    $WARN_FLAGS \
+    CODE_SIGNING_ALLOWED=NO \
+    "$@"
+}
+
 echo "chalk check"
 echo "  logs: ${RESULTS#$ROOT/}"
 echo
@@ -133,6 +149,7 @@ run_step xcodegen sh -c 'cd mac && xcodegen generate'
 # build-for-testing compiles the app and the ChalkTests bundle, so a test-only
 # compile error (warnings as errors included) fails here even under --fast.
 run_step build-mac xcode_build
+run_step build-mac-appkit xcode_build_appkit
 
 # --- engine and headless logic ----------------------------------------------
 # Cheap and test-run-free, so it runs even under --fast: the generated
@@ -282,7 +299,7 @@ extract_for_step() {
     browser-tests) extract_browser "$2" ;;
     engine-tests) extract_vitest "$2" ;;
     chalkkit-tests) extract_swift "$2" ;;
-    mac-tests|pref-guard|ui-invariants|build-mac) extract_xcode "$2" ;;
+    mac-tests|pref-guard|ui-invariants|build-mac|build-mac-appkit) extract_xcode "$2" ;;
     geometric-matrix) extract_geometric "$2" ;;
     snapshots) extract_snapshots "$2" ;;
     bench) extract_bench "$2" ;;

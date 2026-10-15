@@ -1,4 +1,5 @@
 import UIKit
+import ChalkKit
 
 /// A VisualGlass panel: system blur under a tint wash, a 0.5pt hairline ring, a
 /// 1pt inset top light, and a soft drop shadow. Used by the utility pill and

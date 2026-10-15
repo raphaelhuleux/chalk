@@ -27,6 +27,7 @@ Non-goals:
 - Persistence.
   The `chalk.*` preference keys, the bookmark stores, `WindowSession` encoding, the Recovery and ConflictCopies folders under Application Support, and the bundle ID `com.huleux.chalk`.
   An upgrade keeps settings, Library folders and unsaved snapshots.
+  One exception: `chalk.sidebarWidth` and `chalk.outlinePanelWidth` are stored in Catalyst's iPad-idiom points (1/0.77 of a Mac point). The AppKit shell converts them once, in the Library phase, and the two accessors live in each shell rather than in ChalkKit.
 - The sandbox entitlements and the UTIs in `project.yml`.
 - The `EditorSurface` seam, with `view` retyped to `NSView`.
   `FakeEditorSurface` in the tests keeps working.
@@ -220,7 +221,7 @@ Same look is checked, not eyeballed.
 
 1. **Freeze the reference before writing code.**
    Run `ChromeInvariantMatrixTests` on the Catalyst build with a Debug-only dump of `chromeLayout(for:)` for all 32 states, divide every rect by `ChalkMetrics.displayScale`, and commit the result as `Tests/chrome-reference/catalyst-2026-10.json`.
-   Capture the 32 states as PNGs with the audit harness into the same folder.
+   The pixel reference is the showcase set in `docs/images/`, retaken by `scripts/screenshots/capture-mac.sh`; one PNG per cell is not worth a new audit driver.
 2. **Metrics come from the spec, not from the old code.**
    Every `ChalkMetrics` token is already documented with its spec value; drop `s()` and keep the number.
    Fonts: IBM Plex Mono at `TabStripMetrics.fontSize`, system font at 13 for rows and headers, 11 for counts.
@@ -237,6 +238,8 @@ Each phase ends with its tests green on the `ChalkMac` target and the Catalyst t
 Phases 1 to 6 are sequential; the test port in each phase is part of the phase, not a later step.
 
 ### Phase 0: preparation
+
+Done 2026-10-15 on branch `appkit-shell`: `ChalkMac` and `ChalkMacTests` targets, the shared code in ChalkKit (`Preferences`, `ChromeMetrics`, `BuildInfo`, `AlphaSession`, `Diagnostics`, `SnippetLibrary`, `LocationStore`, `RecoveryLocation`, `SampleContent`, the notification names), the reference in `Tests/chrome-reference/`, and the `build-mac-appkit` step. Catalyst: 502 tests green after the move.
 
 - Add the `ChalkMac` target and a `ChalkMacTests` bundle to `project.yml`; bundle IDs `com.huleux.chalk.mac` and `.mac.debug` until cutover; entitlements file `Chalk-mac.entitlements` with the same three keys; Info.plist keys for `NSPrincipalClass`, the document types and UTIs copied.
 - Move everything UIKit-free out of `mac/Chalk` into ChalkKit so both shells share it and `swift test` covers it: `ChalkMetrics` as numbers, `Preferences` minus `interfaceStyle`, `SampleContent`, `BuildInfo`, `AlphaSession`, `RecoveryLocation`, `Diagnostics`, `Tab`, `TabItem`, `SnippetLibrary`, `LocationStore`, `SidebarFileOperations` minus the alerts.

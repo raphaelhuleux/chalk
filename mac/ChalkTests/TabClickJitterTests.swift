@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// A click that the system reads as a micro-drag must still switch tabs.

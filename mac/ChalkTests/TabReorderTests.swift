@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// moveTab(id:to:) contracts: reorder + republish, index clamping, unknown-id

@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// The tab row's "+" is typography, not a button: Paper draws it as a 13px

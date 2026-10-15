@@ -1,4 +1,5 @@
 import Foundation
+import ChalkKit
 @testable import Chalk
 
 /// The suite's `DocumentControllerDelegate` stand-in: it forwards dirty-state

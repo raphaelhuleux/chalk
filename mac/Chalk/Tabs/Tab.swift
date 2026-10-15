@@ -1,4 +1,5 @@
 import Foundation
+import ChalkKit
 
 /// One open document: its own editor surface + document controller, so each tab
 /// keeps its own cursor, scroll and undo history. The surface stays dormant

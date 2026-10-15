@@ -1,4 +1,5 @@
 import XCTest
+import ChalkKit
 @testable import Chalk
 
 /// Zoom and the default view mode are process-wide preferences that every new

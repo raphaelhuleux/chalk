@@ -5,6 +5,14 @@ Native Mac app in [mac/](mac/) (UIKit through Mac Catalyst), VS Code
 extension in [vscode/](vscode/), shared engine in
 [packages/editor-core/](packages/editor-core/).
 
+The Mac shell is being rewritten in AppKit as the `ChalkMac` target
+([mac/ChalkMac/](mac/ChalkMac/), scheme `ChalkMac`, destination
+`platform=macOS`), beside the Catalyst `Chalk` target until parity. Plan and
+parity checklist: [docs/specs/2026-10-15-appkit-shell-rewrite-plan.md](docs/specs/2026-10-15-appkit-shell-rewrite-plan.md).
+Anything UIKit-free the two shells share lives in ChalkKit, not in either
+shell; spec chrome tokens are `ChromeMetrics` (Mac points) and the Catalyst
+shell's `ChalkMetrics` scales them.
+
 ## Architecture: one engine, two hosts, two seams
 
 - **`HostPort`** ([packages/editor-core/src/host-port.ts](packages/editor-core/src/host-port.ts)):
@@ -61,7 +69,7 @@ accepted-failure format). jsdom unit tests stay beside their package, in
 `packages/editor-core/test/`; Swift tests stay in `mac/`.
 
 [scripts/check.sh](scripts/check.sh) runs the lot. Its `--list` names every
-step: build-web, typecheck, xcodegen, build-mac, invariants-doc,
+step: build-web, typecheck, xcodegen, build-mac, build-mac-appkit, invariants-doc,
 engine-tests, chalkkit-tests, caret-fixtures, browser-tests,
 geometric-matrix, snapshots, pref-guard, ui-invariants, mac-tests, bench.
 `--fast` skips the three Xcode test steps and the benchmarks.
