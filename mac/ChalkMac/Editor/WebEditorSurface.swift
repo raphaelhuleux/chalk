@@ -11,6 +11,18 @@ import os
 /// one keystroke, so there is nothing to dedupe. Copy and cut are WebKit's own on AppKit.
 final class EditorWebView: WKWebView {}
 
+/// The surface's view: holds the web view so the container's tab cross-fade and the surface's
+/// own pre-paint cover are two alphas on two views, never one fighting the other.
+final class EditorSurfaceHostView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+}
+
 /// `WKUserContentController` retains its handler strongly, so registering the surface directly
 /// would form a retain cycle that only `teardown()` breaks. This weak shim lets a surface dropped
 /// without teardown deallocate and take its web content process with it.
@@ -38,14 +50,18 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
 /// of the seed.
 final class WebEditorSurface: NSObject, EditorSurface {
     weak var delegate: EditorSurfaceDelegate?
-    var view: NSView { webView }
+    /// The host, not the web view itself: the container fades the host at a
+    /// tab switch, while the web view's own alpha is the pre-paint cover.
+    var view: NSView { host }
+    private let host = EditorSurfaceHostView()
 
     /// Fires when recovery is exhausted (the watchdog reload also timed out, or the bundle is
     /// missing) so the shell shows an error instead of a blank tab. A closure, not a delegate
     /// method, because the delegate is DocumentController and this is a shell concern.
     var onFailedToBecomeReady: (() -> Void)?
 
-    private let webView: EditorWebView
+    /// Exposed for the shell's `takeSnapshot` covers and the tests; the seam is `view`.
+    let webView: EditorWebView
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private static let log = Logger(subsystem: "com.huleux.chalk", category: "surface")
@@ -98,11 +114,27 @@ final class WebEditorSurface: NSObject, EditorSurface {
         // Boot is deferred to bootIfNeeded(): booting every restored background tab at launch
         // exhausted file descriptors. Pre-boot messages queue in `pending` like pre-ready ones.
         // The page's own `:root` background is the editor colour from the first paint (the theme
-        // seed is a document-start script), and the under-page colour covers overscroll. AppKit's
-        // WKWebView has no public opaque switch; a white pre-paint flash, if any shows, is a
-        // shell cover's job (WebPaintGate), not a private-API `drawsBackground` toggle.
+        // seed is a document-start script), and the under-page colour covers overscroll. Before
+        // that first paint AppKit's WKWebView composites WHITE, and it has no public opaque
+        // switch, so the web view stays transparent until `ready` and the editor-toned host
+        // shows through; a private `drawsBackground` toggle is not an option.
         webView.underPageBackgroundColor = .chalkEditorBackground
         webView.allowsLinkPreview = false
+        webView.alphaValue = 0
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: host.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+        ])
+    }
+
+    /// The page has painted in the editor's tone: show it. Also on a final failure, so the
+    /// shell's error state is not hidden behind the cover.
+    private func revealWebView() {
+        webView.alphaValue = 1
     }
 
     /// Called on the tab's first show. Until then the WKWebView holds no page, no web content
@@ -171,6 +203,7 @@ final class WebEditorSurface: NSObject, EditorSurface {
     // Async, so a missing-bundle failure fired inside `bootIfNeeded()` reaches the shell after
     // its caller returns.
     private func notifyFailedToBecomeReady() {
+        revealWebView()
         DispatchQueue.main.async { [weak self] in self?.onFailedToBecomeReady?() }
     }
 
@@ -228,6 +261,8 @@ final class WebEditorSurface: NSObject, EditorSurface {
     }
 
     #if DEBUG
+    /// Whether the pre-paint cover has lifted.
+    var isWebViewRevealedForTesting: Bool { webView.alphaValue == 1 }
     var userScriptsForTesting: [WKUserScript] {
         webView.configuration.userContentController.userScripts
     }
@@ -502,6 +537,8 @@ extension WebEditorSurface: WKNavigationDelegate {
     /// WebKit killed our content process: reload, and the controller re-seeds on the next `ready`.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         isReady = false
+        // The reload paints white first, like a boot: cover it until the next `ready`.
+        self.webView.alphaValue = 0
         // Stale queued messages would flush into the fresh editor; the controller re-seeds via
         // `editorDidResetConnection`.
         pending.removeAll()
@@ -592,6 +629,7 @@ extension WebEditorSurface: WKScriptMessageHandler {
                 return
             }
             isReady = true
+            revealWebView()
             Self.log.info("ready received; flushing \(self.pending.count) pending message(s)")
             // Reset the one-reload budget for a later crash reload.
             readyWatchdog?.cancel()

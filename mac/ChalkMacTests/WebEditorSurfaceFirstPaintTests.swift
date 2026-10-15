@@ -66,4 +66,29 @@ final class WebEditorSurfaceFirstPaintTests: XCTestCase {
             documentStartSources(surface).contains { $0.contains("__chalkWantsScrollTelemetry") },
             "the chrome auto-hide telemetry opt-in must still be injected")
     }
+
+    // MARK: - The white before the first paint
+
+    /// AppKit's WKWebView composites white until the page paints, and the
+    /// shell has no public opaque switch: the surface keeps its web view
+    /// transparent until `ready`, so the editor-toned host shows instead.
+    func testTheWebViewStaysCoveredUntilReady() {
+        let surface = WebEditorSurface()
+        surface.bootIfNeeded()
+        XCTAssertFalse(surface.isWebViewRevealedForTesting, "a booting page must not show its white")
+        XCTAssertTrue(surface.webView.isDescendant(of: surface.view), "the web view lives inside the host")
+        surface.handleHostMessage(body: ["type": "ready"])
+        XCTAssertTrue(surface.isWebViewRevealedForTesting, "ready is the first paint in the editor's tone")
+    }
+
+    /// A reload after a web-process crash paints white first, like a boot.
+    func testACrashedPageIsCoveredAgainUntilItsNextReady() {
+        let surface = WebEditorSurface()
+        surface.bootIfNeeded()
+        surface.handleHostMessage(body: ["type": "ready"])
+        surface.webViewWebContentProcessDidTerminate(surface.webView)
+        XCTAssertFalse(surface.isWebViewRevealedForTesting)
+        surface.handleHostMessage(body: ["type": "ready"])
+        XCTAssertTrue(surface.isWebViewRevealedForTesting)
+    }
 }

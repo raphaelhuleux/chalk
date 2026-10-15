@@ -432,7 +432,7 @@ final class EditorContainerViewController: NSViewController {
 
     /// The active tab's webview, for the snapshot that masks the unfreeze reflow.
     var activeSurfaceWebView: WKWebView? {
-        activeTab?.surface.view as? WKWebView
+        (activeTab?.surface as? WebEditorSurface)?.webView
     }
 
     #if DEBUG

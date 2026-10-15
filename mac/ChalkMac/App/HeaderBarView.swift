@@ -56,9 +56,13 @@ final class HeaderBarView: FlippedView {
             backdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
             stripLeading,
             stripTrailing,
-            // Tabs sit on the band's floor; whatever the band gains above the
-            // strip (the titlebar) stays backdrop-only.
-            tabStrip.bottomAnchor.constraint(equalTo: bottomAnchor),
+            // The row is centred on the band: the traffic lights sit on the
+            // titlebar's centre line and the names must share it, which is
+            // where the Catalyst glue placed its strip too. Bottom-anchoring
+            // read 3pt low under the 52pt unified titlebar. Whatever the band
+            // gains above and below the row stays backdrop-only; where the
+            // band is the row's own height (full screen) the two coincide.
+            tabStrip.centerYAnchor.constraint(equalTo: centerYAnchor),
             tabStrip.heightAnchor.constraint(equalToConstant: ChalkMetrics.tabStripHeight),
         ])
         refreshColors()

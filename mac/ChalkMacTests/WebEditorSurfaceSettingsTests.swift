@@ -98,8 +98,7 @@ final class WebEditorSurfaceSettingsTests: XCTestCase {
         surface.setHsnips(content: "snippets")
         signalReady()
 
-        let webView = try XCTUnwrap(surface.view as? WKWebView)
-        surface.webViewWebContentProcessDidTerminate(webView)
+        surface.webViewWebContentProcessDidTerminate(surface.webView)
         let before = surface.deliveredMessagesForTesting.count
         signalReady()
 
@@ -115,8 +114,7 @@ final class WebEditorSurfaceSettingsTests: XCTestCase {
         surface.setTextAlign(.justified)
         signalReady()
 
-        let webView = try XCTUnwrap(surface.view as? WKWebView)
-        surface.webViewWebContentProcessDidTerminate(webView)
+        surface.webViewWebContentProcessDidTerminate(surface.webView)
         surface.setMeasure(700) // the same value, while the page reloads
         let before = surface.evaluatedScriptsForTesting.count
         signalReady()
