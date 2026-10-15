@@ -77,10 +77,12 @@ public enum BandLayout {
         }
         // Overlay chrome: the editor runs full-bleed under the titlebar and
         // rests below web-side padding, so scrolled text reaches the top
-        // edge. Windowed uses the raw `max(system, recorded)`, not the
-        // floored band: the floor only keeps the chips on screen.
+        // edge. Windowed rests below the band, which is the titlebar when
+        // that is taller than the row and the row's floor otherwise (a short
+        // titlebar still hosts the row, and text must not rest under the
+        // chips); `recorded` covers a transient safe area mid-transition.
         let restsBelow = fullscreen ? (zen ? 0 : band)
-                                    : (zen ? safeAreaTop : max(safeAreaTop, recorded))
+                                    : (zen ? safeAreaTop : max(band, recorded))
         return Result(
             bandHeight: band,
             // The row's `tabStripLeading` clears the traffic lights; past

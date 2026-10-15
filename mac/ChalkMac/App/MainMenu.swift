@@ -1,8 +1,8 @@
 import AppKit
 
-/// The main menu, built in code. Phase 0 carries only what keeps the app
-/// usable (Quit, Close, New Window); the full menu from the plan's "Menu bar"
-/// section lands in phase 6.
+/// The main menu, built in code. It carries what the shipped phases need
+/// (Quit, Close, New Window, the Library's two commands); the full menu from
+/// the plan's "Menu bar" section lands in phase 6.
 enum MainMenu {
     static func build() -> NSMenu {
         let main = NSMenu()
@@ -14,8 +14,15 @@ enum MainMenu {
         let file = NSMenu(title: "File")
         let newWindow = file.addItem(withTitle: "New Window", action: #selector(AppDelegate.cmdNewWindow(_:)), keyEquivalent: "n")
         newWindow.keyEquivalentModifierMask = [.command, .shift]
+        let addFolder = file.addItem(withTitle: "Add Folder to Window\u{2026}",
+                                     action: #selector(RootSplitViewController.cmdAddLocation(_:)), keyEquivalent: "o")
+        addFolder.keyEquivalentModifierMask = [.command, .shift]
         file.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         main.addItem(submenu(file, title: "File"))
+
+        let view = NSMenu(title: "View")
+        view.addItem(withTitle: "Toggle Library", action: #selector(RootSplitViewController.cmdToggleSidebar(_:)), keyEquivalent: "j")
+        main.addItem(submenu(view, title: "View"))
 
         let window = NSMenu(title: "Window")
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")

@@ -20,11 +20,10 @@ final class RootView: FlippedView {
 /// Shell commands (Cmd+J sidebar, P/N/W/S, zoom, tab nav) are the main menu's
 /// and route here through the responder chain. Editor keys (typing, Tab
 /// tabout, hsnips, Cmd+B/I, Cmd+:) are deliberately not claimed, so they fall
-/// through to the web editor. The Library column arrives with phase 3 of
-/// docs/specs/2026-10-15-appkit-shell-rewrite-plan.md; until then its column
-/// is an empty host that the sidebar toggle shows and hides.
+/// through to the web editor.
 final class RootSplitViewController: NSViewController {
     private(set) var editor = EditorContainerViewController()
+    private let sidebar = SidebarViewController()
 
     /// This window's own folder list; the detached default keeps windows built
     /// in tests off the persisted bookmarks.
@@ -32,11 +31,35 @@ final class RootSplitViewController: NSViewController {
 
     // The columns. Hand-laid rather than an NSSplitView: the sidebar slide
     // translates the columns while the webview keeps its bounds, which a
-    // split view's own resize animation cannot do (docs/motion.md).
+    // split view's own resize animation cannot do (docs/motion.md). The
+    // sidebar sits ABOVE the editor column so a sliding Library covers the
+    // frozen content's overhang.
     private let sidebarColumn = FlippedView()
     private let editorColumn = FlippedView()
     private var sidebarColumnWidth: NSLayoutConstraint!
+    /// The editor's leading pin: the divider while the Library is shown, the
+    /// window edge while it is hidden. The column keeps its width when hidden
+    /// (a zero-width column cannot satisfy the Library's own insets).
+    private var editorLeadingToSidebar: NSLayoutConstraint!
+    private var editorLeadingToEdge: NSLayoutConstraint!
     private(set) var isSidebarVisible = false
+    /// The divider's drag handle; the width persists on release.
+    private let sidebarResizeGrip = ColumnResizeGrip()
+    private var sidebarDragStartWidth: CGFloat = 0
+
+    // The sidebar slide's state (docs/motion.md "Sidebar show/hide").
+    /// The column mid-slide, nil at rest.
+    private var slidingSidebarColumn: NSView?
+    /// Bumped by every cancel: a completion or a settle callback from an
+    /// older slide must do nothing to the newer one.
+    private var sidebarSlideEpoch = 0
+    private var sidebarSlideSettle: WebPaintGate?
+    /// True from a slide's start to its completion: the band's layout pass
+    /// must not re-post the still-tiled divider mid-hide.
+    private var isSidebarSliding = false
+    /// Tags the one layout pass a show's placement snap runs, so the chips'
+    /// inset rides the slide's clock instead of snapping.
+    private var pendingStripSlideDuration: TimeInterval?
 
     // The tab name row. Hosted here, not in either column, so nothing moves
     // when the sidebar opens.
@@ -152,6 +175,7 @@ final class RootSplitViewController: NSViewController {
             }
         }
         editor.libraryRootsProvider = { [weak self] in self?.libraryRoots ?? [] }
+        wireLibrary()
 
         // This root orchestrates the covered appearance transitions and pushes
         // the one data-theme change itself; the container's own hook stands down.
@@ -177,6 +201,8 @@ final class RootSplitViewController: NSViewController {
     /// (a dirty-marker flip) never pops the chrome back into view.
     func handleTabsChanged(_ items: [TabItem]) {
         headerBar.tabStrip.update(items)
+        // The Library marks where you are, not just what exists.
+        sidebar.setOpenDocument(editor.activeDocumentURL)
         let identities = items.map(\.id)
         if identities != lastTabIdentities
             || items.first(where: \.isActive)?.id != currentActiveTabID {
@@ -208,23 +234,33 @@ final class RootSplitViewController: NSViewController {
             self, selector: #selector(themeDidChange),
             name: ChalkAppearance.themeDidChange, object: nil)
 
-        // The columns, with the editor pinned to the sidebar's trailing edge.
-        for column in [sidebarColumn, editorColumn] {
+        // The columns, with the editor pinned to the sidebar's trailing edge;
+        // the sidebar is added last so it stacks above the editor.
+        for column in [editorColumn, sidebarColumn] {
             column.translatesAutoresizingMaskIntoConstraints = false
+            column.wantsLayer = true
             view.addSubview(column)
         }
         sidebarColumn.isHidden = true
-        let width = sidebarColumn.widthAnchor.constraint(equalToConstant: 0)
+        let width = sidebarColumn.widthAnchor.constraint(equalToConstant: Preferences.sidebarWidth)
         sidebarColumnWidth = width
+        editorLeadingToSidebar = editorColumn.leadingAnchor.constraint(equalTo: sidebarColumn.trailingAnchor)
+        editorLeadingToEdge = editorColumn.leadingAnchor.constraint(equalTo: view.leadingAnchor)
         addChild(editor)
         editor.view.translatesAutoresizingMaskIntoConstraints = false
         editorColumn.addSubview(editor.view)
+        addChild(sidebar)
+        sidebar.view.translatesAutoresizingMaskIntoConstraints = false
+        sidebarColumn.addSubview(sidebar.view)
+        sidebarResizeGrip.translatesAutoresizingMaskIntoConstraints = false
+        sidebarResizeGrip.isHidden = true
+        view.addSubview(sidebarResizeGrip)
         NSLayoutConstraint.activate([
             sidebarColumn.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             sidebarColumn.topAnchor.constraint(equalTo: view.topAnchor),
             sidebarColumn.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             width,
-            editorColumn.leadingAnchor.constraint(equalTo: sidebarColumn.trailingAnchor),
+            editorLeadingToEdge,
             editorColumn.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             editorColumn.topAnchor.constraint(equalTo: view.topAnchor),
             editorColumn.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -232,7 +268,23 @@ final class RootSplitViewController: NSViewController {
             editor.view.trailingAnchor.constraint(equalTo: editorColumn.trailingAnchor),
             editor.view.topAnchor.constraint(equalTo: editorColumn.topAnchor),
             editor.view.bottomAnchor.constraint(equalTo: editorColumn.bottomAnchor),
+            sidebar.view.leadingAnchor.constraint(equalTo: sidebarColumn.leadingAnchor),
+            sidebar.view.trailingAnchor.constraint(equalTo: sidebarColumn.trailingAnchor),
+            sidebar.view.topAnchor.constraint(equalTo: sidebarColumn.topAnchor),
+            sidebar.view.bottomAnchor.constraint(equalTo: sidebarColumn.bottomAnchor),
+            sidebarResizeGrip.centerXAnchor.constraint(equalTo: sidebarColumn.trailingAnchor),
+            sidebarResizeGrip.widthAnchor.constraint(equalToConstant: Self.resizeGripWidth),
+            sidebarResizeGrip.topAnchor.constraint(equalTo: view.topAnchor),
+            sidebarResizeGrip.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+        sidebarResizeGrip.onDragBegan = { [weak self] in
+            guard let self else { return }
+            self.sidebarDragStartWidth = self.sidebarColumnWidth.constant
+        }
+        sidebarResizeGrip.onDragged = { [weak self] travel in
+            self?.resizeSidebar(to: (self?.sidebarDragStartWidth ?? 0) + travel)
+        }
+        sidebarResizeGrip.onDragEnded = { [weak self] in self?.persistSidebarWidth() }
 
         // The band, above both columns, spanning the window.
         headerBar.translatesAutoresizingMaskIntoConstraints = false
@@ -370,8 +422,12 @@ final class RootSplitViewController: NSViewController {
         }
         // The band never moves and its cover reaches the window's leading
         // edge; the Library is cut out of that paint rather than drawn over
-        // (`libraryIsNeverPaintedOver`).
-        headerBar.setStripLeadingInset(layout.chipLeadingInset)
+        // (`libraryIsNeverPaintedOver`). Mid-slide the chips are already on
+        // their way to the slide's target; a pass here must not snap them
+        // back to the still-tiled divider.
+        if !isSidebarSliding {
+            headerBar.setStripLeadingInset(layout.chipLeadingInset, animatedOver: pendingStripSlideDuration)
+        }
         headerBar.setLibraryHole(measured.libraryColumn.map { libraryHole(upTo: $0) })
         headerBar.setOutlineHole(outlineHole())
         editor.setTopClearance(layout.editorTopClearance)
@@ -388,6 +444,15 @@ final class RootSplitViewController: NSViewController {
 
     /// Where the Library's list begins: the chrome floor.
     var libraryTreeTop: CGFloat { chromeReserve }
+
+    /// That line in the Library's own coordinates, or nil when it has no view
+    /// in a window to convert into. Its own, not the window's: a window-space
+    /// line goes stale when an ancestor moves without laying the Library out
+    /// again, which a column slide does.
+    private func libraryTreeTopForLibrary() -> CGFloat? {
+        guard sidebar.isViewLoaded, sidebar.view.window != nil else { return nil }
+        return sidebar.view.convert(CGPoint(x: 0, y: libraryTreeTop), from: view).y
+    }
 
     /// The outline panel's slice of the band, cut out of the cover: from the
     /// panel's leading edge to the band's trailing edge, the band's full
@@ -558,15 +623,17 @@ final class RootSplitViewController: NSViewController {
         editor.restoreRecoveredBuffers(matchingOwnTabsOnly: matchingOwnTabsOnly)
     }
 
-    /// On foreground, re-read externally-changed files.
+    /// On foreground, re-read externally-changed files and refresh the Library.
     func reloadExternalChanges() {
         editor.reloadExternalChanges()
+        // Foreground refresh can hit a cold iCloud Location: off-main.
+        sidebar.scheduleReload()
     }
 
     /// One log line describing what this window is actually showing.
     var stateSummary: String {
         "tabs=\(editor.openTabCount) \(editor.diagnosticSummary)"
-            + " sidebar=\(isSidebarVisible)"
+            + " sidebar=\(isSidebarVisible) \(sidebar.diagnosticSummary)"
             + " band=\(Int(headerHeight?.constant ?? -1))"
             + " titlebar=\(Int(systemTitlebarHeight))"
             + " size=\(Int(view.bounds.width))x\(Int(view.bounds.height))"
@@ -594,6 +661,19 @@ final class RootSplitViewController: NSViewController {
 
     /// No tabs and no folders: an external folder open fills this window instead of opening another.
     var isPristine: Bool { editor.openTabCount == 0 && locationStore.locations().isEmpty }
+
+    /// Add `url` to this window's folders and show the Library. False when it
+    /// could not be stored (the user has been told).
+    @discardableResult
+    func addFolderToWindow(_ url: URL) -> Bool {
+        guard locationStore.add(url: url) else {
+            sidebar.showFileOpFailure(
+                "Couldn\u{2019}t add \u{201C}\(url.lastPathComponent)\u{201D} to this window. Try adding the folder again.")
+            return false
+        }
+        setSidebarVisible(true)
+        return true
+    }
 
     /// Open a document handed to us by the OS (Finder double-click, "Open With").
     func openExternalDocument(_ url: URL) {
@@ -702,21 +782,278 @@ final class RootSplitViewController: NSViewController {
 
     // MARK: - The Library column
 
-    /// Reveal or hide the Library column. The slide (docs/motion.md) arrives
-    /// with the Library itself; this is the placement both lanes land on.
+    /// Wire the Library's callbacks and the cross-window signals.
+    private func wireLibrary() {
+        sidebar.locationsProvider = { [weak self] in self?.locationStore.locations() ?? [] }
+        // The Library's list starts on the chrome floor: it asks, every
+        // layout pass, and the host answers from its own live chrome.
+        sidebar.treeTopProvider = { [weak self] in self?.libraryTreeTopForLibrary() }
+        // Browse-reuse: a sidebar click replaces the current tab when it's
+        // unmodified, so browsing files doesn't spawn tabs.
+        sidebar.onOpenFile = { [weak self] url in self?.openFromLibrary(url) }
+        // Asset rows (image/PDF) never reach the editor: a preview instead.
+        sidebar.onPreviewFile = { [weak self] url in self?.previewAsset(url) }
+        // "Open in New Tab": the browse-reuse that makes clicking through the
+        // tree cheap is exactly what this menu item opts out of.
+        sidebar.onOpenFileInNewTab = { [weak self] url in self?.openFromLibrary(url, inNewTab: true) }
+        sidebar.onOpenFileInNewWindow = { url in
+            (NSApp.delegate as? AppDelegate)?.openNewWindow(initialContent: .openEmpty)
+                .root.openExternalDocument(url)
+        }
+        sidebar.onAddLocation = { [weak self] url in self?.addFolderToWindow(url) }
+        // A Location whose sandbox bookmark stopped granting access heals in
+        // place when the user re-picks its folder ("Grant Access…"). The store
+        // broadcasts `.chalkLibraryDidChange`, which reloads every window's
+        // sidebar, including this one, so no local reload here.
+        sidebar.onReauthorizeLocation = { [weak self] id, url in
+            self?.locationStore.reauthorize(id: id, with: url)
+        }
+        // "Remove from Window" drops the Location's security-scoped bookmark
+        // and refreshes the tree. Open tabs from that Location stay open.
+        sidebar.onRemoveLocation = { [weak self] id in self?.locationStore.remove(id: id) }
+        // A file created from a sidebar context menu opens in a tab.
+        sidebar.onOpenCreatedFile = { [weak self] url in self?.editor.open(url: url) }
+        // A draft (Cmd+N) saved to a location for the first time: surface the
+        // new file in every window's tree, not just this one's.
+        editor.onDraftSaved = { _ in
+            NotificationCenter.default.post(name: .chalkLibraryDidChange, object: nil)
+        }
+        // A rename or drag-move remaps any open tab under the moved path
+        // (keeping unsaved edits) rather than closing it. Broadcast so every
+        // window remaps: a rename in window A must not leave window B's tab
+        // saving to the dead path.
+        sidebar.onFileMoved = { from, to in
+            NotificationCenter.default.post(
+                name: .chalkFileDidMove, object: nil,
+                userInfo: [ChalkNotificationKey.fromURL: from, ChalkNotificationKey.toURL: to])
+        }
+        // Cross-window signals. Selector-based observers detach on dealloc.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(libraryDidChange),
+            name: .chalkLibraryDidChange, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(fileDidMove(_:)),
+            name: .chalkFileDidMove, object: nil)
+    }
+
+    @objc private func libraryDidChange() {
+        // App-wide notification, fans to every window: coalesced + off-main.
+        sidebar.scheduleReload()
+    }
+
+    @objc private func fileDidMove(_ note: Notification) {
+        guard let from = note.userInfo?[ChalkNotificationKey.fromURL] as? URL,
+              let to = note.userInfo?[ChalkNotificationKey.toURL] as? URL else { return }
+        editor.handleFileMoved(from: from, to: to)
+        // The move changed the on-disk tree every window's sidebar shows.
+        sidebar.scheduleReload()
+    }
+
+    /// The one fork every Library open path runs through (sidebar click, row
+    /// menu, Quick Open). The tree lists documents AND the images/PDFs those
+    /// documents embed, and only documents can become a tab: handing a png to
+    /// `editor.open` would decode its bytes as Markdown, so assets divert to
+    /// the preview. `inNewTab` is a document-only distinction (browse-reuse vs
+    /// always-a-fresh-tab); a preview has no tab to reuse.
+    func openFromLibrary(_ url: URL, inNewTab: Bool = false) {
+        if FileTree.kind(of: url) == .asset {
+            previewAsset(url)
+        } else {
+            editor.open(url: url, reuseCurrentIfClean: !inNewTab)
+        }
+    }
+
+    /// The preview sheet arrives with phase 4 of the plan; the routing fact is
+    /// recorded now so no asset can reach a tab.
+    private func previewAsset(_ url: URL) {
+        lastPreviewedAsset = url
+        Self.log.notice("asset preview is not in this build yet")
+    }
+
+    /// Last URL routed to the preview (AssetPreviewRoutingTests).
+    private(set) var lastPreviewedAsset: URL?
+
+    /// Reveal or hide the Library column: the placement both lanes land on.
     func setSidebarVisible(_ visible: Bool) {
         guard visible != isSidebarVisible else { return }
         isSidebarVisible = visible
         sidebarColumn.isHidden = !visible
-        sidebarColumnWidth.constant = visible ? Preferences.sidebarWidth : 0
+        sidebarResizeGrip.isHidden = !visible
+        if visible { sidebarColumnWidth.constant = Preferences.sidebarWidth }
+        // Deactivate before activating, so no pass sees both pins.
+        (visible ? editorLeadingToEdge : editorLeadingToSidebar)?.isActive = false
+        (visible ? editorLeadingToSidebar : editorLeadingToEdge)?.isActive = true
         if isViewLoaded { view.layoutSubtreeIfNeeded() }
     }
 
+    /// The grip's drag: live, clamped to the resizable range.
+    private func resizeSidebar(to width: CGFloat) {
+        let range = Preferences.sidebarWidthRange
+        let wanted = min(max(width, range.lowerBound), range.upperBound)
+        guard abs(sidebarColumnWidth.constant - wanted) > 0.5 else { return }
+        sidebarColumnWidth.constant = wanted
+        view.layoutSubtreeIfNeeded()
+    }
+
+    /// Persist the dragged width, only on a real change, so a steady pass
+    /// never churns UserDefaults. 2.0 is a rounding guard; a drag moves many points.
+    private func persistSidebarWidth() {
+        let width = sidebarColumnWidth.constant
+        guard isSidebarVisible, Preferences.sidebarWidthRange.contains(width),
+              abs(Preferences.sidebarWidth - width) > 2.0 else { return }
+        Preferences.sidebarWidth = width
+    }
+
+    static let resizeGripWidth: CGFloat = 8
+
+    /// Run a Library show/hide with a short slide; Reduce Motion snaps instantly.
+    ///
+    /// The editor is a WKWebView, which paints asynchronously in the
+    /// web-content process, so any bounds change near the animation flashes
+    /// stale tiles at the wrong layout. The visible slide therefore never
+    /// touches the webview's bounds: the width is frozen at its current value
+    /// and the content is translated instead (`contentShift`). The one real
+    /// reflow runs after the slide, while everything is stationary, under a
+    /// `takeSnapshot` image of the settled content (`settleSidebarSlide`).
     private func animateSidebar(show: Bool) {
         // Zen owns the chrome: panels do not open into it, whichever lane
-        // asked. `UIState.applying` encodes the same refusal.
+        // asked (Cmd+J, the pill, a test step). The way out is leaving zen.
+        // `UIState.applying` encodes the same refusal.
         if show, isZen { return }
-        setSidebarVisible(show)
+        // One code path (docs/motion.md "Sidebar show/hide"): a dead
+        // snapshotter degrades to a covered reflow on the backstop clock
+        // (WebPaintGate), never a stuck width. A rapid re-toggle lands
+        // mid-slide: finish the previous transition's bookkeeping first.
+        cancelSidebarSlide()
+        guard motionAllowed, view.window != nil else {
+            setSidebarVisible(show)
+            return
+        }
+        if show { animateSidebarIn() } else { animateSidebarOut() }
+    }
+
+    /// The placement snaps at slide start (its layout pass posts the chips'
+    /// new inset on the slide's clock); the column starts a width off screen
+    /// and slides in while the frozen editor content slides by `contentShift`.
+    private func animateSidebarIn() {
+        editor.freezeContentWidth()
+        pendingStripSlideDuration = ChalkMetrics.motionSidebar
+        setSidebarVisible(true)
+        pendingStripSlideDuration = nil
+        let width = sidebarColumn.frame.width
+        let shift = contentShift(sidebarWidth: width, showing: true)
+        // The frozen full-width content overhangs the (now narrower) column's
+        // leading edge; it stays visible there until the sidebar covers it.
+        editor.view.clipsToBounds = false
+        slidingSidebarColumn = sidebarColumn
+        isSidebarSliding = true
+        let epoch = sidebarSlideEpoch
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            // A re-toggle canceled this slide; its bookkeeping is done and
+            // running the settle here would unfreeze mid-NEW-slide.
+            guard let self, epoch == self.sidebarSlideEpoch else { return }
+            self.slidingSidebarColumn = nil
+            self.isSidebarSliding = false
+            self.editor.view.clipsToBounds = true
+            self.applyBandLayout() // anything the slide guard held back
+            self.settleSidebarSlide()
+        }
+        sidebarColumn.layer?.transform = CATransform3DMakeTranslation(-width, 0, 0)
+        sidebarColumn.layer?.chalkSlide(toTranslationX: 0, over: ChalkMetrics.motionSidebar)
+        editor.slideContent(by: shift, over: ChalkMetrics.motionSidebar)
+        CATransaction.commit()
+    }
+
+    /// How far the visible text travels when the editor column resizes by one
+    /// sidebar width. The web content column is `Preferences.editorMeasure`
+    /// wide (the CSS px the host pushes into the page), centered while the
+    /// editor is wider than that and edge-anchored below the cap. So the
+    /// travel is the leading-edge move plus the inset change: Δ/2 when fully
+    /// wide, the full sidebar width when fully narrow, in between when the
+    /// toggle crosses the cap.
+    private func contentShift(sidebarWidth: CGFloat, showing: Bool) -> CGFloat {
+        let measure = CGFloat(Preferences.editorMeasure)
+        func inset(_ editorWidth: CGFloat) -> CGFloat {
+            max(0, (editorWidth - measure) / 2)
+        }
+        let wide = view.bounds.width          // editor width, sidebar hidden
+        let narrow = wide - sidebarWidth      // editor width, sidebar shown
+        let travel = sidebarWidth + inset(narrow) - inset(wide)
+        return showing ? travel : -travel
+    }
+
+    /// Mirror of `animateSidebarIn`, with the placement at the END: the real
+    /// column slides out first and the hide lands in the completion, where
+    /// the frozen content's screen rect is identical across the snap.
+    private func animateSidebarOut() {
+        let width = sidebarColumn.frame.width
+        let shift = contentShift(sidebarWidth: width, showing: false)
+        editor.freezeContentWidth()
+        // The chips ride the column's clock: the placement lands only in the
+        // completion, so post the target inset now; the slide guard keeps the
+        // layout passes in between from re-measuring the still-tiled divider.
+        isSidebarSliding = true
+        headerBar.setStripLeadingInset(0, animatedOver: ChalkMetrics.motionSidebar)
+        // The content's visual rect crosses the column's leading edge on its
+        // way out; the departing sidebar (stacked above) covers the seam.
+        editor.view.clipsToBounds = false
+        slidingSidebarColumn = sidebarColumn
+        let epoch = sidebarSlideEpoch
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            guard let self, epoch == self.sidebarSlideEpoch else { return }
+            self.slidingSidebarColumn = nil
+            self.isSidebarSliding = false
+            self.editor.view.clipsToBounds = true
+            self.setSidebarVisible(false)
+            self.sidebarColumn.layer?.chalkEndSlide()
+            self.applyBandLayout() // after the snap: the divider is final
+            self.settleSidebarSlide()
+        }
+        sidebarColumn.layer?.chalkSlide(toTranslationX: -width, over: ChalkMetrics.motionSidebar)
+        editor.slideContent(by: shift, over: ChalkMetrics.motionSidebar)
+        CATransaction.commit()
+    }
+
+    /// Abort any in-flight slide so a new one starts from consistent state.
+    /// The epoch bump turns the canceled animation's completion into a no-op
+    /// and `cancel()` does the same for the settle's pending callbacks: a
+    /// stale snapshot or backstop must never act on the next slide's state.
+    private func cancelSidebarSlide() {
+        sidebarSlideEpoch += 1
+        sidebarSlideSettle?.cancel()
+        sidebarSlideSettle = nil
+        slidingSidebarColumn?.layer?.chalkEndSlide()
+        slidingSidebarColumn = nil
+        isSidebarSliding = false
+        if editor.isViewLoaded { editor.view.clipsToBounds = true }
+        editor.unfreezeContentWidth()
+    }
+
+    /// Post-slide settle: swap the frozen, translated webview for its real
+    /// layout in one stationary reflow, masked by an opaque cover carrying a
+    /// bitmap of the pixels on screen. `WebPaintGate` owns the ordering and
+    /// the guaranteed release (docs/motion.md "Sidebar show/hide"): the
+    /// release is armed before the snapshot is requested, so a snapshot that
+    /// never lands degrades to a covered reflow on the backstop clock, never
+    /// a stuck width or a naked reflow. The shield is `makeWebCover`.
+    private func settleSidebarSlide() {
+        guard editor.isViewLoaded, let seams = coverSeams(for: .sidebarSlide) else {
+            // No webview to mask (no open tab): nothing can flicker; release now.
+            editor.unfreezeContentWidth()
+            return
+        }
+        let editorView = editor.view
+        let settle = WebPaintGate(
+            snapshotter: seams.snapshotter,
+            paintGate: seams.paintGate,
+            makeCover: { [weak self] image in
+                self?.makeWebCover(over: editorView, bitmap: image, of: seams.bitmapSource)
+            },
+            reflow: { [weak self] in self?.editor.unfreezeContentWidth() })
+        sidebarSlideSettle = settle
+        settle.begin()
     }
 
     @objc func cmdToggleSidebar(_ sender: Any? = nil) {
@@ -785,7 +1122,7 @@ final class RootSplitViewController: NSViewController {
     }
 
     @objc func cmdAddLocation(_ sender: Any? = nil) {
-        Self.log.notice("Add Folder to Window is not in this build yet")
+        sidebar.presentAddLocationPicker()
     }
 
     // MARK: - Editing modes
@@ -939,7 +1276,7 @@ final class RootSplitViewController: NSViewController {
             #endif
         }
 
-        guard let seams = coverSeams(), editor.isViewLoaded, editor.view.window != nil else {
+        guard let seams = coverSeams(for: .appearance), editor.isViewLoaded, editor.view.window != nil else {
             // No surface to mask (no open tab, or not hosted yet): nothing can tear.
             flip()
             return
@@ -967,15 +1304,24 @@ final class RootSplitViewController: NSViewController {
         settle.begin()
     }
 
+    /// Which covered transition is asking for seams, so a DEBUG build can
+    /// hand back that transition's injected test doubles.
+    private enum CoveredTransition { case sidebarSlide, appearance }
+
     /// The seams a covered transition runs on: the live surface's, replaced in
-    /// DEBUG by injected test doubles (no bitmap source then). nil when there
-    /// is nothing to mask.
-    private func coverSeams()
+    /// DEBUG by the transition's injected test doubles (no bitmap source
+    /// then). nil when there is nothing to mask.
+    private func coverSeams(for transition: CoveredTransition)
         -> (snapshotter: WebPaintGate.Snapshotter, paintGate: WebPaintGate.PaintGate, bitmapSource: NSView?)? {
         #if DEBUG
-        if let snapshotter = appearanceSnapshotterForTesting {
+        let injected: (WebPaintGate.Snapshotter?, WebPaintGate.PaintGate?)
+        switch transition {
+        case .sidebarSlide: injected = (sidebarSnapshotterForTesting, sidebarPaintGateForTesting)
+        case .appearance: injected = (appearanceSnapshotterForTesting, appearancePaintGateForTesting)
+        }
+        if let snapshotter = injected.0 {
             return (snapshotter,
-                    appearancePaintGateForTesting ?? { ready in DispatchQueue.main.async(execute: ready) },
+                    injected.1 ?? { ready in DispatchQueue.main.async(execute: ready) },
                     nil)
         }
         #endif
@@ -1144,7 +1490,15 @@ extension RootSplitViewController {
         let tabStripFrame = headerBar.isHidden
             ? CGRect.zero
             : view.convert(headerBar.tabStrip.frame, from: headerBar)
-        let panel: CGRect? = isSidebarVisible ? sidebarColumn.frame : nil
+        let panel: CGRect? = {
+            guard isSidebarVisible, sidebar.isViewLoaded else { return nil }
+            return view.convert(sidebar.panelFrameForTesting, from: sidebar.view)
+        }()
+        let firstRowTop: CGFloat? = panel == nil ? nil
+            : sidebar.firstRowFrameForTesting.map { view.convert($0, from: sidebar.view).minY }
+        let firstHeaderTop: CGFloat? = panel == nil ? nil
+            : sidebar.firstHeaderFrameForTesting.map { view.convert($0, from: sidebar.view).minY }
+        let scrollOffset: CGFloat? = panel == nil ? nil : sidebar.libraryScrollOffsetForTesting
         let activeChip: CGRect? = headerBar.isHidden
             ? nil
             : headerBar.tabStrip.activeTabFrameForTesting
@@ -1179,9 +1533,9 @@ extension RootSplitViewController {
             editorContent: editorContent,
             reserveTop: chromeReserve,
             safeLeading: 0,
-            libraryFirstRowTop: nil,
-            libraryFirstHeaderTop: nil,
-            libraryScrollOffset: nil,
+            libraryFirstRowTop: firstRowTop,
+            libraryFirstHeaderTop: firstHeaderTop,
+            libraryScrollOffset: scrollOffset,
             activeChip: activeChip,
             activeTabLabel: activeLabel,
             activeTabUnderline: activeUnderline,
@@ -1215,8 +1569,42 @@ extension RootSplitViewController {
     /// Where the chrome that reserves space above the text ENDS.
     var chromeReserveForTesting: CGFloat { chromeReserve }
 
-    /// Whether the sidebar slide still owns any state. Placement only, until
-    /// the Library's slide arrives.
-    var isSidebarTransitionInFlightForTesting: Bool { false }
+    /// Whether the sidebar slide still owns any state (a sliding column or a
+    /// live settle). True mid-flight; false at rest.
+    var isSidebarTransitionInFlightForTesting: Bool {
+        slidingSidebarColumn != nil || (sidebarSlideSettle?.isActive ?? false)
+    }
+
+    /// The Library itself, for the tests that drive its own seams.
+    var sidebarForTesting: SidebarViewController { sidebar }
+    /// The view the slide transforms; the editor must never be inside it.
+    var sidebarColumnForTesting: NSView { sidebarColumn }
+    var headerBarForTesting: NSView { headerBar }
+    var sidebarResizeGripFrameForTesting: CGRect { sidebarResizeGrip.frame }
+    var sidebarResizeGripIsHiddenForTesting: Bool { sidebarResizeGrip.isHidden }
+    /// The chips' inset past the traffic lights, as last written.
+    var stripLeadingInsetForTesting: CGFloat { headerBar.stripLeadingInsetForTesting }
+    var lastPreviewedAssetForTesting: URL? { lastPreviewedAsset }
+
+    /// The Library list's scroll offset (see the sidebar seams).
+    var libraryScrollOffsetForTesting: CGFloat { sidebar.libraryScrollOffsetForTesting }
+    func setLibraryScrollOffsetForTesting(_ offset: CGFloat) {
+        sidebar.setLibraryScrollOffsetForTesting(offset)
+    }
+
+    /// Point the Library at the given folders without touching the real
+    /// `LocationStore`, whose security-scoped bookmarks a test must never write.
+    func setLibraryLocationsForTesting(_ urls: [URL]) {
+        sidebar.locationsProvider = {
+            urls.map { Location(id: $0.lastPathComponent, name: $0.lastPathComponent, url: $0) }
+        }
+        sidebar.reload()
+    }
+
+    /// Drive the divider drag the grip would.
+    func resizeSidebarForTesting(to width: CGFloat) {
+        resizeSidebar(to: width)
+        persistSidebarWidth()
+    }
 }
 #endif

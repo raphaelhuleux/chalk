@@ -112,7 +112,10 @@ final class ZenTransitionContractTests: XCTestCase {
 
         root.applyTransitionForTesting(.zen(true))
 
-        // Same turn: the band is fading, not snapped away.
+        // Same turn: the Library is leaving through the sidebar slide, and
+        // the band is fading, not snapped away.
+        XCTAssertTrue(root.isSidebarTransitionInFlightForTesting,
+                      "zen's Library close goes through the one sidebar slide (docs/motion.md C3)")
         XCTAssertFalse(root.isHeaderHiddenForTesting,
                        "the band fades over motionStandard; isHidden lands in the fade's completion")
 

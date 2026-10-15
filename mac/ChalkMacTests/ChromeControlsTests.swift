@@ -20,7 +20,7 @@ final class ChromeControlsTests: XCTestCase {
     /// and `Preferences` is the OWNER's UserDefaults domain (see
     /// ChromeMatrixHost for the incident that established this rule).
     private var previousWidthRaw: Any?
-    private static let sidebarWidthKey = "chalk.sidebarWidth"
+    private static let sidebarWidthKey = "chalk.sidebarWidth.appkit"
 
     override func setUp() {
         super.setUp()

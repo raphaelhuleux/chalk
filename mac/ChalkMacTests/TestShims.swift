@@ -24,9 +24,17 @@ extension NSWindow {
         set { newValue ? orderOut(nil) : orderFrontRegardless() }
     }
 
+    /// Assigning a content view controller resizes the window to the
+    /// controller's view (zero for a freshly loaded one, clamped to the
+    /// minimum size); the hosted size is put back, as the app's window
+    /// controller does.
     var rootViewController: NSViewController? {
         get { contentViewController }
-        set { contentViewController = newValue }
+        set {
+            let size = contentView?.frame.size ?? .zero
+            contentViewController = newValue
+            if newValue != nil, size != .zero { setContentSize(size) }
+        }
     }
 
     func addSubview(_ view: NSView) {

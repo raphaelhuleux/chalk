@@ -22,15 +22,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.log.notice("launched; opening the first window")
-        openNewWindow()
+        let controller = openNewWindow()
+        #if DEBUG
+        // A folder to show in the Library straight away, for screenshots
+        // and manual checks before per-window Locations land (phase 6).
+        if let path = ProcessInfo.processInfo.environment["CHALK_DEBUG_LIBRARY"], !path.isEmpty {
+            controller.root.setLibraryLocationsForTesting([URL(fileURLWithPath: path)])
+            controller.root.setSidebarVisible(true)
+        }
+        #endif
     }
 
     /// The app outlives its last window, like every Mac document app.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     @discardableResult
-    func openNewWindow() -> EditorWindowController {
-        let controller = EditorWindowController()
+    func openNewWindow(initialContent: SceneConnectContent = .openWelcome) -> EditorWindowController {
+        let controller = EditorWindowController(initialContent: initialContent)
         controller.onClose = { [weak self, weak controller] in
             self?.editorWindows.removeAll { $0 === controller }
         }

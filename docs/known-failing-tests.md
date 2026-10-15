@@ -6,7 +6,7 @@ To re-attribute a failure, run the suite in a HEAD worktree (`git worktree add â
 
 | Test | Suite / runner | Cause |
 | --- | --- | --- |
-| `SidebarFileOperationsTests.testUndoRestoresATrashedFile` | ChalkTests, Mac Catalyst | Recorded 2026-08-23: undo after trashing `draft.tex` does not restore the file (`NSCocoaErrorDomain 260` on reopen). Suspected environment-sensitive `NSFileManager.trashItem`/undo behavior on the macOS 15 host rather than app code (the last app-side change to the trash path predates a green run on 2026-08-20). Needs triage on its own terms. |
+| `SidebarFileOperationsTests.testUndoRestoresATrashedFile` | ChalkTests, Mac Catalyst | Recorded 2026-08-23: undo after trashing `draft.tex` does not restore the file (`NSCocoaErrorDomain 260` on reopen). Suspected environment-sensitive `NSFileManager.trashItem`/undo behavior on the macOS 15 host rather than app code (the last app-side change to the trash path predates a green run on 2026-08-20). Needs triage on its own terms. The same test passes on the AppKit port (`ChalkMacTests`, 2026-10-15), where `trashItem` returns the trashed URL. |
 | `TabSwitchContractTests.testSwitchKeepsBothSurfacesHostedThenExactlyOne` | ChalkTests, Mac Catalyst, intermittent | Waits a fixed 0.35s for the tab-switch fade, so it fails when another build loads the machine and passes alone. Re-verified 2026-09-28. Fix: wait on the condition instead of a fixed delay. |
 
 ## 2026-08-26: an intermittent in the editor-core vitest suite, ~1 run in 4

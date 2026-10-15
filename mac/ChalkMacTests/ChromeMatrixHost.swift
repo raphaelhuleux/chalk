@@ -40,12 +40,12 @@ final class ChromeMatrixHost {
     /// fixed value; this snapshot is what makes that pin safe on the owner's
     /// machine.
     private let incomingSidebarWidthRaw: Any?
-    private static let sidebarWidthKey = "chalk.sidebarWidth"
+    private static let sidebarWidthKey = "chalk.sidebarWidth.appkit"
 
     /// Same reasoning as `incomingSidebarWidthRaw`, for the outline panel's
     /// pinned width.
     private let incomingOutlinePanelWidthRaw: Any?
-    private static let outlinePanelWidthKey = "chalk.outlinePanelWidth"
+    private static let outlinePanelWidthKey = "chalk.outlinePanelWidth.appkit"
 
     init() {
         incomingEditingMode = Preferences.editingMode

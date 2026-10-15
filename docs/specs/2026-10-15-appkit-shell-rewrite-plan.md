@@ -154,7 +154,7 @@ The exact menu from `AppDelegate.buildMenu(with:)`, rebuilt as `NSMenu`:
 - Row context menu: Open, Open in New Tab, Open in New Window, Preview for assets, New File, New Folder, Rename, Duplicate, Copy, Copy Path, Move to Trash. `SidebarContextMenuTests`, `docs/specs/2026-08-02-sidebar-rename-and-context-menu-design.md`.
 - Tree with lazy children and grandchild prefetch, expansion state per node, fold keys on left and right arrow, F2 renames. `SidebarKeyboardNavTests`, `SidebarFolderToggleTests`.
 - Inline rename including case-only renames; failures shown in place. `SidebarInlineRenameTests`, `CaseOnlyRenameTests`.
-- Move to Trash with undo through `CoordinatedFileMove`; Duplicate, Copy Path. `SidebarFileOperationsTests`, including `testUndoRestoresATrashedFile`, which fails today (`docs/known-failing-tests.md`) and is fixed in the Library phase: `NSWorkspace.recycle` returns the trashed item's new URL, which is what the undo needs to move it back.
+- Move to Trash with undo through `CoordinatedFileMove`; Duplicate, Copy Path. `SidebarFileOperationsTests`, including `testUndoRestoresATrashedFile`, which fails on Catalyst (`docs/known-failing-tests.md`) and passes on the AppKit port as written: `FileManager.trashItem` hands back the trashed item's URL there, which is what the undo moves back.
 - Drag and drop moves within and across Locations, drop targets from `SidebarDropPolicy`, no drop into own subtree. `SidebarDropTargetTests`.
 - Open-document highlight follows the active tab; a sidebar click browses in place unless the tab is pinned or dirty; Cmd click opens a new tab. `SidebarOpenTargetTests`, `LibraryListStartTests`.
 - Asset rows (images, PDFs) open the preview sheet. `AssetPreviewRoutingTests`.
@@ -297,6 +297,18 @@ Done 2026-10-15. 213 tests green on `ChalkMacTests`. What the port taught:
 - The slide with the frozen webview and the strip inset on the same clock.
 
 Exit: every `Sidebar*`, `Library*`, `LocationStore*`, `AddLocation*`, `CaseOnlyRename*` test green.
+
+Done 2026-10-15. 357 tests green on `ChalkMacTests` (one skipped: the reopen wedge), including the ported invariant and transition matrices; Catalyst and ChalkKit untouched in count. What the port taught:
+
+- The tree is an `NSOutlineView` over class-backed row items (`LibraryRowItem`, `LibraryLocationItem`): the table keys expansion and reloads on item identity, so a reload reconciles rows in place by `FileNode` and keeps the objects that survive. The model's `isExpanded` is the truth, mirrored from the table's expand and collapse notifications and re-applied when a collapsed parent opens again.
+- AppKit refuses to collapse an item whose outline cell is hidden through `shouldShowOutlineCell`: `collapseItem` returns before asking the delegate. The disclosure triangle is removed by giving it a zero frame (`frameOfOutlineCell`) and the cell draws its own chevron.
+- The table reads the data source back during its own row updates. The model is written first, in its final shape, through references; an inout borrow of `children` across `removeItems` is an exclusivity violation that kills the process.
+- A hidden Library column keeps its width and the editor's leading pin swaps between the divider and the window edge. A zero-width column cannot satisfy the panel's own insets and Auto Layout breaks a constraint on every pass.
+- `BandLayout` windowed rests the text below the band, not the raw titlebar: on AppKit the band is hosted windowed too, so a titlebar shorter than the row (the test window's standard one) floors the band and the text must clear it. The app's unified-toolbar titlebar is taller than the row, so it sees no change.
+- The slide is two `CABasicAnimation`s on `transform.translation.x` (the column and the frozen content) under one `CATransaction` completion, epoch-guarded like the Catalyst one; the model transform lands at once so a reader sees the end state the same turn. The chips animate through their constraint inside an `NSAnimationContext` with implicit animation on.
+- The Catalyst titlebar-band click replay is gone: the window hands clicks under the transparent titlebar to the content views, which `SidebarTitlebarClickTests` proves through the frame view's own hit-test, Library header, first row, band hole and tab strip.
+- `trashItem` returns the trashed URL on this shell, so `testUndoRestoresATrashedFile` passes unchanged.
+- Deferred to their phases: the asset preview sheet (phase 4; the routing and the row behaviour are in), the per-window `LocationStore` and the full menu (phase 6; `CHALK_DEBUG_LIBRARY` seeds a folder for screenshots meanwhile).
 
 ### Phase 4: palettes, outline panel, preview
 

@@ -71,7 +71,7 @@ final class EditorContainerViewController: NSViewController {
     /// of the tab band's paint.
     var onOutlinePanelLayoutChanged: (() -> Void)?
     /// Straddles the panel's leading edge, in THIS view so it can extend over the editor's side.
-    private let outlineResizeGrip = OutlineResizeGrip()
+    private let outlineResizeGrip = ColumnResizeGrip()
     /// Last frame announced through `onOutlinePanelLayoutChanged`, so only a layout pass that
     /// actually moved the panel re-cuts the band.
     private var lastAnnouncedOutlinePanelFrame: CGRect?
@@ -396,10 +396,10 @@ final class EditorContainerViewController: NSViewController {
         frozenContentWidth = frozen
     }
 
-    /// The animatable half of the slide, set inside the caller's animation block. The text column
-    /// is centered, so half the width change lands it where the post-reflow layout will.
-    func slideContent(by offset: CGFloat) {
-        contentView.layer?.transform = CATransform3DMakeTranslation(offset, 0, 0)
+    /// The animatable half of the slide, on the caller's clock. The text column is centered, so
+    /// half the width change lands it where the post-reflow layout will.
+    func slideContent(by offset: CGFloat, over duration: TimeInterval) {
+        contentView.layer?.chalkSlide(toTranslationX: offset, over: duration)
     }
 
     /// Restore edge-pinning: the transition's single width reflow, while nothing is moving.
@@ -410,7 +410,7 @@ final class EditorContainerViewController: NSViewController {
         #endif
         frozen.isActive = false
         frozenContentWidth = nil
-        contentView.layer?.transform = CATransform3DIdentity
+        contentView.layer?.chalkEndSlide()
         contentLeading?.isActive = true
         view.layoutSubtreeIfNeeded()
         // The slide may have crossed the push/overlay threshold while frozen.
@@ -1321,7 +1321,7 @@ extension EditorContainerViewController: DocumentControllerDelegate {
 
 /// The outline panel's resize handle: a horizontal-resize cursor and a drag
 /// that reports its x travel.
-final class OutlineResizeGrip: FlippedView {
+final class ColumnResizeGrip: FlippedView {
     var onDragBegan: (() -> Void)?
     var onDragged: ((CGFloat) -> Void)?
     var onDragEnded: (() -> Void)?

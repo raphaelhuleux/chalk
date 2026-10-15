@@ -102,11 +102,31 @@ final class HeaderBarView: FlippedView {
     /// Only the chips move to the editor column when the Library is open; the
     /// band itself spans the window so its paint runs edge to edge
     /// (`bandSpansFullWidth`).
-    func setStripLeadingInset(_ inset: CGFloat) {
+    ///
+    /// `animatedOver` is the sidebar slide's clock: the chips ride the
+    /// column's motion (docs/motion.md). Every other caller passes nil and the
+    /// write is instant; a live divider drag is dense small deltas.
+    func setStripLeadingInset(_ inset: CGFloat, animatedOver duration: TimeInterval? = nil) {
         let wanted = ChalkMetrics.tabStripLeading + inset
         guard abs(stripLeading.constant - wanted) > 0.5 else { return }
-        stripLeading.constant = wanted
+        guard let duration, duration > 0, window != nil else {
+            stripLeading.constant = wanted
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.allowsImplicitAnimation = true
+            stripLeading.constant = wanted
+            layoutSubtreeIfNeeded()
+        }
     }
+
+    #if DEBUG
+    /// The chips' inset past the traffic lights, as last written (the model
+    /// value, even mid-animation).
+    var stripLeadingInsetForTesting: CGFloat { stripLeading.constant - ChalkMetrics.tabStripLeading }
+    #endif
 
     /// The Library panel's rect, in this view's coordinates, cut out of the
     /// band's paint. Nil when no Library is showing (`libraryIsNeverPaintedOver`).
