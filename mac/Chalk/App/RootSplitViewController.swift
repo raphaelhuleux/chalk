@@ -2654,8 +2654,8 @@ extension RootSplitViewController {
 
 extension RootSplitViewController {
     /// Applies CHALK_AUDIT_STATE after first layout. States: tabs1 tabs5 tabs12
-    /// tabs12to3 longtabs | promo-editor promo-library promo-outline promo-panel
-    /// promo-tex |
+    /// tabs12to3 longtabs | promo-editor promo-library promo-outline
+    /// promo-file |
     /// sidebar-deep sidebar-empty | tabs6-sidebar | preview | quickopen
     /// quickopen-long outline fsoutline fstabs5 | settings | empty | stressdoc
     /// | scale06 scale25 | narrow
@@ -2713,17 +2713,33 @@ extension RootSplitViewController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
                     cmdToggleOutline()
                 }
-            case "promo-panel":
+            // README screenshots (scripts/screenshots/capture-mac.sh): one file, plus an optional
+            // Library folder, outline panel and window size, all from the environment.
+            case "promo-file":
+                let env = ProcessInfo.processInfo.environment
+                guard let path = env["CHALK_AUDIT_FILE"] else { break }
                 editor.closeAllTabsForAudit()
-                editor.open(url: AuditMode.seedPromoContent()
-                    .appendingPathComponent("Panel bias/estimator-bias.md"))
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
-                    cmdToggleOutlinePanel()
+                if let folder = env["CHALK_AUDIT_LIBRARY"] {
+                    locationStore.add(url: URL(fileURLWithPath: folder, isDirectory: true))
+                    sidebar.reload(); setSidebarVisible(true); sidebar.expandAll()
                 }
-            case "promo-tex":
-                editor.closeAllTabsForAudit()
-                editor.open(url: AuditMode.seedPromoContent()
-                    .appendingPathComponent("Panel bias/identification.tex"))
+                editor.open(url: URL(fileURLWithPath: path))
+                let size = (env["CHALK_AUDIT_SIZE"] ?? "").split(separator: "x").compactMap { Double($0) }
+                if size.count == 2, let scene = view.window?.windowScene {
+                    scene.requestGeometryUpdate(.Mac(systemFrame:
+                        CGRect(x: 80, y: 60, width: size[0], height: size[1])))
+                }
+                // Off line 1, so the heading there renders instead of showing its markup.
+                if let line = env["CHALK_AUDIT_LINE"].flatMap(Int.init) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+                        editor.revealLine(line)
+                    }
+                }
+                if env["CHALK_AUDIT_OUTLINE"] != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+                        cmdToggleOutlinePanel()
+                    }
+                }
             case "sidebar-deep":
                 locationStore.add(url: fixtures.appendingPathComponent("deep"))
                 sidebar.reload(); setSidebarVisible(true); sidebar.expandAll()

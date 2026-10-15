@@ -40,4 +40,6 @@ Check [docs/known-failing-tests.md](docs/known-failing-tests.md) before you chas
 - Add or update tests with the change. Do not delete or loosen an assertion to make a suite pass; if a failure is accepted, record it in `docs/known-failing-tests.md` or the runner's `KNOWN_FAILURES` file with a reason.
 - A visual change that moves a snapshot in `Tests/__Snapshots__` needs a re-recorded baseline (`node Tests/runner/snapshots.mjs --record`) and a sentence explaining why it changed.
 
+If a change alters what the README shows, retake its images: `scripts/screenshots/capture-mac.sh` (Mac screenshots of the files in `docs/showcase/`; it takes over the screen for about a minute) and `node scripts/screenshots/record-gifs.mjs` (the GIFs, headless).
+
 By contributing, you agree that your contribution is licensed under the [MIT License](LICENSE).

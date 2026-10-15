@@ -1,0 +1,35 @@
+
+\begin{frame}{The setup}{what we estimate}
+    \begin{itemize}
+        \item data $y \in \mathbb{R}^n$, regressors $X \in \mathbb{R}^{n \times k}$
+        \item model $y = X\beta + \varepsilon$
+    \end{itemize}
+    \[ \hat\beta = \arg\min_b \|y - Xb\|^2 = (X^\top X)^{-1} X^\top y \]
+
+    \begin{block}{Takeaway}
+        the fit is the projection of $y$ onto $\operatorname{col}(X)$
+    \end{block}
+\end{frame}
+
+\begin{frame}{The key result}
+\begin{theorem}[Gauss--Markov]
+Under homoskedasticity, $\hat\beta$ has the smallest variance among linear
+unbiased estimators.
+\end{theorem}
+
+\begin{alertblock}{Caveat}
+    drop homoskedasticity and GLS takes over
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Three consequences}
+    \begin{enumerate}
+        \item the residuals are orthogonal to every regressor
+        \item $P = X(X^\top X)^{-1} X^\top$ is idempotent
+        \item with an intercept, $\sum_i e_i = 0$
+    \end{enumerate}
+
+    \begin{exampleblock}{Example}
+        with one regressor, $\hat\beta_1 = \widehat{\operatorname{Cov}}(x, y) / \widehat{\operatorname{Var}}(x)$
+    \end{exampleblock}
+\end{frame}

@@ -2,9 +2,8 @@
 
 Chalk is a live-preview editor for `.tex` and `.md` files.
 Math renders in place with KaTeX while you type, and HyperSnips-style snippets (hsnips) expand as you write.
-Your files stay plain text: Chalk only changes how they look while you edit them.
 
-![Chalk for Mac, with the Library sidebar and a Markdown note full of math](docs/images/mac-library.png)
+![Chalk for Mac: a Markdown note with a theorem, a proof, numbered equations, cross-references and a callout](docs/images/mac-hero.png)
 
 It comes in two forms, built on one editor engine:
 
@@ -16,16 +15,33 @@ It comes in two forms, built on one editor engine:
 ![Typing in Chalk: each formula renders as soon as the cursor leaves it](docs/images/live-preview.gif)
 
 - **Live math.** Inline and display math render with KaTeX as soon as the cursor leaves them. Move back in and you edit the source.
-- **LaTeX that reads like the PDF.** Sections, theorem and proof environments, numbered `equation` and `align` blocks, and lists render in place.
-- **Markdown and Quarto.** Headings, lists, tables, callouts, images and Mermaid diagrams.
+- **LaTeX that reads like the PDF.** Sections, theorem and proof environments, numbered `equation` and `align` blocks, lists and figures render in place.
+- **Cross-references.** `\label`/`\eqref` in LaTeX and Quarto's `{#eq-…}`/`@eq-…` in Markdown, with equations and theorems numbered as you write.
+- **Beamer.** Each frame shows as a slide card, with blocks and theorems inside.
+- **Markdown and Quarto.** Headings, lists, tables, callouts, theorem blocks, images and Mermaid diagrams.
 - **Snippets.** HyperSnips-style snippets for fast math typing, with a default set included.
 - **Three view modes.** Preview, mixed, or plain source.
 - **Writing modes.** Zen, typewriter and focus.
 - **Colour themes.** Atom (the default), Ink, Catppuccin and LaTeX, each in light and dark.
 
-| LaTeX | Outline panel |
+### Snippets
+
+![Typing dm, lim, ooo, 1/, sum and ;m expands to a full align block](docs/images/snippets.gif)
+
+Short triggers expand as you type: `dm` opens an `align` block, `lim` gives `\lim_{n \to \infty}`, `1/` starts a fraction, `;m` is `\mu`, and Tab jumps to the next field.
+The default set covers Greek letters, operators, accents and environments, and you can add your own.
+
+### LaTeX and Beamer
+
+| LaTeX, with the outline panel | Beamer |
 | --- | --- |
-| ![A .tex file with a theorem, a proof and numbered equations](docs/images/mac-tex.png) | ![The outline panel next to a Markdown note](docs/images/mac-outline.png) |
+| ![A .tex file with a theorem, a proof, numbered equations and the outline panel](docs/images/mac-tex.png) | ![A Beamer deck shown as slide cards](docs/images/mac-beamer.png) |
+
+### Mixed view
+
+Mixed view keeps the markup visible but dimmed, while math, images and tables still render.
+
+![The same Markdown note in mixed view](docs/images/mac-mixed.png)
 
 ### In VS Code
 
@@ -100,14 +116,14 @@ To debug it, open the repo in VS Code and run the "Run Chalk Extension" launch c
 
 ## Tests
 
-| Command | What it runs |
-| --- | --- |
-| `scripts/check.sh` | everything below plus the Xcode suites and benchmarks; `--fast` skips the slow parts, `--list` names every step |
-| `pnpm test` | the editor-core and extension unit tests (vitest, jsdom) |
-| `pnpm typecheck` | TypeScript across the workspace |
-| `pnpm test:swift` | the ChalkKit Swift package tests, from the command line |
-| `pnpm test:browser` | browser scenarios over the built editor (Playwright, Chromium) |
-| `pnpm test:caret` | caret and mouse fixtures in `Tests/fixtures` |
+| Command             | What it runs                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `scripts/check.sh`  | everything below plus the Xcode suites and benchmarks; `--fast` skips the slow parts, `--list` names every step |
+| `pnpm test`         | the editor-core and extension unit tests (vitest, jsdom)                                                        |
+| `pnpm typecheck`    | TypeScript across the workspace                                                                                 |
+| `pnpm test:swift`   | the ChalkKit Swift package tests, from the command line                                                         |
+| `pnpm test:browser` | browser scenarios over the built editor (Playwright, Chromium)                                                  |
+| `pnpm test:caret`   | caret and mouse fixtures in `Tests/fixtures`                                                                    |
 
 The browser runners need Playwright's browsers once: `npx playwright install chromium webkit`.
 
