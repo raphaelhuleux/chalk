@@ -4,6 +4,7 @@
 #
 #   ./scripts/screenshots/capture-mac.sh              # build Debug, capture every shot
 #   ./scripts/screenshots/capture-mac.sh --no-build   # reuse the last Debug build
+#   ./scripts/screenshots/capture-mac.sh --no-build mac-beamer   # only the named shots
 #
 # Drives the Debug app (bundle ID com.huleux.chalk.debug, so the installed app's
 # settings are never touched) through the DEBUG-only `promo-file` audit state,
@@ -25,7 +26,10 @@ WIDTH=1600 # README images are shown at most ~900px wide; 1600 keeps them sharp 
 
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 
-if [[ "${1:-}" != --no-build ]]; then
+BUILD=1
+if [[ "${1:-}" == --no-build ]]; then BUILD=0; shift; fi
+ONLY=" $* "
+if [[ "$BUILD" == 1 ]]; then
   (cd "$ROOT/mac" && xcodegen generate --quiet)
   xcodebuild build -project "$ROOT/mac/Chalk.xcodeproj" -scheme Chalk -configuration Debug \
     -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64' \
@@ -45,6 +49,7 @@ quit_app() {
 # shot NAME FILE [ENV=VALUE ...] -- [launch arguments]
 shot() {
   local name="$1" file="$2"; shift 2
+  [[ "$ONLY" == "  " || "$ONLY" == *" $name "* ]] || return 0
   local envs=(--env CHALK_AUDIT_STATE=promo-file --env "CHALK_AUDIT_FILE=$file")
   while [[ $# -gt 0 && "$1" != -- ]]; do envs+=(--env "$1"); shift; done
   [[ "${1:-}" == -- ]] && shift
@@ -80,3 +85,4 @@ shot mac-hero   "$SHOW/least-squares.md"  CHALK_AUDIT_LIBRARY="$SHOW" CHALK_AUDI
 shot mac-mixed  "$SHOW/least-squares.md"  CHALK_AUDIT_SIZE=1100x900 CHALK_AUDIT_LINE=2 -- -chalk.viewMode mixed
 shot mac-tex    "$SHOW/least-squares.tex" CHALK_AUDIT_OUTLINE=1 CHALK_AUDIT_SIZE=1280x900 CHALK_AUDIT_LINE=3
 shot mac-beamer "$SHOW/slides.tex"        CHALK_AUDIT_SIZE=1100x900
+shot mac-mermaid "$SHOW/instruments.md"   CHALK_AUDIT_SIZE=1100x820 CHALK_AUDIT_LINE=2

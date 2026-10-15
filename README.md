@@ -31,11 +31,24 @@ It comes in two forms, built on one editor engine:
 Short triggers expand as you type: `dm` opens an `align` block, `lim` gives `\lim_{n \to \infty}`, `1/` starts a fraction, `;m` is `\mu`, and Tab jumps to the next field.
 The default set covers Greek letters, operators, accents and environments, and you can add your own.
 
-### LaTeX and Beamer
+### LaTeX
 
-| LaTeX, with the outline panel | Beamer |
-| --- | --- |
-| ![A .tex file with a theorem, a proof, numbered equations and the outline panel](docs/images/mac-tex.png) | ![A Beamer deck shown as slide cards](docs/images/mac-beamer.png) |
+Theorem-like environments become cards, `equation` and `align` blocks are numbered, and `\eqref` points at them.
+The outline panel lists sections and environments, with a word count.
+
+![A .tex file with a theorem, a proof, numbered equations and the outline panel](docs/images/mac-tex.png)
+
+### Beamer
+
+Each `frame` becomes a numbered slide card with its title, and `block`, `alertblock`, `exampleblock` and theorems render inside it.
+
+![A Beamer deck shown as slide cards](docs/images/mac-beamer.png)
+
+### Mermaid diagrams
+
+A `mermaid` code block keeps its source and draws the diagram under it.
+
+![A Markdown note with a Mermaid flowchart rendered under its source](docs/images/mac-mermaid.png)
 
 ### Mixed view
 
