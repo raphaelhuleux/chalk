@@ -6,7 +6,13 @@
 #   ./scripts/install-mac.sh               # Release, install, launch, verify
 #   ./scripts/install-mac.sh --no-launch
 #   ./scripts/install-mac.sh --config Debug
+#   ./scripts/install-mac.sh --appkit      # the AppKit shell (ChalkMac) instead of Mac Catalyst
 #   DEST=/Applications/Chalk.app ./scripts/install-mac.sh   # override the default ~/Applications/Chalk.app
+#
+# --appkit installs the AppKit shell from docs/specs/2026-10-15-appkit-shell-rewrite-plan.md.
+# Until cutover it carries its own bundle ID (com.huleux.chalk.mac), so it does
+# not see the Catalyst app's settings or Library, and the previous app is kept
+# as the rollback copy like any other install.
 #
 # This is the local path, and it is ad-hoc signed: no Developer Program, no
 # provisioning profile, nothing that expires. To hand a build to someone else
@@ -26,14 +32,40 @@ DEST="${DEST:-$HOME/Applications/Chalk.app}"
 DD="${DD:-$ROOT/mac/build/dd}"        # shared with scripts/check.sh; gitignored
 PREV=""                               # the rollback copy, named after DEST below
 LAUNCH=1
+SHELL_KIND=catalyst
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-launch) LAUNCH=0; shift ;;
     --config) CONFIG="${2:?--config needs Debug or Release}"; shift 2 ;;
+    --appkit) SHELL_KIND=appkit; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+# What differs between the two shells: scheme, destination, product folder,
+# binary name, bundle ID, and whether a glue bundle must be present and loaded.
+case "$SHELL_KIND" in
+  catalyst)
+    SCHEME=Chalk
+    DESTINATION='platform=macOS,variant=Mac Catalyst'
+    PRODUCT_DIR="$CONFIG-maccatalyst"
+    PRODUCT=Chalk.app
+    BINARY=Chalk
+    BUNDLE_ID=com.huleux.chalk
+    HAS_GLUE=1
+    ;;
+  appkit)
+    SCHEME=ChalkMac
+    DESTINATION='platform=macOS'
+    PRODUCT_DIR="$CONFIG"
+    PRODUCT=ChalkMac.app
+    BINARY=ChalkMac
+    BUNDLE_ID=com.huleux.chalk.mac
+    HAS_GLUE=0
+    ;;
+esac
+[[ "$CONFIG" == Debug ]] && BUNDLE_ID="$BUNDLE_ID.debug"
 
 PREV="$ROOT/mac/build/$(basename "$DEST").prev"
 
@@ -59,11 +91,14 @@ step "Quitting Chalk"
 # Anchored at DEST, not at any Chalk: a run with DEST pointing somewhere else
 # has no business killing the copy you are working in.
 DEST_RE="$(printf '%s' "$DEST" | sed 's/[][\\.^$*+?(){}|]/\\&/g')"
-RUNNING="^$DEST_RE/Contents/MacOS/Chalk"
+RUNNING="^$DEST_RE/Contents/MacOS/"
 if pgrep -qf "$RUNNING"; then
   # `tell application id ... to quit` would LAUNCH it if it were not running,
-  # which is why this is inside the pgrep guard.
-  osascript -e 'tell application id "com.huleux.chalk" to quit' >/dev/null 2>&1 || true
+  # which is why this is inside the pgrep guard. The installed copy may be the
+  # other shell, so both IDs are asked.
+  for id in com.huleux.chalk com.huleux.chalk.mac; do
+    osascript -e "tell application id \"$id\" to quit" >/dev/null 2>&1 || true
+  done
   for _ in $(seq 1 20); do
     pgrep -qf "$RUNNING" || break
     sleep 0.5
@@ -85,20 +120,20 @@ step "xcodegen"
 # CODE_SIGNING_ALLOWED=NO is required, not a shortcut. The target uses
 # Automatic signing with no team set, so a signed build dies with "requires a
 # development team". Unsigned here, ad-hoc signed in step 4.
-step "Building ($CONFIG, Mac Catalyst)"
+step "Building ($CONFIG, $SHELL_KIND)"
 echo "  a cold build is ~15 min; an incremental one is under a minute."
 xcodebuild \
   -project "$ROOT/mac/Chalk.xcodeproj" \
-  -scheme Chalk \
+  -scheme "$SCHEME" \
   -configuration "$CONFIG" \
-  -destination 'platform=macOS,variant=Mac Catalyst' \
+  -destination "$DESTINATION" \
   -derivedDataPath "$DD" \
   CODE_SIGNING_ALLOWED=NO \
   CHALK_GIT_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
   -quiet \
   build
 
-APP="$DD/Build/Products/$CONFIG-maccatalyst/Chalk.app"
+APP="$DD/Build/Products/$PRODUCT_DIR/$PRODUCT"
 [[ -d "$APP" ]] || die "the build reported success but there is no app at $APP"
 
 # --- 3. audit the product ---------------------------------------------------
@@ -109,8 +144,13 @@ step "Auditing the build"
 fail=0
 check() { if eval "$2"; then echo "  ok    $1"; else echo "  FAIL  $1"; fail=1; fi; }
 
-check "the AppKit glue is in Contents/PlugIns" \
-      "[ -d '$APP/Contents/PlugIns/ChalkAppKitGlue.bundle' ]"
+if [[ "$HAS_GLUE" == 1 ]]; then
+  check "the AppKit glue is in Contents/PlugIns" \
+        "[ -d '$APP/Contents/PlugIns/ChalkAppKitGlue.bundle' ]"
+else
+  check "no glue bundle shipped (the AppKit shell draws its own strip)" \
+        "! find '$APP' -name 'ChalkAppKitGlue.bundle' | grep -q ."
+fi
 check "the editor bundle is present and non-trivial" \
       "[ \$(stat -f%z '$APP/Contents/Resources/editor/editor.html') -gt 200 ]"
 if [[ "$CONFIG" == Release ]]; then
@@ -123,7 +163,7 @@ if [[ "$CONFIG" == Release ]]; then
   check "no debug dylibs" \
         "! find '$APP' -name '*.debug.dylib' -o -name '__preview.dylib' | grep -q ."
   check "the binary is universal" \
-        "lipo -archs '$APP/Contents/MacOS/Chalk' | grep -q x86_64 && lipo -archs '$APP/Contents/MacOS/Chalk' | grep -q arm64"
+        "lipo -archs '$APP/Contents/MacOS/$BINARY' | grep -q x86_64 && lipo -archs '$APP/Contents/MacOS/$BINARY' | grep -q arm64"
 fi
 [[ "$fail" -eq 0 ]] || die "the build audit failed; not installing this."
 
@@ -139,6 +179,8 @@ fi
 # kills the WKWebView content process, so the editor page never runs and never
 # signals `ready`: a blank editor with nothing in any log. A real signature
 # does not help (docs/issues/2026-08-19-sandbox-crash-loops-the-webview.md).
+# The AppKit shell is the same: its entitlements file carries the sandbox too,
+# and an unsandboxed ad-hoc build is what its Debug smoke runs use.
 step "Signing (ad-hoc, inside out)"
 # Every kind of nested code, not just the glue: a Debug build embeds
 # ChalkTests.xctest here too, and one unsigned nested bundle fails the verify
@@ -191,25 +233,34 @@ if [[ $LAUNCH -eq 1 ]]; then
   open -a "$DEST"
   PID=""
   for _ in $(seq 1 20); do
-    PID="$(pgrep -f "$(basename "$DEST")/Contents/MacOS/Chalk" | head -1 || true)"
+    PID="$(pgrep -f "$(basename "$DEST")/Contents/MacOS/$BINARY" | head -1 || true)"
     [[ -n "$PID" ]] && break
     sleep 0.5
   done
   [[ -n "$PID" ]] || die "the app did not stay running. Check Console.app for a
        crash report under Chalk."
   echo "  running, pid $PID"
-  for _ in $(seq 1 10); do
-    if lsof -p "$PID" 2>/dev/null | grep -qi 'ChalkAppKitGlue'; then
-      echo "  AppKit glue loaded (real title-bar strip, not the UIKit fallback)."
-      break
-    fi
-    sleep 0.5
-  done
-  lsof -p "$PID" 2>/dev/null | grep -qi 'ChalkAppKitGlue' || cat >&2 <<'WARN'
+  if [[ "$HAS_GLUE" == 1 ]]; then
+    for _ in $(seq 1 10); do
+      if lsof -p "$PID" 2>/dev/null | grep -qi 'ChalkAppKitGlue'; then
+        echo "  AppKit glue loaded (real title-bar strip, not the UIKit fallback)."
+        break
+      fi
+      sleep 0.5
+    done
+    lsof -p "$PID" 2>/dev/null | grep -qi 'ChalkAppKitGlue' || cat >&2 <<'WARN'
 warning: the glue bundle is NOT loaded, so this app is running its UIKit tab
          fallback: no AppKit title-bar strip and the editor geometry is wrong.
          Check the glue's signature before you touch any layout code.
 WARN
+  else
+    # The AppKit shell has no glue to lose; a window on screen is the check.
+    sleep 2
+    pgrep -qf "$(basename "$DEST")/Contents/MacOS/$BINARY" \
+      || die "the app quit within two seconds of launching. Check Console.app
+       for a crash report under $BINARY."
+    echo "  still running after two seconds ($BUNDLE_ID)."
+  fi
 fi
 
 step "Done"

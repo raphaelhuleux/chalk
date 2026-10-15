@@ -1,8 +1,11 @@
 # Chalk (monorepo)
 
 Live-preview editor for `.tex`/`.md` with KaTeX math and hsnips snippets.
-Native Mac app in [mac/](mac/) (UIKit through Mac Catalyst), VS Code
-extension in [vscode/](vscode/), shared engine in
+Native Mac app in [mac/](mac/): the AppKit shell `ChalkMac`
+([mac/ChalkMac/](mac/ChalkMac/)), with the older Mac Catalyst target `Chalk`
+([mac/Chalk/](mac/Chalk/)) kept intact until the cutover in
+[docs/specs/2026-10-15-appkit-shell-rewrite-plan.md](docs/specs/2026-10-15-appkit-shell-rewrite-plan.md).
+VS Code extension in [vscode/](vscode/), shared engine in
 [packages/editor-core/](packages/editor-core/).
 
 The Mac shell is being rewritten in AppKit as the `ChalkMac` target
@@ -24,12 +27,13 @@ shell's `ChalkMetrics` scales them.
   persistent panel, `command` save/toggle-outline/toggle-outline-panel) and the
   `window.__chalkEditor` bridge (clipboard, outline access, and
   `setOutlineSubscription`, which turns the `outline` pushes on and off),
-  mirrored in [WebEditorSurface.swift](mac/Chalk/Editor/WebEditorSurface.swift).
+  mirrored in [WebEditorSurface.swift](mac/ChalkMac/Editor/WebEditorSurface.swift)
+  (and its Catalyst twin under `mac/Chalk/Editor/`).
   - Native transport: `WKScriptMessageHandler` / `evaluateJavaScript`
-    ([web/src/native-host.ts](web/src/native-host.ts) ↔ [mac/Chalk/Editor/WebEditorSurface.swift](mac/Chalk/Editor/WebEditorSurface.swift)).
+    ([web/src/native-host.ts](web/src/native-host.ts) ↔ [mac/ChalkMac/Editor/WebEditorSurface.swift](mac/ChalkMac/Editor/WebEditorSurface.swift)).
     Swift `Codable` mirrors: [mac/ChalkKit/Sources/ChalkKit/HostProtocol.swift](mac/ChalkKit/Sources/ChalkKit/HostProtocol.swift).
   - VS Code transport: webview postMessage ([vscode/src/webview-entry.ts](vscode/src/webview-entry.ts)).
-- **`EditorSurface`** ([mac/Chalk/Editor/EditorSurface.swift](mac/Chalk/Editor/EditorSurface.swift)):
+- **`EditorSurface`** ([mac/ChalkMac/Editor/EditorSurface.swift](mac/ChalkMac/Editor/EditorSurface.swift)):
   the native shell's swap seam so a TextKit 2 surface could one day replace
   the webview without touching tabs/documents.
 
@@ -41,14 +45,16 @@ for engine guardrails before touching editor code.
 
 | Part | Tool | Commands |
 |---|---|---|
-| mac/ | XcodeGen + xcodebuild | `cd mac && xcodegen generate`, then scheme `Chalk` with destination `platform=macOS,variant=Mac Catalyst`; `mac/Chalk.xcodeproj` + `Info.plist` are generated — edit [mac/project.yml](mac/project.yml) |
+| mac/ | XcodeGen + xcodebuild | `cd mac && xcodegen generate`, then scheme `ChalkMac` with destination `platform=macOS` (the Catalyst target: scheme `Chalk`, `platform=macOS,variant=Mac Catalyst`); `mac/Chalk.xcodeproj` + the `Info.plist`s are generated — edit [mac/project.yml](mac/project.yml) |
 | packages/, vscode/, web/ | one pnpm workspace, one lockfile | `pnpm install`, `pnpm test`, `pnpm typecheck` (includes `web/`), `pnpm -C vscode build`, `pnpm web:build` |
 
-`Chalk` is the only scheme; it builds the app and tests the `ChalkTests`
-bundle on Mac Catalyst. Local builds are unsigned and then ad-hoc signed
-([scripts/install-mac.sh](scripts/install-mac.sh)); the project sets no
-development team. [scripts/release-mac.sh](scripts/release-mac.sh) is the
-signed release path ([docs/release-steps.md](docs/release-steps.md)).
+`ChalkMac` builds the AppKit app and tests the `ChalkMacTests` bundle;
+`Chalk` builds the Catalyst app and tests `ChalkTests`. Local builds are
+unsigned and then ad-hoc signed ([scripts/install-mac.sh](scripts/install-mac.sh),
+`--appkit` for the AppKit shell); the project sets no development team.
+[scripts/release-mac.sh](scripts/release-mac.sh) is the signed release path
+([docs/release-steps.md](docs/release-steps.md)). Rerun `xcodegen generate`
+after adding a Swift file: sources are globbed at generation time.
 
 `web/` depends on `@chalk/editor-core` via `workspace:*`, and esbuild bundles
 the package's TypeScript source through its `exports`. The Xcode pre-build
@@ -66,18 +72,20 @@ caret/reveal discovery matrix, `pnpm test:matrix:geo`), `Tests/__Snapshots__`
 runners plus the shared `lib/browser.mjs` engine-lane bootstrap, chromium or
 webkit via `CHALK_BROWSER`, and `lib/known-failures.mjs` tagged
 accepted-failure format). jsdom unit tests stay beside their package, in
-`packages/editor-core/test/`; Swift tests stay in `mac/`.
+`packages/editor-core/test/`; Swift tests stay in `mac/` (`mac/ChalkMacTests`
+for the AppKit shell, `mac/ChalkTests` for Catalyst).
 
 [scripts/check.sh](scripts/check.sh) runs the lot. Its `--list` names every
-step: build-web, typecheck, xcodegen, build-mac, build-mac-appkit, invariants-doc,
-engine-tests, chalkkit-tests, caret-fixtures, browser-tests,
+step: build-web, typecheck, xcodegen, build-mac, build-catalyst,
+invariants-doc, engine-tests, chalkkit-tests, caret-fixtures, browser-tests,
 geometric-matrix, snapshots, pref-guard, ui-invariants, mac-tests, bench.
+The Xcode test steps run `ChalkMacTests`; `build-catalyst` only builds.
 `--fast` skips the three Xcode test steps and the benchmarks.
-Debug builds, and so the ChalkTests host, use the bundle ID
-`com.huleux.chalk.debug`: tests write `UserDefaults.standard`, and must never
-share a domain with the installed Release app (`com.huleux.chalk`). It parses each
-runner's output with a fixed extractor, so a runner that changes its failure
-lines must change the extractor with it.
+Debug builds, and so the ChalkMacTests host, use the bundle ID
+`com.huleux.chalk.mac.debug` (Catalyst: `com.huleux.chalk.debug`): tests write
+`UserDefaults.standard`, and must never share a domain with an installed
+Release app. It parses each runner's output with a fixed extractor, so a
+runner that changes its failure lines must change the extractor with it.
 
 ChalkKit ([mac/ChalkKit/](mac/ChalkKit/)) is pure Foundation — no UIKit —
 so `swift test` works from the command line without Xcode's test runner
@@ -93,8 +101,8 @@ so `swift test` works from the command line without Xcode's test runner
   on touchscreen laptops.
 - **Chrome geometry is asserted, not eyeballed.** `ChromeInvariantMatrixTests`
   drives a 32-cell state matrix (window mode x sidebar x outline panel x
-  editing mode x appearance) on Mac Catalyst and checks named rules over the
-  chrome's real laid-out frames. Before changing the band, the Library panel,
+  editing mode x appearance) on the AppKit shell and checks named rules over
+  the chrome's real laid-out frames. Before changing the band, the Library panel,
   the tab strip or the editor's resting offset, read
   [docs/ui-correctness.md](docs/ui-correctness.md) — it lists the traps that
   make this class of test silently vacuous (unhosted roots, persisted

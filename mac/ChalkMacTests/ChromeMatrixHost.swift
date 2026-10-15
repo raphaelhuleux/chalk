@@ -47,7 +47,16 @@ final class ChromeMatrixHost {
     private let incomingOutlinePanelWidthRaw: Any?
     private static let outlinePanelWidthKey = "chalk.outlinePanelWidth.appkit"
 
+    /// One folder with one file, so every Library-open cell has a first area
+    /// header to measure: `libraryListStartsAtTheChromeFloor` is evidence only
+    /// against a measured header, and a detached root's Library is empty.
+    private let libraryFolder: URL
+
     init() {
+        libraryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chalk-matrix-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: libraryFolder, withIntermediateDirectories: true)
+        try? Data("# note\n".utf8).write(to: libraryFolder.appendingPathComponent("note.md"))
         incomingEditingMode = Preferences.editingMode
         incomingSidebarWidthRaw = UserDefaults.standard.object(forKey: Self.sidebarWidthKey)
         incomingOutlinePanelWidthRaw = UserDefaults.standard.object(forKey: Self.outlinePanelWidthKey)
@@ -71,6 +80,7 @@ final class ChromeMatrixHost {
         }
         window.isHidden = true
         window.rootViewController = nil
+        try? FileManager.default.removeItem(at: libraryFolder)
     }
 
     /// Windowed and fullscreen differ in size here; the size is not enough
@@ -102,11 +112,7 @@ final class ChromeMatrixHost {
         Preferences.editingMode = .normal
 
         let root = RootSplitViewController()
-        // A test root must not take part in the AppKit strip bridge: it can
-        // steal the live scene's bind and then toggle the REAL test-runner
-        // window's toolbar mid-suite (see the seam's comment). Set before
-        // the view loads so no bridge observer ever acts.
-                // Construction is placement, not motion (docs/motion.md: at rest,
+        // Construction is placement, not motion (docs/motion.md: at rest,
         // nothing animates). Zen's chrome now FADES on the animated lane
         // (C3), so a zen cell built on `.system` would return mid-fade — the
         // band not yet hidden, the fresh-layout cache poisoned. Drive the
@@ -119,6 +125,7 @@ final class ChromeMatrixHost {
         window.rootViewController = root
         root.loadViewIfNeeded()
         root.view.appearance = NSAppearance(named: state.appearance == .dark ? .darkAqua : .aqua)
+        root.setLibraryLocationsForTesting([libraryFolder])
         root.setSidebarVisible(state.sidebar == .shown)
         window.frame = CGRect(origin: .zero, size: Self.size(for: state))
         window.layoutIfNeeded()

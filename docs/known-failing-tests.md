@@ -2,12 +2,19 @@
 
 Pre-existing failures on `main`, first baselined 2026-08-14 and re-verified 2026-09-28.
 They are not regressions of in-flight work; check this list before chasing a red suite.
+Since 2026-10-15 `scripts/check.sh` runs the AppKit shell's `ChalkMacTests`, which has no accepted failures; the two rows below belong to the Catalyst `ChalkTests` suite, which `check.sh` only builds until cutover.
 To re-attribute a failure, run the suite in a HEAD worktree (`git worktree add … HEAD`); never `git stash` (concurrent sessions share this tree).
 
 | Test | Suite / runner | Cause |
 | --- | --- | --- |
 | `SidebarFileOperationsTests.testUndoRestoresATrashedFile` | ChalkTests, Mac Catalyst | Recorded 2026-08-23: undo after trashing `draft.tex` does not restore the file (`NSCocoaErrorDomain 260` on reopen). Suspected environment-sensitive `NSFileManager.trashItem`/undo behavior on the macOS 15 host rather than app code (the last app-side change to the trash path predates a green run on 2026-08-20). Needs triage on its own terms. The same test passes on the AppKit port (`ChalkMacTests`, 2026-10-15), where `trashItem` returns the trashed URL. |
 | `TabSwitchContractTests.testSwitchKeepsBothSurfacesHostedThenExactlyOne` | ChalkTests, Mac Catalyst, intermittent | Waits a fixed 0.35s for the tab-switch fade, so it fails when another build loads the machine and passes alone. Re-verified 2026-09-28. Fix: wait on the condition instead of a fixed delay. |
+
+## 2026-10-15: the 16 web snapshots differ from their baselines on this machine
+
+`Tests/runner/snapshots.mjs` compares PNGs byte for byte, and every one of the 16 cases fails here, on `main` as on `appkit-shell`, with byte-identical actual images from both.
+The baselines show KaTeX math set in a serif fallback font; the actual images show the real KaTeX fonts, so the rendering that differs is the fonts the headless Chromium can load, not the editor.
+Not re-recorded: the runner says never to re-record to make the step pass, and whether the baseline or the environment is the one to fix is the owner's call.
 
 ## 2026-08-26: an intermittent in the editor-core vitest suite, ~1 run in 4
 
@@ -92,7 +99,7 @@ Resolved:
 ## 2026-08-23: a leaked preference looks like a broad failure
 
 An interrupted run once leaked `chalk.editingMode = zen` into the app's preferences, so the app under test launched with no band and no Library, and many unrelated suites went red at once.
-That is exactly the state `PreferencePollutionGuardTests` exists to name, which is why `scripts/check.sh` runs the `pref-guard` step first.
+That is exactly the state `PreferencePollutionGuardTests` exists to name, which is why `scripts/check.sh` runs the `pref-guard` step first (the AppKit shell's Debug domain is `com.huleux.chalk.mac.debug`).
 When the Xcode suites go broadly red, read the pref-guard step before anything else.
 
 Update this file when a baseline failure is fixed or a new one is accepted.

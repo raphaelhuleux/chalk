@@ -65,7 +65,7 @@ public struct ChromeInvariant: Sendable {
     // COVERAGE-DOC-BEGIN
     // ## Where each rule is actually asserted
     //
-    // `ChromeInvariantMatrixTests` walks all 32 cells of the state matrix on Mac Catalyst.
+    // `ChromeInvariantMatrixTests` walks all 32 cells of the state matrix on the AppKit shell (`ChalkMacTests`).
     // In each cell it asserts every rule that both APPLIES there and is FALSIFIABLE there.
     // A rule evaluated against absent geometry passes whatever the app did, so it is not counted as coverage and never reported as a pass.
     //
@@ -73,28 +73,24 @@ public struct ChromeInvariant: Sendable {
     //
     // EVERY cell asserts something falsifiable, and the blind-cell guard in the matrix test PASSES.
     // The utility pill stands in every state, so `pillRestsInTheCorner` is evidence everywhere rather than only where the pill happened to be showing.
+    // The matrix host seeds one Library folder, so every Library-open cell has a first area header for `libraryListStartsAtTheChromeFloor` to measure.
     //
     // Coverage is still not uniform, and the differences are structural.
     // The counts below are the ones the suite PRINTS (`ChromeInvariantMatrixTests falsifiable coverage`), read off a run rather than reasoned about.
+    // Windowed and full screen are the same chrome on the AppKit shell (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
     //
     // | Cells | Falsifiable rules | Why |
     // | --- | --- | --- |
-    // | full screen, normal, Library open, outline closed (2) | 15 of 19 | the row is the tab UI AND the strip decisions are recorded; the outline panel is closed |
-    // | full screen, normal, Library open, outline open (2) | 19 of 19 | as above, plus the four `outlinePanel*` rules: every rule in the catalogue is evidence here |
-    // | full screen, normal, Library closed, outline closed (2) | 11 of 19 | as above, minus the Library rules |
-    // | full screen, normal, Library closed, outline open (2) | 15 of 19 | as above, plus the four `outlinePanel*` rules |
-    // | windowed, normal, Library open, outline closed (2) | 10 of 19 | no UIKit row (the tabs are AppKit): the Library rules, the reserve, the pill, the content column and the four strip rules |
-    // | windowed, normal, Library open, outline open (2) | 13 of 19 | as above, plus THREE of the four `outlinePanel*` rules: with no UIKit band there is no paint, so `outlinePanelIsNeverPaintedOver` has nothing to be wrong about |
-    // | windowed, normal, Library closed, outline closed (2) | 8 of 19 | as above, minus the Library rules |
-    // | windowed, normal, Library closed, outline open (2) | 11 of 19 | as above, plus the same three `outlinePanel*` rules |
-    // | zen, outline closed (8) | 8 of 19 | resting reserve, pill, content column, window containment, plus the four strip rules |
-    // | zen, outline open (8) | 8 of 19 | zen forces the outline panel closed regardless of the request, so its three rules are never evidence here |
+    // | normal, Library open, outline open (4) | 15 of 19 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
+    // | normal, Library open, outline closed (4) | 11 of 19 | as above, minus the four `outlinePanel*` rules |
+    // | normal, Library closed, outline open (4) | 11 of 19 | as the first row, minus the three Library rules and the name row |
+    // | normal, Library closed, outline closed (4) | 7 of 19 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
+    // | zen, outline closed (8) | 4 of 19 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
+    // | zen, outline open (8) | 4 of 19 | zen forces the outline panel closed regardless of the request, so its four rules are never evidence here |
     //
-    // One gap this layer still cannot close, stated rather than averaged away: **the windowed tab row's PIXELS remain unasserted.**
-    // The tabs live in an AppKit `NSToolbar` inside `ChalkAppKitGlue`, a runtime-loaded bundle no test target links.
-    // What the `stripIs*`/`stripLeading*` rules assert is the app's half of that contract — the divider inset, visibility and fade the app DECIDED and posts to the glue (recorded at the post sites, before the scene-bound gate) — checked against `MacStripExpectation.forState`.
-    // Whether the glue draws what it was told is pinned only as pure functions by `TitlebarBandGeometryTests`; nothing asserts the drawn result.
-    // The same holds for the accent underline: `activeUnderlineTracksTheActiveName` sees the UIKit row (full screen), and the AppKit row's underline is pinned by ChalkKit's `ThemePalette` and `TabStripMetrics`, which the glue compiles in, not by this matrix.
+    // Four rules are never evidence on the AppKit shell: `stripLeadingTracksTheDivider`, `stripVisibilityMatchesTheState`, `stripFadeMatchesTheState` and `bandAndStripNeverBothCarryTheTabs`.
+    // They describe the Catalyst app's contract with its `ChalkAppKitGlue` toolbar strip (`macStrip`, recorded at the post sites and checked against `MacStripExpectation.forState`); the AppKit shell has no glue, its strip is the band's own row, and `macStrip` is nil.
+    // They retire with the glue at cutover.
     // COVERAGE-DOC-END
 
     /// Every rule the chrome must satisfy.

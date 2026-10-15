@@ -21,7 +21,7 @@ introduced it.
 
 | Command | Covers | Time |
 | --- | --- | --- |
-| `xcodebuild test -project mac/Chalk.xcodeproj -scheme Chalk -destination 'platform=macOS,variant=Mac Catalyst' -only-testing:ChalkTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 32 cells | seconds after build |
+| `xcodebuild test -project mac/Chalk.xcodeproj -scheme ChalkMac -destination 'platform=macOS' -only-testing:ChalkMacTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 32 cells | seconds after build |
 | `node scripts/generate-ui-invariants.mjs --check` | the docs match the catalogue | instant |
 | `./scripts/check.sh` | both of the above, plus everything else | minutes |
 
@@ -94,13 +94,13 @@ ChromeInvariant(
 4. **Prove it can fail.** Reintroduce the bug (or stub the predicate) and watch
    it go red on the right states. A rule nobody has seen fail is not evidence.
 5. **Regenerate the docs:** `node scripts/generate-ui-invariants.mjs`.
-6. Run the matrix on Mac Catalyst.
+6. Run the matrix.
 
 ### Rules must be relationships
 
-`band.minX == root.minX`, never `band.minX == 0`. Mac Catalyst scales the UIKit
-idiom to 77% and aligns to the pixel grid, and window sizes differ per cell, so
-an absolute assertion is either wrong somewhere or accidentally true.
+`band.minX == root.minX`, never `band.minX == 0`. Window sizes differ per cell
+and lengths align to the pixel grid, so an absolute assertion is either wrong
+somewhere or accidentally true.
 
 ## Add a state, or a new rect
 
@@ -119,10 +119,12 @@ an absolute assertion is either wrong somewhere or accidentally true.
 `ChalkMetrics` instead of reading the view, every rule over it would be a
 tautology that passes while the screen is wrong.
 
-**Window-host the root.** UIKit delivers the sidebar carve through the
-secondary column's safe area, and safe areas only resolve inside a real window.
-An unhosted root reports the chips at the window's raw leading edge no matter
-what the sidebar is doing — the suite passes while blind.
+**Window-host the root.** Layout only resolves inside a real window: an
+unhosted root reports zero frames for the band, the panel and the chips no
+matter what the sidebar is doing, and every rule over them reduces to a
+tautology — the suite passes while blind. `ChromeMatrixHost` also seeds one
+Library folder, because `libraryListStartsAtTheChromeFloor` needs a measured
+header and a detached root's Library is empty.
 
 **Reset persisted preferences per state.** `Preferences.editingMode` survives
 between states, and `applyZenChrome` early-returns when it already believes it is
@@ -147,14 +149,13 @@ That arithmetic is now the one pure `BandLayout.resolve`, applied by `RootSplitV
 
 Be honest about the edges; a system trusted past its limits is worse than none.
 
-- **The AppKit glue.** `ChalkAppKitGlue` is a runtime-loaded bundle no test target
-  links, so the Mac *windowed* tab strip cannot be asserted here. Its geometry
-  lives in `ChalkKit.TitlebarBandGeometry` and is unit-tested separately, and
-  since 2026-09-10 so does the rest of its vocabulary: `TabStripBridge` (the
-  bridge's notification names and userInfo keys), `TabStripPolicy`,
-  `TabStripMetrics`, `ChalkTheme` and `WindowRouting` are compiled into the
-  glue rather than mirrored into it, so what the AppKit strip runs is what
-  ChalkKit's tests exercise.
+- **The Catalyst glue's strip rules.** The four `strip*` rules
+  (`stripLeadingTracksTheDivider`, `stripVisibilityMatchesTheState`,
+  `stripFadeMatchesTheState`, `bandAndStripNeverBothCarryTheTabs`) describe
+  the contract between the Catalyst app and its `ChalkAppKitGlue` bundle. The
+  AppKit shell draws its tab strip in the content view, so the band rules see
+  it directly and `macStrip` is nil; those four rules are never evidence on
+  the AppKit shell and retire with the glue at cutover.
 - **Anything below the chrome.** Math, tables, code blocks and the writing
   surface are covered by the jsdom suite in `packages/editor-core/test` and by
   the browser harnesses, which all live in one tree beside the snapshots:
@@ -169,10 +170,10 @@ Be honest about the edges; a system trusted past its limits is worse than none.
   square corner where the panel curves. Three of the six original bugs were of
   that kind. The contact-sheet layer in the spec is the answer and is not built:
   `docs/specs/2026-08-19-ui-correctness-system-design.md`.
-- **The chrome reserve.** Nothing checks what actually reserves space at rest or
-  in zen, because `ChromeLayout` has no field distinguishing "the reserve" from
-  "the UIKit band frame". The reserving chrome is an AppKit titlebar the layout
-  cannot see.
+- **The system titlebar.** `reserveTop` is what `BandLayout.resolve` decided
+  from the measured titlebar; nothing asserts the titlebar's own drawn height
+  against it, so a titlebar that AppKit grows under a future toolbar style
+  would move the band without a rule noticing.
 
 ## File map
 
@@ -181,6 +182,7 @@ Be honest about the edges; a system trusted past its limits is worse than none.
 | `mac/ChalkKit/Sources/ChalkKit/UIState.swift` | the 32-cell matrix and its ids |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeLayout.swift` | the geometry, as a value |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeInvariants.swift` | the rules |
-| `mac/ChalkTests/ChromeInvariantMatrixTests.swift` | drives the matrix, asserts the rules |
-| `mac/Chalk/App/RootSplitViewController.swift` | `chromeLayout(for:)`, in its `#if DEBUG` block |
+| `mac/ChalkMacTests/ChromeInvariantMatrixTests.swift` | drives the matrix, asserts the rules |
+| `mac/ChalkMacTests/ChromeMatrixHost.swift` | hosts a root in a window, seeds a Library, settles the layout |
+| `mac/ChalkMac/App/RootSplitViewController.swift` | `chromeLayout(for:)`, in its `#if DEBUG` block |
 | `scripts/generate-ui-invariants.mjs` | renders the catalogue; `--check` fails on drift |
