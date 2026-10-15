@@ -1287,12 +1287,73 @@ final class RootSplitViewController: NSViewController {
         editor.setOutlinePanelVisible(show, animated: motionAllowed)
     }
 
+    /// The session the crash prompt and the Help screens read. Overridable so
+    /// NoticeBannerTests can drive a crashed launch without touching the real
+    /// preferences.
+    var alphaSessionForTesting: AlphaSession?
+    private var alpha: AlphaSession { alphaSessionForTesting ?? .shared }
+
+    // MARK: - The crash prompt
+
+    private weak var noticeBanner: NoticeBannerView?
+
+    /// Called once the window is on screen and settled. Shows the crash
+    /// prompt when the last session ended abnormally.
+    func presentAlphaNoticeIfNeeded() {
+        guard noticeBanner == nil else { return }
+        if alpha.claimCrashPrompt() {
+            showBanner(
+                message: "Chalk didn\u{2019}t shut down cleanly last time.",
+                primaryTitle: "Send a report",
+                onPrimary: { [weak self] in
+                    self?.alpha.recordCrashPromptOutcome(.sent)
+                    self?.cmdReportProblem()
+                },
+                onDecline: { [weak self] in
+                    self?.alpha.recordCrashPromptOutcome(.declined)
+                })
+        }
+    }
+
+    private func showBanner(message: String, primaryTitle: String?,
+                            onPrimary: @escaping () -> Void, onDecline: @escaping () -> Void) {
+        let banner = NoticeBannerView(
+            message: message,
+            primaryTitle: primaryTitle,
+            declineTitle: primaryTitle == nil ? "OK" : "No thanks",
+            onPrimary: onPrimary,
+            onDecline: onDecline)
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(banner)
+        NSLayoutConstraint.activate([
+            banner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            banner.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -ChalkMetrics.s(56)),
+            banner.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
+        ])
+        noticeBanner = banner
+
+        // Walking away is an answer, so the timeout routes through the same
+        // decline path the button does.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak banner] in
+            banner?.dismissByTimeout()
+        }
+    }
+
+    /// Help menu entry points, as sheets on this window.
     @objc func cmdReportProblem(_ sender: Any? = nil) {
-        Self.log.notice("Report a Problem is not in this build yet")
+        guard admitShellAction(#selector(cmdReportProblem(_:))) else { return }
+        presentAlphaScreen(ReportProblemViewController(alpha: alpha))
     }
 
     @objc func cmdPrivacy(_ sender: Any? = nil) {
-        Self.log.notice("Privacy is not in this build yet")
+        guard admitShellAction(#selector(cmdPrivacy(_:))) else { return }
+        presentAlphaScreen(PrivacyViewController(alpha: alpha))
+    }
+
+    private func presentAlphaScreen(_ screen: NSViewController) {
+        guard let window = view.window, window.attachedSheet == nil else { return }
+        hidePalettesForSheet()
+        HelpSheet.present(screen, over: window) { [weak self] in self?.returnFocusAfterDismiss() }
     }
 
     @objc func cmdNewFile(_ sender: Any? = nil) {
@@ -1325,8 +1386,10 @@ final class RootSplitViewController: NSViewController {
     @objc func cmdNextTab(_ sender: Any? = nil) { editor.nextTab() }
     @objc func cmdPrevTab(_ sender: Any? = nil) { editor.previousTab() }
 
+    /// ⌘,: the app's one Settings window, owned by the app delegate.
     @objc func cmdSettings(_ sender: Any? = nil) {
-        Self.log.notice("Settings is not in this build yet")
+        guard admitShellAction(#selector(cmdSettings(_:))) else { return }
+        (NSApp.delegate as? AppDelegate)?.showSettings()
     }
 
     @objc func cmdAddLocation(_ sender: Any? = nil) {
@@ -1430,6 +1493,9 @@ final class RootSplitViewController: NSViewController {
 
     func applyThemePreference() {
         let wanted = Preferences.themePreference.appearance
+        // A sheet was pinned at present time; a change made while one is up
+        // reaches it too, not just the window.
+        view.window?.attachedSheet?.appearance = wanted
         guard view.appearance?.name != wanted?.name
             || ChalkAppearance.theme != Preferences.colorTheme else {
             // Same override and theme (the Settings broadcast re-applies on
@@ -1788,6 +1854,7 @@ extension RootSplitViewController {
     /// The view the slide transforms; the editor must never be inside it.
     var sidebarColumnForTesting: NSView { sidebarColumn }
     var headerBarForTesting: NSView { headerBar }
+    var noticeBannerForTesting: NoticeBannerView? { noticeBanner }
     var sidebarResizeGripFrameForTesting: CGRect { sidebarResizeGrip.frame }
     var sidebarResizeGripIsHiddenForTesting: Bool { sidebarResizeGrip.isHidden }
     /// The chips' inset past the traffic lights, as last written.

@@ -16,13 +16,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   log show --last 5m --predicate 'subsystem == "com.huleux.chalk"'
     private static let log = Logger(subsystem: "com.huleux.chalk", category: "app")
 
+    /// The app's one Settings window, made on first use and kept.
+    private var settingsWindow: SettingsWindowController?
+
     func applicationWillFinishLaunching(_ notification: Notification) {
+        recordLaunch()
         NSApp.mainMenu = MainMenu.build()
+    }
+
+    /// Runs before any window: constructing `AlphaSession` reads and clears
+    /// the launch marker, which every later read depends on.
+    private func recordLaunch() {
+        let alpha = AlphaSession.shared
+        let verdict: Int
+        switch alpha.verdict {
+        case .firstLaunch: verdict = 0
+        case .clean: verdict = 1
+        case .abnormal: verdict = 2
+        }
+        Diagnostics.record(.launch, a: verdict)
+        // Corroboration only: a crash with no dirty buffers leaves no residue,
+        // so it cannot stand in for the marker.
+        let residue = RecoveryStore(directory: RecoveryStore.appDirectory).pendingCount()
+        if residue > 0 { Diagnostics.record(.recoveryResidueFound, a: residue) }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        AlphaSession.shared.markForeground()
+    }
+
+    /// An orderly exit. Anything that leaves the marker armed was a death nobody handled.
+    func applicationWillTerminate(_ notification: Notification) {
+        AlphaSession.shared.markClean()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.log.notice("launched; opening the first window")
         let controller = openNewWindow()
+        // The crash prompt, once the window is on screen and settled.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak controller] in
+            controller?.root.presentAlphaNoticeIfNeeded()
+        }
         #if DEBUG
         // A folder to show in the Library straight away, for screenshots
         // and manual checks before per-window Locations land (phase 6).
@@ -37,6 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "quick-open": controller.root.cmdQuickOpen(nil)
                 case "outline": controller.root.cmdToggleOutline(nil)
                 case "outline-panel": controller.root.cmdToggleOutlinePanel(nil)
+                case "settings": self.showSettings()
+                case "settings-shortcuts":
+                    self.showSettings()
+                    self.settingsWindow?.container.selectRailForTesting(section: 1, row: 1)
                 default: break
                 }
             }
@@ -60,4 +98,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func cmdNewWindow(_ sender: Any?) { openNewWindow() }
+
+    /// Focus the Settings window, making it only the first time: ⌘, must
+    /// never stack Settings windows.
+    func showSettings() {
+        let controller = settingsWindow ?? SettingsWindowController()
+        settingsWindow = controller
+        #if DEBUG
+        controller.container.openCommandTime = CACurrentMediaTime()
+        #endif
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// On the delegate too: with no editor window, the app menu's item still
+    /// resolves through the responder chain's end.
+    @objc func cmdSettings(_ sender: Any?) { showSettings() }
+
+    #if DEBUG
+    var settingsWindowForTesting: SettingsWindowController? { settingsWindow }
+    #endif
 }

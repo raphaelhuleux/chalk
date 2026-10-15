@@ -5,9 +5,14 @@ import Foundation
 public final class SnippetLibrary {
     public static let shared = SnippetLibrary()
 
-    public let store = UserSnippetStore()
+    public let store: UserSnippetStore
     private var cached: String?
     private var hasComposed = false
+
+    /// `store` defaults to the user's; tests pass one over their own defaults suite.
+    public init(store: UserSnippetStore = UserSnippetStore()) {
+        self.store = store
+    }
 
     /// The composed hsnips content, or nil when the bundled file is missing
     /// (the editor then just runs without snippets).

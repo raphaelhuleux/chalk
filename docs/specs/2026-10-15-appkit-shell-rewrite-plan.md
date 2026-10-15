@@ -331,6 +331,17 @@ Done 2026-10-15. 433 tests green on `ChalkMacTests` (one skipped). What the port
 
 Exit: `Settings*`, `Shortcut*`, `About*`, `ReportProblem*`, `HelpMenu*`, `HelpScreen*`, `NoticeBanner*`, `AlphaSession*` tests green.
 
+Done 2026-10-15. 496 tests green on `ChalkMacTests` (one skipped). What the port taught:
+
+- Settings is an `NSWindowController` the app delegate keeps, one per app: ⌘, focuses it, its frame is autosaved, and its window and any sheet on it carry `ThemePreference.appearance`, which the broadcast re-pins. Done, Esc and ⌘, from inside the window all close it; the container answers `cmdSettings` because the responder chain from the Settings window never reaches an editor root.
+- The General pane is cards of `SettingsRowView` (title, detail, trailing control) rather than a table: the row layout tests assert on the same real frames, and an `NSSlider` needs an explicit width the way a `UISlider` did.
+- The shortcuts table flattens its two sections into one `NSTableView` with automatic row heights; the replacement is a wrapping `NSTextField`, so Return commits and Option-Return inserts a newline. Reset and Delete are a row button and a context menu, replacing the swipe. `SnippetLibrary` takes its store at init so the pane can be tested over a throwaway defaults suite.
+- Report a Problem and Privacy are `HelpSheet` sheets on whichever window asked (editor or Settings), the screen over a Done bar, with Esc as Done; the sheet's completion is where focus returns to the editor.
+- The crash banner is the same view with the same rules, on AppKit's terms: `acceptsFirstResponder` false, `refusesFirstResponder` on every button, and a hit test that returns nil for anything but a button. An image-only `NSButton` carries the title "Button" until told otherwise, which the equal-weight test caught.
+- `AlphaSession` is read in `applicationWillFinishLaunching`, marked foreground on `applicationDidBecomeActive`, clean on `applicationWillTerminate`, and the first window asks for the crash prompt a second after it opens.
+- Not ported: `ShellShortcutTableTests`, which pins the Catalyst webview's `pressesBegan` table; on AppKit the menu's key equivalents are the one table (`ShellKeyEquivalentTests`).
+- `CHALK_DEBUG_PALETTE=settings|settings-shortcuts` opens the window on either pane for screenshots.
+
 ### Phase 6: menu bar, multi-window, restoration, external open
 
 - The full menu with validation, window registry, per-window Locations, restoration through `NSWindowRestoration`, external open routing, resign-active saves, orderly quit, logging lines.

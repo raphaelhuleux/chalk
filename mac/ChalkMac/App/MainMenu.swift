@@ -8,6 +8,8 @@ enum MainMenu {
         let main = NSMenu()
 
         let app = NSMenu()
+        app.addItem(withTitle: "Settings\u{2026}", action: #selector(RootSplitViewController.cmdSettings(_:)), keyEquivalent: ",")
+        app.addItem(.separator())
         app.addItem(withTitle: "Quit Chalk", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         main.addItem(submenu(app, title: ""))
 
@@ -33,7 +35,22 @@ enum MainMenu {
         main.addItem(submenu(window, title: "Window"))
         NSApp.windowsMenu = window
 
+        let help = NSMenu(title: "Help")
+        for item in helpMenuItems() { help.addItem(item) }
+        main.addItem(submenu(help, title: "Help"))
+        NSApp.helpMenu = help
+
         return main
+    }
+
+    /// What the Help menu offers; `HelpMenuTests` reads it.
+    static func helpMenuItems() -> [NSMenuItem] {
+        [
+            NSMenuItem(title: "Report a Problem\u{2026}",
+                       action: #selector(RootSplitViewController.cmdReportProblem(_:)), keyEquivalent: ""),
+            NSMenuItem(title: "Privacy",
+                       action: #selector(RootSplitViewController.cmdPrivacy(_:)), keyEquivalent: ""),
+        ]
     }
 
     private static func submenu(_ menu: NSMenu, title: String) -> NSMenuItem {
