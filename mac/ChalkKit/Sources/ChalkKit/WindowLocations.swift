@@ -35,4 +35,15 @@ public enum WindowLocations {
     public static func discard(windows windowIDs: [String], defaults: UserDefaults = .standard) {
         for id in windowIDs { defaults.removeObject(forKey: key(forWindow: id)) }
     }
+
+    /// Forget every per-window list except those of `windowIDs`: the windows the shell can still
+    /// bring back. A process that died before it first journaled a window leaves that window's list
+    /// behind with no way to reach it. The legacy app-wide list is never touched.
+    public static func discardAll(except windowIDs: [String], defaults: UserDefaults = .standard) {
+        let keep = Set(windowIDs.map(key(forWindow:)))
+        for stored in defaults.dictionaryRepresentation().keys
+        where stored.hasPrefix(keyPrefix) && !keep.contains(stored) {
+            defaults.removeObject(forKey: stored)
+        }
+    }
 }

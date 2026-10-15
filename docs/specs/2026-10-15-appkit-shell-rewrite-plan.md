@@ -348,6 +348,19 @@ Done 2026-10-15. 496 tests green on `ChalkMacTests` (one skipped). What the port
 
 Exit: `CrossWindow*`, `WindowRouting*`, the restoration tests, `ShellShortcutTable*`, `SceneStateLineRedaction*` green; the manual multi-window script passes.
 
+Done 2026-10-15. 526 tests green on `ChalkMacTests` (one skipped), ChalkKit 528. What the port taught:
+
+- Restoration is the app's own `WindowSessionJournal` (ChalkKit), not `NSWindowRestoration`: AppKit's restoration only runs when "Close windows when quitting an application" is off in System Settings, which it is not by default, while the Catalyst shell brought every window back on relaunch. The journal carries each window's id, tabs, active tab, sidebar, outline panel and frame. It is written on resign-active, on a window close and at quit, and read once in `applicationDidFinishLaunching`. A closed window leaves it and `WindowLocations.discard` drops the window's folders; a quit keeps every window.
+- `EditorWindowController.windowID` is the one key for the journal and for `WindowLocations`; a restored window passes `isRestoredWindow: true`, so a window from before per-window lists still inherits the legacy list.
+- `SceneLaunchPolicy.initialContent` is reused as is: Welcome only when nothing was restored and no URL arrived. `CHALK_DISABLE_RESTORATION` and `CHALK_AUDIT_STATE` skip the journal and clear the recovery store once per process, as the Catalyst cold start did.
+- Recovery: every restored window layers the records matching its own tabs; the leftover drain runs once per process on the next runloop turn, on the frontmost window.
+- External open: `application(_:open:)` before launch finishes stashes the URLs, so a cold Finder open lands as one more tab on top of the restored windows. `ExternalOpenRouter` takes the windows frontmost first (`NSApp.orderedWindows`) and the key window as receiver; the rules are `ExternalOpenRouting`. A new window for a folder is made by the delegate, synchronously, while the sender's scope is held.
+- Quit: `applicationShouldTerminate` writes the journal, saves every window's documents and replies `terminateLater` until the async writes land (capped at three seconds), then `applicationWillTerminate` marks the clean exit. A window close saves, then releases its scopes in the save's completion.
+- The menu is the Catalyst menu as `NSMenu`, plus a standard Edit menu (Undo, Redo, Cut, Copy, Paste, Select All) that the web view answers; Catalyst kept the system one. Every shell item has a nil target and `validateMenuItem` checks the active editing mode and the default view mode. `admitShellAction` stays, against this plan's line: the web editor forwards ⌘O, ⌘P, ⌘K and ⌘S over the transport and the menu's key equivalent fires too, so the same-selector dedupe is still the one guard against a double toggle.
+- `MenuRoutingTests` replaces `ShellShortcutTableTests` and the identity-routing half of `WindowRoutingTests` (a shell action sent up one window's responder chain reaches that window's root only); the strip-payload half was Catalyst glue and is dropped. `SceneRoutingTests` is Catalyst scene configuration and has no AppKit counterpart; `WindowRestorationTests` covers the restoration lines instead.
+- `AuditMode` ported (an `NSImage` figure, a real `toggleFullScreen`, `setFrame` for the sizes); `scripts/screenshots/capture-mac.sh --appkit` drives the ChalkMac product, the default still drives Catalyst until cutover.
+- The crash prompt and the Debug launch switches (`CHALK_DEBUG_LIBRARY`, `CHALK_DEBUG_PALETTE`) act on the frontmost window after restoration.
+
 ### Phase 7: the matrix and the rest
 
 - `ChromeMatrixHost` and `TestWindow` on `NSWindow`; the 32-cell matrix green with the blind-cell guard passing; `ChromeReferenceParityTests` green.

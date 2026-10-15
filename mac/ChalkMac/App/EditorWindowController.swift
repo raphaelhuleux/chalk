@@ -12,10 +12,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     /// Fired after the window closes, so the owner can drop this controller.
     var onClose: (() -> Void)?
 
+    /// Fired when the window becomes key, for the owner's breadcrumbs.
+    var onBecomeKey: (() -> Void)?
+
+    /// The identity this window's Locations and journal record live under
+    /// (`WindowLocations.key`, `WindowRecord.id`). Survives restoration.
+    let windowID: String
+
     let root: RootSplitViewController
 
-    init(initialContent: SceneConnectContent = .openWelcome,
-         locationStore: LocationStore = .detached()) {
+    /// - Parameters:
+    ///   - windowID: a restored window's id, or a fresh one.
+    ///   - locationStore: this window's folders; the app delegate hands in the
+    ///     per-window store, tests leave it detached.
+    ///   - frame: the restored frame in screen coordinates, else the default
+    ///     size centred.
+    init(windowID: String = UUID().uuidString,
+         initialContent: SceneConnectContent = .openWelcome,
+         locationStore: LocationStore = .detached(),
+         frame: NSRect? = nil) {
+        self.windowID = windowID
         root = RootSplitViewController(locationStore: locationStore, initialContent: initialContent)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: EditorWindowController.defaultSize),
@@ -39,7 +55,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         // Assigning a content view controller resizes the window to its view's
         // frame (zero here, clamped to minSize); restore the opening size.
         window.setContentSize(EditorWindowController.defaultSize)
-        window.center()
+        if let frame, frame.width >= ChalkMetrics.minWindowSize.width,
+           frame.height >= ChalkMetrics.minWindowSize.height {
+            window.setFrame(frame, display: false)
+            // A frame from a display that is gone lands off screen.
+            if window.screen == nil { window.center() }
+        } else {
+            window.center()
+        }
     }
 
     @available(*, unavailable)
@@ -48,8 +71,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     /// First-window size, in Mac points.
     static let defaultSize = NSSize(width: 1100, height: 760)
 
+    /// What the journal keeps for this window: its id, its tabs and its frame.
+    func windowRecord() -> WindowRecord {
+        var frame: WindowRecord.Frame?
+        if let rect = window?.frame {
+            frame = WindowRecord.Frame(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+        }
+        return WindowRecord(id: windowID, session: root.captureSession(), frame: frame)
+    }
+
+    /// The red close button is the user's "done with this": it saves, like a
+    /// Catalyst scene disconnect did, or the window's edits would drain into
+    /// another window at the next launch. The scopes release only after the
+    /// async writes land: revoking a sandbox extension mid-write fails the save.
     func windowWillClose(_ notification: Notification) {
-        root.releaseExternalScopes()
+        let root = self.root
+        root.snapshotDirtyBuffers()
+        root.saveAllDocuments { root.releaseExternalScopes() }
         onClose?()
     }
 
@@ -69,6 +107,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func windowDidBecomeKey(_ notification: Notification) {
         root.reloadExternalChanges()
+        onBecomeKey?()
     }
 
     // MARK: NSToolbarDelegate (an empty toolbar: the titlebar's height is all it is for)

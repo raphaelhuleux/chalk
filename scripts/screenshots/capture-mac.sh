@@ -5,6 +5,7 @@
 #   ./scripts/screenshots/capture-mac.sh              # build Debug, capture every shot
 #   ./scripts/screenshots/capture-mac.sh --no-build   # reuse the last Debug build
 #   ./scripts/screenshots/capture-mac.sh --no-build mac-beamer   # only the named shots
+#   ./scripts/screenshots/capture-mac.sh --appkit                 # the AppKit shell (ChalkMac)
 #
 # Drives the Debug app (bundle ID com.huleux.chalk.debug, so the installed app's
 # settings are never touched) through the DEBUG-only `promo-file` audit state,
@@ -19,20 +20,39 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DD="$ROOT/mac/build/dd"
-APP="$DD/Build/Products/Debug-maccatalyst/Chalk.app"
 OUT="$ROOT/docs/images"
 SHOW="$ROOT/docs/showcase"
 WIDTH=1600 # README images are shown at most ~900px wide; 1600 keeps them sharp on retina
 
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 
+# Which shell to drive. Both read the same audit environment; the AppKit
+# shell is the ChalkMac scheme with its own product and bundle ID.
+SCHEME=Chalk
+APP="$DD/Build/Products/Debug-maccatalyst/Chalk.app"
+BINARY=Chalk
+BUNDLE_ID=com.huleux.chalk.debug
+DESTINATION='platform=macOS,variant=Mac Catalyst,arch=arm64'
 BUILD=1
-if [[ "${1:-}" == --no-build ]]; then BUILD=0; shift; fi
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --no-build) BUILD=0 ;;
+    --appkit)
+      SCHEME=ChalkMac
+      APP="$DD/Build/Products/Debug/ChalkMac.app"
+      BINARY=ChalkMac
+      BUNDLE_ID=com.huleux.chalk.mac.debug
+      DESTINATION='platform=macOS,arch=arm64'
+      ;;
+    *) die "unknown option $1" ;;
+  esac
+  shift
+done
 ONLY=" $* "
 if [[ "$BUILD" == 1 ]]; then
   (cd "$ROOT/mac" && xcodegen generate --quiet)
-  xcodebuild build -project "$ROOT/mac/Chalk.xcodeproj" -scheme Chalk -configuration Debug \
-    -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64' \
+  xcodebuild build -project "$ROOT/mac/Chalk.xcodeproj" -scheme "$SCHEME" -configuration Debug \
+    -destination "$DESTINATION" \
     -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO -quiet
 fi
 [[ -d "$APP" ]] || die "no Debug build at $APP; run without --no-build"
@@ -42,7 +62,7 @@ trap 'quit_app; rm -rf "$TMP"' EXIT
 swiftc -O "$ROOT/scripts/screenshots/winid.swift" -o "$TMP/winid"
 
 quit_app() {
-  pkill -f "$APP/Contents/MacOS/Chalk" 2>/dev/null || true
+  pkill -f "$APP/Contents/MacOS/$BINARY" 2>/dev/null || true
   sleep 2
 }
 
@@ -62,13 +82,13 @@ shot() {
       -chalk.themePreference 2 -chalk.colorTheme atom "$@"
     for _ in $(seq 20); do
       sleep 1
-      pid="$(pgrep -f "$APP/Contents/MacOS/Chalk" | head -1 || true)"
+      pid="$(pgrep -f "$APP/Contents/MacOS/$BINARY" | head -1 || true)"
       [[ -n "$pid" ]] && win="$("$TMP/winid" "$pid" 2>/dev/null | cut -d' ' -f1 || true)"
       [[ -n "$win" ]] && break 2
     done
   done
   [[ -n "$win" ]] || die "$name: the app never showed a window"
-  osascript -e 'tell application id "com.huleux.chalk.debug" to activate' >/dev/null 2>&1 || true
+  osascript -e "tell application id \"$BUNDLE_ID\" to activate" >/dev/null 2>&1 || true
   sleep 4 # web view boot, KaTeX, the outline panel's delayed open
   # The window may have resized since it first appeared; look it up again.
   local again

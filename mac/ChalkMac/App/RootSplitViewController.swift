@@ -23,11 +23,11 @@ final class RootView: FlippedView {
 /// through to the web editor.
 final class RootSplitViewController: NSViewController {
     private(set) var editor = EditorContainerViewController()
-    private let sidebar = SidebarViewController()
+    let sidebar = SidebarViewController()
 
     /// This window's own folder list; the detached default keeps windows built
     /// in tests off the persisted bookmarks.
-    private let locationStore: LocationStore
+    let locationStore: LocationStore
 
     // The columns. Hand-laid rather than an NSSplitView: the sidebar slide
     // translates the columns while the webview keeps its bounds, which a

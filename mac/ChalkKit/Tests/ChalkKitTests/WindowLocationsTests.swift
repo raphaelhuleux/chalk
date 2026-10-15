@@ -49,6 +49,17 @@ final class WindowLocationsTests: XCTestCase {
         let a = WindowLocations.store(forWindow: "A", isRestoredWindow: true, defaults: defaults)
         XCTAssertEqual(a.records(), [])
     }
+
+    /// A list no restorable window owns is a leak from a process that died before journaling it.
+    func testDiscardAllKeepsOnlyTheNamedWindowsAndTheLegacyList() {
+        defaults.set(legacy, forKey: WindowLocations.legacyKey)
+        _ = WindowLocations.store(forWindow: "live", isRestoredWindow: false, defaults: defaults)
+        _ = WindowLocations.store(forWindow: "dead", isRestoredWindow: false, defaults: defaults)
+        WindowLocations.discardAll(except: ["live"], defaults: defaults)
+        XCTAssertNotNil(defaults.object(forKey: WindowLocations.key(forWindow: "live")))
+        XCTAssertNil(defaults.object(forKey: WindowLocations.key(forWindow: "dead")))
+        XCTAssertNotNil(defaults.data(forKey: WindowLocations.legacyKey), "the legacy list is read-only")
+    }
 }
 
 final class ExternalOpenRoutingTests: XCTestCase {
@@ -78,4 +89,5 @@ final class ExternalOpenRoutingTests: XCTestCase {
     func testSiblingWithSharedPrefixIsNotInside() {
         XCTAssertNil(ExternalOpenRouting.windowContaining(file: "/notes2/a.md", windowRoots: [["/notes"]]))
     }
+
 }
