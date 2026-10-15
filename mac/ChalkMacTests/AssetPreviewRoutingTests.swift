@@ -7,8 +7,6 @@ import ChalkKit
 /// still opens in an editor tab, an asset goes to the preview. A png reaching
 /// `editor.open` would render its bytes as Markdown.
 ///
-/// The preview sheet itself arrives with phase 4 of the plan; the routing is
-/// pinned here so no asset can reach a tab in the meantime.
 @MainActor
 final class AssetPreviewRoutingTests: XCTestCase {
     private var root: URL!
@@ -66,6 +64,48 @@ final class AssetPreviewRoutingTests: XCTestCase {
         // TabItem carries the display name, not the URL.
         XCTAssertTrue(shell.editorForTesting.tabItemsForTesting.contains { $0.name.hasPrefix("note") },
                       "expected a tab for \(note.lastPathComponent)")
+    }
+
+    /// The sheet is in-process (an image view, not Quick Look), so it must
+    /// actually be presented and carry the file.
+    func testAssetPresentsAnInAppPreviewSheetOnce() throws {
+        let shell = makeRoot()
+        let window = NSWindow.hostedForTesting(frame: shell.view.frame)
+        window.rootViewController = shell
+        window.isHidden = false
+        defer {
+            if let sheet = window.attachedSheet { window.endSheet(sheet) }
+            dismantleHostedSidebar(window)
+        }
+
+        let png = root.appendingPathComponent("figure.png")
+        shell.openFromLibrary(png)
+        // A row click can dispatch twice in one turn; the second must no-op.
+        shell.openFromLibrary(png)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        let preview = try XCTUnwrap(shell.livePreviewForTesting)
+        XCTAssertEqual(preview.url, png)
+        XCTAssertEqual(preview.title, "figure.png")
+        XCTAssertFalse(preview.showsUnreadableMessageForTesting, "a real png decodes")
+        let sheet = try XCTUnwrap(window.attachedSheet, "the preview is a sheet on the window")
+        XCTAssertNil(sheet.attachedSheet, "a second click stacked another sheet")
+        XCTAssertTrue(sheet.contentViewController === preview)
+
+        // Done ends the sheet and clears the slot for the next preview.
+        preview.close()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+        XCTAssertNil(window.attachedSheet)
+        XCTAssertNil(shell.livePreviewForTesting)
+    }
+
+    /// A PDF goes through PDFKit; an unreadable file says so instead of crashing.
+    func testUnreadableAssetShowsAMessage() throws {
+        let broken = root.appendingPathComponent("broken.png")
+        try Data("not an image".utf8).write(to: broken)
+        let preview = AssetPreviewViewController(url: broken)
+        preview.loadViewIfNeeded()
+        XCTAssertTrue(preview.showsUnreadableMessageForTesting)
     }
 
     // MARK: - Sidebar row behaviour

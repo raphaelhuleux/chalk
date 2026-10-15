@@ -30,6 +30,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.root.setLibraryLocationsForTesting([URL(fileURLWithPath: path)])
             controller.root.setSidebarVisible(true)
         }
+        // A palette opened once the window is up, for the same purpose.
+        if let palette = ProcessInfo.processInfo.environment["CHALK_DEBUG_PALETTE"], !palette.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                switch palette {
+                case "quick-open": controller.root.cmdQuickOpen(nil)
+                case "outline": controller.root.cmdToggleOutline(nil)
+                case "outline-panel": controller.root.cmdToggleOutlinePanel(nil)
+                default: break
+                }
+            }
+        }
         #endif
     }
 

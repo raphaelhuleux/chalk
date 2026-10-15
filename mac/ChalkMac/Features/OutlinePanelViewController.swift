@@ -49,6 +49,11 @@ final class OutlinePanelViewController: NSViewController {
     var headerDocumentNameForTesting: String { nameLabel.stringValue }
     /// The footer's text, or nil while it is hidden.
     var statsTextForTesting: String? { statsLabel.isHidden ? nil : statsLabel.stringValue }
+    /// A row click, as `rowClicked` reads it.
+    func jumpToRowForTesting(_ row: Int) {
+        guard items.indices.contains(row) else { return }
+        onJump?(items[row].line)
+    }
     func guideCountForTesting(row: Int) -> Int? {
         (tableView.rowView(atRow: row, makeIfNecessary: false) as? OutlineTreeRowView)?.guideCount
     }

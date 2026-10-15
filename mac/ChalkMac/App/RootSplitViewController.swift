@@ -84,6 +84,20 @@ final class RootSplitViewController: NSViewController {
     /// so the root's appearance hook can tell its own echo from a genuine
     /// system appearance flip.
     private var isApplyingThemeOverride = false
+
+    // The palettes (docs/specs plan "Palettes"): one overlay host each, the
+    // controllers mounted once as children on first use.
+    private let quickOpenHost = PaletteOverlayHost()
+    private let outlineHost = PaletteOverlayHost()
+    /// The tab the open outline palette's snapshot was fetched from; a switch
+    /// to another tab hides the palette (its line numbers belong to that tab).
+    private var outlineSnapshotTabID: UUID?
+    /// Bumped per outline fetch; a snapshot from an older open is dropped.
+    private var outlineFetchGeneration = 0
+    /// Per-selector time of the last admitted shell action (`admitShellAction`).
+    private var lastShellDispatch: [Selector: CFTimeInterval] = [:]
+    /// The live preview sheet, so a second click in one turn cannot stack another.
+    private weak var livePreview: NSWindow?
     #if DEBUG
     /// Contract-test seams for the sidebar slide's settle (SidebarSlideContractTests,
     /// ZenTransitionContractTests): held for the Library's slide, which consumes them.
@@ -210,6 +224,12 @@ final class RootSplitViewController: NSViewController {
             revealChrome()
         }
         currentActiveTabID = items.first(where: \.isActive)?.id
+        // The outline snapshot is per-document: the palette hides when the
+        // active tab changes underneath it. Dirty-state and reorder callbacks
+        // report the same active id and must not dismiss.
+        if outlineHost.isVisible, currentActiveTabID != outlineSnapshotTabID {
+            hideOutlinePalette { [weak self] in self?.returnFocusAfterDismiss() }
+        }
     }
 
     override func loadView() {
@@ -656,8 +676,15 @@ final class RootSplitViewController: NSViewController {
 
     /// This window's folders that currently grant access.
     var libraryRoots: [URL] {
-        locationStore.locations().filter { !$0.needsReauthorization }.map(\.url)
+        #if DEBUG
+        if let override = libraryRootsOverrideForTesting { return override }
+        #endif
+        return locationStore.locations().filter { !$0.needsReauthorization }.map(\.url)
     }
+    #if DEBUG
+    /// Set with the Library's test folders, so Quick Open and asset resolution see them too.
+    private var libraryRootsOverrideForTesting: [URL]?
+    #endif
 
     /// No tabs and no folders: an external folder open fills this window instead of opening another.
     var isPristine: Bool { editor.openTabCount == 0 && locationStore.locations().isEmpty }
@@ -863,15 +890,173 @@ final class RootSplitViewController: NSViewController {
         }
     }
 
-    /// The preview sheet arrives with phase 4 of the plan; the routing fact is
-    /// recorded now so no asset can reach a tab.
+    /// The in-process preview, as a sheet on the window. A row click can
+    /// arrive twice in one run loop turn (the click path and the table's
+    /// selection), and the second must not stack a second sheet.
     private func previewAsset(_ url: URL) {
+        // Recorded before the guards: this is the routing fact the tests pin,
+        // whether or not the modal slot happened to be free.
         lastPreviewedAsset = url
-        Self.log.notice("asset preview is not in this build yet")
+        guard livePreview == nil, let window = view.window, window.attachedSheet == nil else { return }
+        hidePalettesForSheet()
+        let sheet = AssetPreviewViewController.makeSheet(url: url, over: window)
+        livePreview = sheet
+        window.beginSheet(sheet) { [weak self] _ in
+            self?.livePreview = nil
+            self?.returnFocusAfterDismiss()
+        }
     }
 
     /// Last URL routed to the preview (AssetPreviewRoutingTests).
     private(set) var lastPreviewedAsset: URL?
+
+    /// The palette overlays are child views, not sheets, so an attached-sheet
+    /// guard doesn't cover them: hide them before presenting a sheet, or the
+    /// sheet stacks over a palette.
+    private func hidePalettesForSheet() {
+        if quickOpenHost.isVisible { hideQuickOpen(then: nil) }
+        if outlineHost.isVisible { hideOutlinePalette(then: nil) }
+    }
+
+    // MARK: - Quick Open
+
+    /// Mounted once as a child (not presented) so opening is a plain view
+    /// toggle with no window animation. Kept alive across opens so it can
+    /// paint its last file index instantly (via `prepareForReuse`) instead of
+    /// flashing empty while the async enumeration runs. Closing returns focus
+    /// to the editor so typing resumes without a click.
+    private lazy var quickOpenVC: QuickOpenViewController = {
+        let vc = QuickOpenViewController()
+        // ↩ browses in place (reuse an unedited tab, like a sidebar click);
+        // ⌘↩ always opens a fresh tab (the palette's footer hint).
+        vc.onOpen = { [weak self] url, inNewTab in
+            self?.openFromLibrary(url, inNewTab: inNewTab)
+        }
+        vc.onDismiss = { [weak self] in self?.returnFocusAfterDismiss() }
+        // The palette asks the host to hide the overlay, then runs `then` (open + focus-return).
+        vc.onClose = { [weak self] then in self?.hideQuickOpen(then: then) }
+        return vc
+    }()
+    private var isQuickOpenMounted = false
+
+    /// Mount the palette as a hidden glass card over the scrim, above every
+    /// view the root holds; the host owns the views and the animation, this
+    /// owns the containment and the wiring.
+    private func setUpQuickOpenOverlay() {
+        guard !isQuickOpenMounted else { return }
+        isQuickOpenMounted = true
+        addChild(quickOpenVC)
+        quickOpenHost.mount(in: view, content: quickOpenVC.view) { [weak self] in
+            self?.hideQuickOpen { self?.returnFocusAfterDismiss() }
+        }
+        quickOpenVC.onContentHeightChanged = { [weak self] in self?.quickOpenHost.setCardHeight($0) }
+    }
+
+    private func presentQuickOpen() {
+        // Don't stack the palette over itself or over a sheet.
+        guard !quickOpenHost.isVisible, view.window?.attachedSheet == nil else { return }
+        // The palettes are mutually exclusive.
+        if outlineHost.isVisible { hideOutlinePalette(then: nil) }
+        setUpQuickOpenOverlay()
+        quickOpenVC.prepareForReuse()
+        #if DEBUG
+        quickOpenVC.openCommandTime = CACurrentMediaTime()
+        #endif
+        quickOpenHost.present { editor.blurActiveSurface() }
+        quickOpenVC.didReveal()
+
+        // Enumerating every Location can take seconds on big folders; never on
+        // the main thread. The palette paints its cached index immediately
+        // (via prepareForReuse) and this refreshes it.
+        let roots = libraryRoots
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let files = roots.flatMap { FileTree.allFiles(in: $0) }
+            DispatchQueue.main.async {
+                self?.quickOpenVC.setFiles(files)
+            }
+        }
+    }
+
+    /// Hide the palette overlay (short fade), then run `then`, typically the
+    /// open-file + focus-return the palette requested. `then` fires at once,
+    /// not on the fade's completion, so opening a file still feels instant;
+    /// the scrim just melts away over the editor that's already taking focus.
+    private func hideQuickOpen(then: (() -> Void)? = nil) {
+        guard quickOpenHost.isVisible else { then?(); return }
+        quickOpenHost.dismiss { quickOpenVC.willHide() }
+        then?()
+    }
+
+    // MARK: - Outline palette
+
+    /// Mounted once as a child, like Quick Open. Kept alive across opens; the
+    /// outline itself is refetched every open (`prepareForReuse` drops it:
+    /// it is per-document, unlike the file index).
+    private lazy var outlinePaletteVC: OutlinePaletteViewController = {
+        let vc = OutlinePaletteViewController()
+        vc.onJump = { [weak self] line in
+            // Belt to handleTabsChanged's suspenders: the line numbers belong
+            // to the tab the snapshot was fetched from; never scroll a
+            // different document to them.
+            guard let self, self.currentActiveTabID == self.outlineSnapshotTabID else { return }
+            self.editor.revealLine(line)
+        }
+        vc.onDismiss = { [weak self] in self?.returnFocusAfterDismiss() }
+        vc.onClose = { [weak self] then in self?.hideOutlinePalette(then: then) }
+        return vc
+    }()
+    private var isOutlineMounted = false
+
+    private func setUpOutlineOverlay() {
+        guard !isOutlineMounted else { return }
+        isOutlineMounted = true
+        addChild(outlinePaletteVC)
+        outlineHost.mount(in: view, content: outlinePaletteVC.view) { [weak self] in
+            self?.hideOutlinePalette { self?.returnFocusAfterDismiss() }
+        }
+        outlinePaletteVC.onContentHeightChanged = { [weak self] in self?.outlineHost.setCardHeight($0) }
+    }
+
+    private func presentOutlinePalette() {
+        guard !outlineHost.isVisible, view.window?.attachedSheet == nil else { return }
+        if quickOpenHost.isVisible { hideQuickOpen(then: nil) }
+        setUpOutlineOverlay()
+        outlinePaletteVC.prepareForReuse()
+        #if DEBUG
+        outlinePaletteVC.openCommandTime = CACurrentMediaTime()
+        #endif
+        outlineHost.present {
+            // Release the webview's DOM focus before the palette grabs the
+            // keyboard, or WebKit re-asserts first responder behind the
+            // overlay and every keystroke dies.
+            editor.blurActiveSurface()
+        }
+        outlinePaletteVC.didReveal()
+
+        // One bridge round trip; the guards drop a snapshot that lands after
+        // the palette was dismissed, after a quick close/reopen superseded
+        // this open (generation), or after the active tab changed underneath
+        // the fetch (identity). A nil snapshot (no tab, editor still booting)
+        // paints the empty state; never cached, every open refetches.
+        outlineFetchGeneration += 1
+        let generation = outlineFetchGeneration
+        let tabID = currentActiveTabID
+        outlineSnapshotTabID = tabID
+        editor.fetchActiveOutline { [weak self] snapshot in
+            guard let self, self.outlineHost.isVisible,
+                  generation == self.outlineFetchGeneration,
+                  tabID == self.currentActiveTabID else { return }
+            self.outlinePaletteVC.setSnapshot(snapshot ?? .empty)
+        }
+    }
+
+    /// Mirror of `hideQuickOpen`: `then` fires at once so the jump feels
+    /// instant while the scrim melts over the editor already scrolling.
+    private func hideOutlinePalette(then: (() -> Void)? = nil) {
+        guard outlineHost.isVisible else { then?(); return }
+        outlineHost.dismiss { outlinePaletteVC.willHide() } // cancel pending grabFocus retries
+        then?()
+    }
 
     /// Reveal or hide the Library column: the placement both lanes land on.
     func setSidebarVisible(_ visible: Bool) {
@@ -1062,17 +1247,40 @@ final class RootSplitViewController: NSViewController {
         animateSidebar(show: !isSidebarVisible)
     }
 
-    @objc func cmdQuickOpen(_ sender: Any? = nil) {
-        Self.log.notice("Quick Open is not in this build yet")
+    /// One press can arrive over two lanes (the menu's key equivalent and the
+    /// web editor's forwarded command), so same-selector dispatches inside
+    /// `window` collapse to one. A deliberate repeat is slower than that.
+    private func admitShellAction(_ selector: Selector, window: CFTimeInterval = 0.1) -> Bool {
+        let now = CACurrentMediaTime()
+        if let last = lastShellDispatch[selector], now - last < window { return false }
+        lastShellDispatch[selector] = now
+        return true
     }
 
+    /// ⌘O. Toggle: a second press closes the palette (and returns editor focus).
+    @objc func cmdQuickOpen(_ sender: Any? = nil) {
+        guard admitShellAction(#selector(cmdQuickOpen(_:)), window: 0.3) else { return }
+        if quickOpenHost.isVisible {
+            hideQuickOpen { [weak self] in self?.returnFocusAfterDismiss() }
+        } else {
+            presentQuickOpen()
+        }
+    }
+
+    /// ⌘P: the outline palette, with toggle semantics.
     @objc func cmdToggleOutline(_ sender: Any? = nil) {
-        Self.log.notice("the outline palette is not in this build yet")
+        guard admitShellAction(#selector(cmdToggleOutline(_:)), window: 0.3) else { return }
+        if outlineHost.isVisible {
+            hideOutlinePalette { [weak self] in self?.returnFocusAfterDismiss() }
+        } else {
+            presentOutlinePalette()
+        }
     }
 
     /// ⌘K: the persistent outline panel. Zen owns the chrome: opening into it
     /// is refused, like the Library.
     @objc func cmdToggleOutlinePanel(_ sender: Any? = nil) {
+        guard admitShellAction(#selector(cmdToggleOutlinePanel(_:)), window: 0.3) else { return }
         let show = !editor.isOutlinePanelVisible
         if show, isZen { return }
         revealChrome()
@@ -1585,6 +1793,30 @@ extension RootSplitViewController {
     /// The chips' inset past the traffic lights, as last written.
     var stripLeadingInsetForTesting: CGFloat { headerBar.stripLeadingInsetForTesting }
     var lastPreviewedAssetForTesting: URL? { lastPreviewedAsset }
+    /// The preview sheet's controller while one is up.
+    var livePreviewForTesting: AssetPreviewViewController? {
+        livePreview?.contentViewController as? AssetPreviewViewController
+    }
+
+    /// Outline palette wiring (OutlineToggleTests).
+    var isOutlineVisibleForTesting: Bool { outlineHost.isVisible }
+    var isQuickOpenVisibleForTesting: Bool { quickOpenHost.isVisible }
+    var outlinePaletteVCForTesting: OutlinePaletteViewController { outlinePaletteVC }
+    var quickOpenVCForTesting: QuickOpenViewController { quickOpenVC }
+    /// The cards' frames in root coordinates; null while unmounted.
+    var quickOpenCardFrameForTesting: CGRect { quickOpenHost.cardFrameForTesting }
+    var outlineCardFrameForTesting: CGRect { outlineHost.cardFrameForTesting }
+    /// A palette dims the window behind it, the band included: its scrim is
+    /// up, spans the band's frame and sits above the band in the view order.
+    var isScrimCoveringTheBandForTesting: Bool {
+        let hosts = [quickOpenHost, outlineHost].filter(\.isVisible)
+        guard let host = hosts.first else { return false }
+        let backdrop = host.backdrop
+        guard !backdrop.isHidden, backdrop.superview === view,
+              let bandIndex = view.subviews.firstIndex(of: headerBar),
+              let scrimIndex = view.subviews.firstIndex(of: backdrop) else { return false }
+        return scrimIndex > bandIndex && backdrop.frame.contains(headerBar.frame)
+    }
 
     /// The Library list's scroll offset (see the sidebar seams).
     var libraryScrollOffsetForTesting: CGFloat { sidebar.libraryScrollOffsetForTesting }
@@ -1595,6 +1827,7 @@ extension RootSplitViewController {
     /// Point the Library at the given folders without touching the real
     /// `LocationStore`, whose security-scoped bookmarks a test must never write.
     func setLibraryLocationsForTesting(_ urls: [URL]) {
+        libraryRootsOverrideForTesting = urls
         sidebar.locationsProvider = {
             urls.map { Location(id: $0.lastPathComponent, name: $0.lastPathComponent, url: $0) }
         }

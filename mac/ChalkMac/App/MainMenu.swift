@@ -14,6 +14,8 @@ enum MainMenu {
         let file = NSMenu(title: "File")
         let newWindow = file.addItem(withTitle: "New Window", action: #selector(AppDelegate.cmdNewWindow(_:)), keyEquivalent: "n")
         newWindow.keyEquivalentModifierMask = [.command, .shift]
+        file.addItem(withTitle: "Quick Open\u{2026}",
+                     action: #selector(RootSplitViewController.cmdQuickOpen(_:)), keyEquivalent: "o")
         let addFolder = file.addItem(withTitle: "Add Folder to Window\u{2026}",
                                      action: #selector(RootSplitViewController.cmdAddLocation(_:)), keyEquivalent: "o")
         addFolder.keyEquivalentModifierMask = [.command, .shift]
@@ -22,6 +24,8 @@ enum MainMenu {
 
         let view = NSMenu(title: "View")
         view.addItem(withTitle: "Toggle Library", action: #selector(RootSplitViewController.cmdToggleSidebar(_:)), keyEquivalent: "j")
+        view.addItem(withTitle: "Outline", action: #selector(RootSplitViewController.cmdToggleOutline(_:)), keyEquivalent: "p")
+        view.addItem(withTitle: "Outline Panel", action: #selector(RootSplitViewController.cmdToggleOutlinePanel(_:)), keyEquivalent: "k")
         main.addItem(submenu(view, title: "View"))
 
         let window = NSMenu(title: "Window")

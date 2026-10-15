@@ -316,6 +316,15 @@ Done 2026-10-15. 357 tests green on `ChalkMacTests` (one skipped: the reopen wed
 
 Exit: `QuickOpen*`, `Outline*`, `Palette*`, `AssetPreview*` tests green.
 
+Done 2026-10-15. 433 tests green on `ChalkMacTests` (one skipped). What the port taught:
+
+- The palettes' keys are the main menu's key equivalents (⌘O, ⌘P, ⌘K), which AppKit routes to the root from any first responder, the search fields included; the Catalyst scene-level key commands and their shadowing hazard are gone, and `ShellKeyEquivalentTests` pins that no palette claims them.
+- ⌘↩ never reaches the field editor's command path: it is a key equivalent, caught on the card's content view (`PaletteContentView`). Up, Down, Escape and Return arrive through `control(_:textView:doCommandBy:)` on one shared table (`PaletteFrame.command(for:)`).
+- The overlay mounts on first present, after every other root view exists, so it stacks above the band; the scrim therefore dims the strip on its own and the Catalyst strip-scrim post has no AppKit counterpart.
+- A click on the scrim dismisses; clicks inside the card's content do not, decided by the backdrop from the event's point rather than by gesture delegates.
+- The asset preview is an `NSWindow` sheet with PDFKit or an `NSImageView` in a magnifying scroll view; Done and Escape end the sheet, and the sheet's completion returns focus to the editor.
+- `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel` opens one at launch for screenshots, and the Library test seam also feeds `libraryRoots`, so Quick Open indexes the seeded folder.
+
 ### Phase 5: Settings, Help, crash banner
 
 - Settings window with both panes, live broadcast, Report a Problem, Privacy, Acknowledgements, Help menu, crash banner and launch verdict.
