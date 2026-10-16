@@ -66,17 +66,20 @@ The extension can also build your LaTeX project on save (`chalk.latex.buildOnSav
 
 The engine, [`@chalk/editor-core`](packages/editor-core/), is CodeMirror 6 plus KaTeX plus a self-contained hsnips port.
 It knows nothing about its host. Each host talks to it through the same small `HostPort` protocol.
-The Mac app is UIKit through Mac Catalyst and hosts the editor in a `WKWebView`; the VS Code extension hosts it in a webview.
+The Mac app is native Swift and hosts the editor in a `WKWebView`; the VS Code extension hosts it in a webview.
+The Mac shell is being moved from Mac Catalyst to AppKit: the `ChalkMac` target is the new shell and the `Chalk` target is the Catalyst one, kept until the cutover in [docs/specs/2026-10-15-appkit-shell-rewrite-plan.md](docs/specs/2026-10-15-appkit-shell-rewrite-plan.md).
 
 ## Repository layout
 
 ```
-├─ mac/                  the Mac app (Swift, UIKit via Mac Catalyst)
+├─ mac/                  the Mac app (Swift)
 │   ├─ project.yml       XcodeGen spec; mac/Chalk.xcodeproj is generated from it
-│   ├─ Chalk/            app shell: split view, tabs, Library sidebar, documents, settings
-│   ├─ ChalkAppKitGlue/  small AppKit bundle the app loads at runtime (title-bar tab strip)
+│   ├─ ChalkMac/         the AppKit shell: window, tabs, Library sidebar, documents, settings
+│   ├─ ChalkMacTests/    XCTest bundle for the AppKit shell
+│   ├─ Chalk/            the Mac Catalyst shell, kept until the cutover
+│   ├─ ChalkAppKitGlue/  small AppKit bundle the Catalyst shell loads at runtime (title-bar tab strip)
 │   ├─ ChalkKit/         pure-Foundation Swift package (protocol types, buffers, bookmarks, chrome rules)
-│   └─ ChalkTests/       XCTest bundle for the app
+│   └─ ChalkTests/       XCTest bundle for the Catalyst shell
 ├─ packages/editor-core/ the shared editor engine (TypeScript)
 ├─ web/                  builds editor-core into the bundle the Mac app loads
 │   └─ src/native-host.ts   HostPort over the WKWebView message bridge
@@ -109,8 +112,8 @@ cd mac && xcodegen generate
 
 Then either:
 
-- run `scripts/install-mac.sh`, which builds a Release copy, signs it ad hoc and installs it to `~/Applications/Chalk.app`, or
-- open `mac/Chalk.xcodeproj` in Xcode and run the `Chalk` scheme on "My Mac".
+- run `scripts/install-mac.sh`, which builds a Release copy, signs it ad hoc and installs it to `~/Applications/Chalk.app` (`--appkit` for the AppKit shell), or
+- open `mac/Chalk.xcodeproj` in Xcode and run the `ChalkMac` scheme (the AppKit shell) or the `Chalk` scheme (Catalyst) on "My Mac".
 
 An Xcode build phase rebuilds the editor bundle (`node web/build.mjs`) on every build, so it needs the `pnpm install` above.
 Run `pnpm web:build` to rebuild the bundle by hand.
