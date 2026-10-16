@@ -26,9 +26,9 @@ final class KeyBadgeView: FlippedView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.borderWidth = 0.5
-        layer?.cornerRadius = ChalkMetrics.s(5)
+        layer?.cornerRadius = 5
         label.stringValue = text
-        label.font = .systemFont(ofSize: ChalkMetrics.s(10.5))
+        label.font = .systemFont(ofSize: 10.5)
         label.textColor = color
         label.alignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -36,7 +36,7 @@ final class KeyBadgeView: FlippedView {
         var constraints = [
             label.centerXAnchor.constraint(equalTo: centerXAnchor),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightAnchor.constraint(equalToConstant: ChalkMetrics.s(20)),
+            heightAnchor.constraint(equalToConstant: 20),
         ]
         if let width {
             constraints.append(widthAnchor.constraint(equalToConstant: width))
@@ -103,9 +103,9 @@ final class PaletteRowView: NSTableRowView {
 /// a hairline, the results table, and a footer with the key hints and a
 /// count. The owner wires the field's and table's delegates to itself.
 final class PaletteFrame {
-    static let inputRowHeight: CGFloat = ChalkMetrics.s(48)
-    static let footerHeight: CGFloat = ChalkMetrics.s(33)
-    static let resultsPadding: CGFloat = ChalkMetrics.s(8)
+    static let inputRowHeight: CGFloat = 48
+    static let footerHeight: CGFloat = 33
+    static let resultsPadding: CGFloat = 8
 
     let searchField = NSTextField()
     let tableView = NSTableView()
@@ -134,7 +134,7 @@ final class PaletteFrame {
 
         let glyph = NSImageView()
         glyph.image = NSImage(systemSymbolName: glyphName, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: ChalkMetrics.s(14), weight: .regular))
+            .withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
         glyph.contentTintColor = .chalkChromeFgTertiary
         glyph.imageScaling = .scaleNone
         glyph.setContentHuggingPriority(.required, for: .horizontal)
@@ -225,22 +225,22 @@ final class PaletteFrame {
             inputRow.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             inputRow.heightAnchor.constraint(equalToConstant: Self.inputRowHeight),
 
-            glyph.leadingAnchor.constraint(equalTo: inputRow.leadingAnchor, constant: ChalkMetrics.s(16)),
+            glyph.leadingAnchor.constraint(equalTo: inputRow.leadingAnchor, constant: 16),
             glyph.centerYAnchor.constraint(equalTo: inputRow.centerYAnchor),
-            searchField.leadingAnchor.constraint(equalTo: glyph.trailingAnchor, constant: ChalkMetrics.s(10)),
-            searchField.trailingAnchor.constraint(equalTo: escBadge.leadingAnchor, constant: -ChalkMetrics.s(10)),
+            searchField.leadingAnchor.constraint(equalTo: glyph.trailingAnchor, constant: 10),
+            searchField.trailingAnchor.constraint(equalTo: escBadge.leadingAnchor, constant: -10),
             searchField.centerYAnchor.constraint(equalTo: inputRow.centerYAnchor),
-            escBadge.trailingAnchor.constraint(equalTo: inputRow.trailingAnchor, constant: -ChalkMetrics.s(16)),
+            escBadge.trailingAnchor.constraint(equalTo: inputRow.trailingAnchor, constant: -16),
             escBadge.centerYAnchor.constraint(equalTo: inputRow.centerYAnchor),
 
             divider.topAnchor.constraint(equalTo: inputRow.bottomAnchor),
-            divider.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: ChalkMetrics.s(12)),
-            divider.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -ChalkMetrics.s(12)),
+            divider.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            divider.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
             divider.heightAnchor.constraint(equalToConstant: 0.5),
 
             scrollView.topAnchor.constraint(equalTo: divider.bottomAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: ChalkMetrics.s(8)),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -ChalkMetrics.s(8)),
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
             scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor),
             emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
@@ -253,11 +253,11 @@ final class PaletteFrame {
             footerHairline.leadingAnchor.constraint(equalTo: footer.leadingAnchor),
             footerHairline.trailingAnchor.constraint(equalTo: footer.trailingAnchor),
             footerHairline.heightAnchor.constraint(equalToConstant: 0.5),
-            hintsLabel.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: ChalkMetrics.s(16)),
+            hintsLabel.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 16),
             hintsLabel.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
             countLabel.leadingAnchor.constraint(
-                greaterThanOrEqualTo: hintsLabel.trailingAnchor, constant: ChalkMetrics.s(14)),
-            countLabel.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -ChalkMetrics.s(16)),
+                greaterThanOrEqualTo: hintsLabel.trailingAnchor, constant: 14),
+            countLabel.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -16),
             countLabel.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
         ])
     }

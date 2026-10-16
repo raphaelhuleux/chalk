@@ -1,4 +1,19 @@
 import AppKit
+
+extension NSView {
+    /// Replace `stored` with a fresh tracking area over `rect` (the whole
+    /// view by default) that reports enter and exit while the window is key.
+    /// Every hover-styled view does this in `updateTrackingAreas`.
+    func chalkReplaceTrackingArea(_ stored: inout NSTrackingArea?, rect: NSRect? = nil,
+                                  userInfo: [AnyHashable: Any]? = nil) {
+        if let stored { removeTrackingArea(stored) }
+        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInKeyWindow]
+        if rect == nil { options.insert(.inVisibleRect) }
+        let area = NSTrackingArea(rect: rect ?? bounds, options: options, owner: self, userInfo: userInfo)
+        addTrackingArea(area)
+        stored = area
+    }
+}
 import ChalkKit
 
 /// The chrome icon button (VisualGlass .footer-btn): 30×26, radius 7, tertiary
@@ -72,12 +87,7 @@ final class ChromeIconButton: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(
-            rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingArea = area
+        chalkReplaceTrackingArea(&trackingArea)
     }
 
     override func mouseEntered(with event: NSEvent) { hovering = true; applyStyle() }

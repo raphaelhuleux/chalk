@@ -81,6 +81,7 @@ final class FakeEditorSurface: EditorSurface {
     func focusEditor() {}
     func blurEditor() {}
     func captureSnapshot(_ completion: @escaping (NSImage?) -> Void) { completion(nil) }
+    func afterNextPaint(_ completion: @escaping () -> Void) { DispatchQueue.main.async(execute: completion) }
     func teardown() {}
 
     // Shell-owned presentation: the container pushes these, and nothing in

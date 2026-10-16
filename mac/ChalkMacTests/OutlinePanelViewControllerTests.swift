@@ -147,6 +147,6 @@ final class OutlinePanelViewControllerTests: XCTestCase {
     func testRowsAreThirtyTwoPointsTall() {
         let (_, vc) = hosted()
         vc.setSnapshot(OutlineSnapshot(items: three, cursorLine: 1))
-        XCTAssertEqual(vc.tableViewForTesting.rowHeight, ChalkMetrics.s(32), accuracy: 0.5)
+        XCTAssertEqual(vc.tableViewForTesting.rowHeight, 32, accuracy: 0.5)
     }
 }

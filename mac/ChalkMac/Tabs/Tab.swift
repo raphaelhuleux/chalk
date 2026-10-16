@@ -26,16 +26,11 @@ final class Tab {
     let surface: EditorSurface
     let controller: DocumentController
 
-    init(url: URL) {
-        self.url = url
-        self.draftTitle = nil
-        let surface = WebEditorSurface()
-        self.surface = surface
-        self.controller = DocumentController(surface: surface)
-    }
+    convenience init(url: URL) { self.init(url: url, draftTitle: nil) }
+    convenience init(draftTitle: String) { self.init(url: nil, draftTitle: draftTitle) }
 
-    init(draftTitle: String) {
-        self.url = nil
+    private init(url: URL?, draftTitle: String?) {
+        self.url = url
         self.draftTitle = draftTitle
         let surface = WebEditorSurface()
         self.surface = surface
@@ -43,4 +38,18 @@ final class Tab {
     }
 
     var displayName: String { url?.lastPathComponent ?? draftTitle ?? "Untitled" }
+
+    /// The journal's record for this tab. The security-scoped bookmark is
+    /// minted once per file (a sandbox call) and kept until the tab's URL
+    /// changes, since the journal is written on every deactivation.
+    func sessionRecord() -> WindowSession.TabRecord? {
+        guard let url else { return nil }
+        if let cached = cachedBookmark, cached.url == url {
+            return WindowSession.TabRecord(path: url.path, bookmark: cached.data)
+        }
+        let data = FileBookmark.make(for: url)
+        cachedBookmark = (url, data)
+        return WindowSession.TabRecord(path: url.path, bookmark: data)
+    }
+    private var cachedBookmark: (url: URL, data: Data?)?
 }

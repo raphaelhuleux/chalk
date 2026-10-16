@@ -84,12 +84,12 @@ final class ReportProblemViewController: NSViewController, NSTextViewDelegate {
         kindControl.action = #selector(refreshPreview)
 
         let notesScroll = Self.makeTextScroll(notesView, editable: true,
-                                              font: .systemFont(ofSize: ChalkMetrics.s(13)),
+                                              font: .systemFont(ofSize: 13),
                                               color: .chalkTextBody)
         notesView.delegate = self
         notesView.isAutomaticQuoteSubstitutionEnabled = false
         notesView.isAutomaticDashSubstitutionEnabled = false
-        notesPlaceholder.font = .systemFont(ofSize: ChalkMetrics.s(13))
+        notesPlaceholder.font = .systemFont(ofSize: 13)
         notesPlaceholder.textColor = .chalkTextMuted
         notesPlaceholder.translatesAutoresizingMaskIntoConstraints = false
         notesScroll.addSubview(notesPlaceholder)
@@ -99,19 +99,19 @@ final class ReportProblemViewController: NSViewController, NSTextViewDelegate {
         includeDiagnostics.action = #selector(refreshPreview)
 
         let diagnosticsLabel = NSTextField(labelWithString: "Include diagnostics")
-        diagnosticsLabel.font = .systemFont(ofSize: ChalkMetrics.s(13))
+        diagnosticsLabel.font = .systemFont(ofSize: 13)
         diagnosticsLabel.textColor = .chalkTextBody
 
         let previewLabel = NSTextField(labelWithString: "This is exactly what will be filed")
-        previewLabel.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .semibold)
+        previewLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         previewLabel.textColor = .chalkTextMuted
 
         let previewScroll = Self.makeTextScroll(previewView, editable: false,
-                                                font: .monospacedSystemFont(ofSize: ChalkMetrics.s(10), weight: .regular),
+                                                font: .monospacedSystemFont(ofSize: 10, weight: .regular),
                                                 color: .chalkTextMuted)
 
         sendButton.bezelStyle = .rounded
-        sendButton.font = .systemFont(ofSize: ChalkMetrics.s(13), weight: .semibold)
+        sendButton.font = .systemFont(ofSize: 13, weight: .semibold)
         sendButton.target = self
         sendButton.action = #selector(send)
 
@@ -121,7 +121,7 @@ final class ReportProblemViewController: NSViewController, NSTextViewDelegate {
             + "the report filled in; you press Submit. It needs a GitHub account.\n\n"
             + "If Chalk crashed, macOS keeps its own crash report: "
             + "Console \u{203A} Crash Reports. Attaching it helps a lot.")
-        footnote.font = .systemFont(ofSize: ChalkMetrics.s(11))
+        footnote.font = .systemFont(ofSize: 11)
         footnote.textColor = .chalkTextMuted
 
         let diagnosticsRow = NSStackView(views: [diagnosticsLabel, includeDiagnostics])
@@ -133,23 +133,23 @@ final class ReportProblemViewController: NSViewController, NSTextViewDelegate {
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = ChalkMetrics.s(12)
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
 
-        let margin = ChalkMetrics.s(16)
+        let margin: CGFloat = 16
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: view.topAnchor, constant: margin),
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: margin),
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -margin),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor, constant: -margin),
-            notesScroll.heightAnchor.constraint(equalToConstant: ChalkMetrics.s(110)),
+            notesScroll.heightAnchor.constraint(equalToConstant: 110),
             notesScroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            previewScroll.heightAnchor.constraint(equalToConstant: ChalkMetrics.s(180)),
+            previewScroll.heightAnchor.constraint(equalToConstant: 180),
             previewScroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footnote.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            notesPlaceholder.topAnchor.constraint(equalTo: notesScroll.topAnchor, constant: ChalkMetrics.s(10)),
-            notesPlaceholder.leadingAnchor.constraint(equalTo: notesScroll.leadingAnchor, constant: ChalkMetrics.s(12)),
+            notesPlaceholder.topAnchor.constraint(equalTo: notesScroll.topAnchor, constant: 10),
+            notesPlaceholder.leadingAnchor.constraint(equalTo: notesScroll.leadingAnchor, constant: 12),
         ])
         refreshPreview()
     }
@@ -158,7 +158,7 @@ final class ReportProblemViewController: NSViewController, NSTextViewDelegate {
     private static func makeTextScroll(_ textView: NSTextView, editable: Bool, font: NSFont, color: NSColor) -> NSScrollView {
         let scroll = NSScrollView()
         scroll.wantsLayer = true
-        scroll.layer?.cornerRadius = ChalkMetrics.s(8)
+        scroll.layer?.cornerRadius = 8
         scroll.layer?.cornerCurve = .continuous
         scroll.drawsBackground = true
         scroll.backgroundColor = .chalkCardBackground
@@ -171,7 +171,7 @@ final class ReportProblemViewController: NSViewController, NSTextViewDelegate {
         textView.font = font
         textView.textColor = color
         textView.insertionPointColor = .chalkAccent
-        textView.textContainerInset = NSSize(width: ChalkMetrics.s(8), height: ChalkMetrics.s(10))
+        textView.textContainerInset = NSSize(width: 8, height: 10)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]

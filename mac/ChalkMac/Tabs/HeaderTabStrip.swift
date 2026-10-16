@@ -612,12 +612,7 @@ final class StripGlyphButton: FlippedView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(
-            rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingArea = area
+        chalkReplaceTrackingArea(&trackingArea)
     }
 
     override func mouseEntered(with event: NSEvent) { hovering = true; applyStyle() }
@@ -638,10 +633,9 @@ final class StripGlyphButton: FlippedView {
 /// change flows through the row's rebuild. Hover changes colour and alpha only:
 /// a size change would re-enter layout.
 private final class HeaderTabName: FlippedView {
-    let itemID: UUID
-    let isActiveItem: Bool
-    private let isDirtyItem: Bool
-    private let itemName: String
+    var itemID: UUID { item.id }
+    var isActiveItem: Bool { item.isActive }
+    private var isDirtyItem: Bool { item.isDirty }
     private weak var strip: HeaderTabStrip?
     private let label = TabLabelView()
     /// Rest and hover renderings of the same string, built once so a hover can
@@ -673,10 +667,6 @@ private final class HeaderTabName: FlippedView {
 
     init(item: TabItem, strip: HeaderTabStrip) {
         self.item = item
-        self.itemID = item.id
-        self.isActiveItem = item.isActive
-        self.isDirtyItem = item.isDirty
-        self.itemName = item.name
         self.strip = strip
         restTitle = Self.title(for: item)
         hoverTitle = Self.title(for: item, hovering: true)
@@ -753,6 +743,10 @@ private final class HeaderTabName: FlippedView {
         return title
     }
 
+    /// One × for every chip: the row is rebuilt on each model change.
+    private static let closeGlyph = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab")?
+        .withSymbolConfiguration(.init(pointSize: TabStripMetrics.closeGlyph, weight: .semibold))
+
     /// The slot: dot OR × per TabStripPolicy.slotContent, cross-faded on slot
     /// hover for dirty tabs (that swap is how an unsaved tab is closed).
     private func buildSlot(item: TabItem) {
@@ -760,8 +754,7 @@ private final class HeaderTabName: FlippedView {
         slotDotView.layer?.cornerRadius = ChalkMetrics.dirtyDotSize / 2
         slotDotView.translatesAutoresizingMaskIntoConstraints = false
 
-        slotCloseIcon.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab")?
-            .withSymbolConfiguration(.init(pointSize: TabStripMetrics.closeGlyph, weight: .semibold))
+        slotCloseIcon.image = Self.closeGlyph
         slotCloseIcon.imageScaling = .scaleNone
         slotCloseIcon.translatesAutoresizingMaskIntoConstraints = false
 
@@ -785,18 +778,8 @@ private final class HeaderTabName: FlippedView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        if let slotTrackingArea { removeTrackingArea(slotTrackingArea) }
-        let area = NSTrackingArea(
-            rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self, userInfo: ["slot": false])
-        addTrackingArea(area)
-        trackingArea = area
-        let slot = NSTrackingArea(
-            rect: slotButton.frame, options: [.mouseEnteredAndExited, .activeInKeyWindow],
-            owner: self, userInfo: ["slot": true])
-        addTrackingArea(slot)
-        slotTrackingArea = slot
+        chalkReplaceTrackingArea(&trackingArea, userInfo: ["slot": false])
+        chalkReplaceTrackingArea(&slotTrackingArea, rect: slotButton.frame, userInfo: ["slot": true])
     }
 
     override func mouseEntered(with event: NSEvent) {

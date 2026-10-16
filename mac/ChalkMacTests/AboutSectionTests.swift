@@ -49,7 +49,7 @@ final class AboutSectionTests: XCTestCase {
         let controller = settings()
         for row in 0..<aboutTitles(controller).count {
             let hasArrow = controller.rowHasDisclosureForTesting(section: 2, row: row)
-            let opens = controller.destinationForTesting(section: 2, row: row) != nil
+            let opens = controller.destination(section: 2, row: row) != nil
             XCTAssertEqual(hasArrow, opens,
                            "row \(row) (\(aboutTitles(controller)[row])) shows an arrow "
                            + "but leads nowhere, or leads somewhere without saying so")
@@ -58,7 +58,7 @@ final class AboutSectionTests: XCTestCase {
 
     /// The Acknowledgements screen carries the bundled notices.
     func testAcknowledgementsReadTheBundledNotices() throws {
-        let screen = try XCTUnwrap(settings().destinationForTesting(section: 2, row: 3) as? AcknowledgementsViewController)
+        let screen = try XCTUnwrap(settings().destination(section: 2, row: 3) as? AcknowledgementsViewController)
         XCTAssertFalse(screen.textForTesting.isEmpty)
         XCTAssertFalse(screen.textForTesting.contains("unavailable in this build"),
                        "THIRD-PARTY-NOTICES must ship in the app bundle")

@@ -49,7 +49,6 @@ final class RootSplitViewController: NSViewController {
 
     // The sidebar slide's state (docs/motion.md "Sidebar show/hide").
     /// The column mid-slide, nil at rest.
-    private var slidingSidebarColumn: NSView?
     /// Bumped by every cancel: a completion or a settle callback from an
     /// older slide must do nothing to the newer one.
     private var sidebarSlideEpoch = 0
@@ -159,8 +158,8 @@ final class RootSplitViewController: NSViewController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleAutoHidePreferenceChange),
             name: Preferences.autoHideChromeDidChange, object: nil)
-        headerBar.tabStrip.onSelect = { [weak self] id in self?.editor.selectTab(id: id) }
-        headerBar.tabStrip.onClose = { [weak self] id in self?.editor.requestCloseTab(id: id) }
+        headerBar.tabStrip.onSelect = { [weak self] id in self?.editor.activate(id: id) }
+        headerBar.tabStrip.onClose = { [weak self] id in self?.editor.closeTab(id: id) }
         headerBar.tabStrip.onNew = { [weak self] in self?.cmdNewFile() }
         headerBar.tabStrip.onMove = { [weak self] id, index in self?.editor.moveTab(id: id, to: index) }
         // The pill routes to the same shell commands the menu uses.
@@ -419,31 +418,13 @@ final class RootSplitViewController: NSViewController {
     private typealias BandInputs = (dividerX: CGFloat, libraryColumn: NSView?)
 
     /// The spec constants `BandLayout` builds the band out of, with the row's
-    /// resting start as measured off this window's traffic lights.
+    /// resting start as the band measures it off this window's traffic lights.
     private var bandMetrics: BandLayout.Metrics {
         BandLayout.Metrics(
             tabStripHeight: ChalkMetrics.tabStripHeight,
-            tabStripLeading: trafficLightsClearance,
+            tabStripLeading: headerBar.restingStart,
             tabRowDividerGap: ChalkMetrics.tabRowDividerGap,
             editorRestingPad: ChalkMetrics.editorRestingPad)
-    }
-
-    /// Where the names start with no Library tiled: the traffic lights'
-    /// trailing edge plus `TabStripMetrics.trafficLightGap`, read off the
-    /// window's own zoom button rather than the spec constant, which was
-    /// measured on a short titlebar and sits 16pt short under the unified
-    /// one. Full screen hides the buttons, so the last windowed reading
-    /// stands and the row does not jump (`ChalkMetrics.tabStripLeading` is
-    /// the seed before any window).
-    private var trafficLightsClearance: CGFloat = ChalkMetrics.tabStripLeading
-
-    private func measureTrafficLights() {
-        guard !isMacFullscreen,
-              let zoom = view.window?.standardWindowButton(.zoomButton), !zoom.isHidden,
-              let container = zoom.superview else { return }
-        let edge = view.convert(zoom.frame, from: container).maxX
-        guard edge > 0 else { return }
-        trafficLightsClearance = edge + TabStripMetrics.trafficLightGap
     }
 
     /// The band's one layout pass: measure the divider off the live columns,
@@ -453,8 +434,6 @@ final class RootSplitViewController: NSViewController {
     /// full-bleed under the band and rests below web-side padding.
     private func applyBandLayout(measured: BandInputs? = nil) {
         let measured = measured ?? measuredBandInputs()
-        measureTrafficLights()
-        headerBar.setTrafficLightsClearance(trafficLightsClearance)
         let layout = BandLayout.resolve(
             glueAvailable: true,
             fullscreen: isMacFullscreen, zen: isZen,
@@ -743,15 +722,11 @@ final class RootSplitViewController: NSViewController {
     /// Snapshot this window's restorable state (open file tabs, active tab,
     /// sidebar visibility, outline panel).
     func captureSession() -> WindowSession {
-        let snapshot = editor.sessionSnapshot()
-        let records = snapshot.urls.map {
-            // A bookmark per tab: it makes restoration independent of
-            // Location-resolution order, and it is the only thing that reopens
-            // an external file's sandbox scope after relaunch.
-            WindowSession.TabRecord(path: $0.path, bookmark: FileBookmark.make(for: $0))
-        }
+        // A bookmark per tab: it makes restoration independent of
+        // Location-resolution order, and it is the only thing that reopens
+        // an external file's sandbox scope after relaunch.
         return WindowSession(
-            tabs: records, activeIndex: snapshot.activeIndex,
+            tabs: editor.sessionTabRecords(), activeIndex: editor.sessionSnapshot().activeIndex,
             isSidebarVisible: isSidebarVisible,
             isOutlineVisible: editor.isOutlinePanelVisible)
     }
@@ -963,14 +938,12 @@ final class RootSplitViewController: NSViewController {
         vc.onClose = { [weak self] then in self?.hideQuickOpen(then: then) }
         return vc
     }()
-    private var isQuickOpenMounted = false
 
     /// Mount the palette as a hidden glass card over the scrim, above every
     /// view the root holds; the host owns the views and the animation, this
     /// owns the containment and the wiring.
     private func setUpQuickOpenOverlay() {
-        guard !isQuickOpenMounted else { return }
-        isQuickOpenMounted = true
+        guard quickOpenVC.parent == nil else { return }
         addChild(quickOpenVC)
         quickOpenHost.mount(in: view, content: quickOpenVC.view) { [weak self] in
             self?.hideQuickOpen { self?.returnFocusAfterDismiss() }
@@ -986,7 +959,6 @@ final class RootSplitViewController: NSViewController {
         setUpQuickOpenOverlay()
         quickOpenVC.prepareForReuse()
         #if DEBUG
-        quickOpenVC.openCommandTime = CACurrentMediaTime()
         #endif
         quickOpenHost.present { editor.blurActiveSurface() }
         quickOpenVC.didReveal()
@@ -1031,11 +1003,9 @@ final class RootSplitViewController: NSViewController {
         vc.onClose = { [weak self] then in self?.hideOutlinePalette(then: then) }
         return vc
     }()
-    private var isOutlineMounted = false
 
     private func setUpOutlineOverlay() {
-        guard !isOutlineMounted else { return }
-        isOutlineMounted = true
+        guard outlinePaletteVC.parent == nil else { return }
         addChild(outlinePaletteVC)
         outlineHost.mount(in: view, content: outlinePaletteVC.view) { [weak self] in
             self?.hideOutlinePalette { self?.returnFocusAfterDismiss() }
@@ -1049,7 +1019,6 @@ final class RootSplitViewController: NSViewController {
         setUpOutlineOverlay()
         outlinePaletteVC.prepareForReuse()
         #if DEBUG
-        outlinePaletteVC.openCommandTime = CACurrentMediaTime()
         #endif
         outlineHost.present {
             // Release the webview's DOM focus before the palette grabs the
@@ -1156,7 +1125,6 @@ final class RootSplitViewController: NSViewController {
         // The frozen full-width content overhangs the (now narrower) column's
         // leading edge; it stays visible there until the sidebar covers it.
         editor.view.clipsToBounds = false
-        slidingSidebarColumn = sidebarColumn
         isSidebarSliding = true
         let epoch = sidebarSlideEpoch
         CATransaction.begin()
@@ -1164,7 +1132,6 @@ final class RootSplitViewController: NSViewController {
             // A re-toggle canceled this slide; its bookkeeping is done and
             // running the settle here would unfreeze mid-NEW-slide.
             guard let self, epoch == self.sidebarSlideEpoch else { return }
-            self.slidingSidebarColumn = nil
             self.isSidebarSliding = false
             self.editor.view.clipsToBounds = true
             self.applyBandLayout() // anything the slide guard held back
@@ -1209,12 +1176,10 @@ final class RootSplitViewController: NSViewController {
         // The content's visual rect crosses the column's leading edge on its
         // way out; the departing sidebar (stacked above) covers the seam.
         editor.view.clipsToBounds = false
-        slidingSidebarColumn = sidebarColumn
         let epoch = sidebarSlideEpoch
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in
             guard let self, epoch == self.sidebarSlideEpoch else { return }
-            self.slidingSidebarColumn = nil
             self.isSidebarSliding = false
             self.editor.view.clipsToBounds = true
             self.setSidebarVisible(false)
@@ -1235,8 +1200,7 @@ final class RootSplitViewController: NSViewController {
         sidebarSlideEpoch += 1
         sidebarSlideSettle?.cancel()
         sidebarSlideSettle = nil
-        slidingSidebarColumn?.layer?.chalkEndSlide()
-        slidingSidebarColumn = nil
+        sidebarColumn.layer?.chalkEndSlide()
         isSidebarSliding = false
         if editor.isViewLoaded { editor.view.clipsToBounds = true }
         editor.unfreezeContentWidth()
@@ -1353,7 +1317,7 @@ final class RootSplitViewController: NSViewController {
         view.addSubview(banner)
         NSLayoutConstraint.activate([
             banner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            banner.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -ChalkMetrics.s(56)),
+            banner.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -56),
             banner.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
         ])
         noticeBanner = banner
@@ -1634,22 +1598,12 @@ final class RootSplitViewController: NSViewController {
     }
 
     /// The live editor surface's covered-transition seams: a bitmap of the
-    /// pixels on screen, and a gate that answers once the web process has
-    /// painted the new layout (two rAFs, not a delay: a fixed delay races the
-    /// async repaint and loses on heavy documents).
+    /// pixels on screen, and the surface's own paint gate.
     private func liveWebPaintSeams() -> (snapshotter: WebPaintGate.Snapshotter,
                                          paintGate: WebPaintGate.PaintGate,
                                          bitmapSource: NSView)? {
-        guard let webView = editor.activeSurfaceWebView, webView.window != nil else { return nil }
-        return (
-            { done in webView.takeSnapshot(with: nil) { image, _ in done(image) } },
-            { ready in
-                webView.callAsyncJavaScript(
-                    "await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
-                    in: nil, in: .page
-                ) { _ in ready() }
-            },
-            webView)
+        guard let surface = editor.activeSurface, surface.view.window != nil else { return nil }
+        return (surface.captureSnapshot, surface.afterNextPaint, surface.view)
     }
 
     /// The opaque shield a covered transition installs over the editor: the
@@ -1677,10 +1631,10 @@ final class RootSplitViewController: NSViewController {
             // either (AppKit resets it on layout, see `chalkSlide`); either
             // one placed the bitmap a sidebar's width from the content it was
             // covering, where it faded as a ghost.
+            let shift = Self.presentedTranslation(of: bitmapSource, upTo: editorView)
             bitmap.frame = editorView
                 .convert(bitmapSource.bounds, from: bitmapSource)
-                .offsetBy(dx: Self.presentedTranslation(of: bitmapSource, upTo: editorView).dx - finalRect.origin.x,
-                          dy: Self.presentedTranslation(of: bitmapSource, upTo: editorView).dy - finalRect.origin.y)
+                .offsetBy(dx: shift.dx - finalRect.origin.x, dy: shift.dy - finalRect.origin.y)
             cover.addSubview(bitmap)
         }
         editorView.addSubview(cover)
@@ -1720,12 +1674,7 @@ final class PointerBandTracker: FlippedView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(
-            rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingArea = area
+        chalkReplaceTrackingArea(&trackingArea)
     }
 
     override func mouseEntered(with event: NSEvent) { onChange?(true) }
@@ -1775,8 +1724,6 @@ extension RootSplitViewController {
     var pillEditingModeForTesting: EditingMode? { footerBar.currentEditingMode?() }
     var editorChromeTopInsetForTesting: Double { editor.chromeTopInsetForTesting }
     var editorMeasureForTesting: Double? { editor.lastPushedMeasure }
-    var editorLineHeightForTesting: Double? { editor.lastPushedLineHeight }
-    var editorTextAlignForTesting: String? { editor.lastPushedTextAlign?.cssValue }
     var editorForTesting: EditorContainerViewController { editor }
     var isOutlinePanelVisibleForTesting: Bool { editor.isOutlinePanelVisible }
     /// The band's trailing cut-out in root coordinates, nil when none.
@@ -1894,13 +1841,11 @@ extension RootSplitViewController {
         }
     }
 
-    /// Where the chrome that reserves space above the text ENDS.
-    var chromeReserveForTesting: CGFloat { chromeReserve }
 
     /// Whether the sidebar slide still owns any state (a sliding column or a
     /// live settle). True mid-flight; false at rest.
     var isSidebarTransitionInFlightForTesting: Bool {
-        slidingSidebarColumn != nil || (sidebarSlideSettle?.isActive ?? false)
+        isSidebarSliding || (sidebarSlideSettle?.isActive ?? false)
     }
 
     /// The Library itself, for the tests that drive its own seams.

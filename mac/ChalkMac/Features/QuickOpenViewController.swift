@@ -27,7 +27,7 @@ final class QuickOpenViewController: NSViewController {
         hints: "\u{2191}\u{2193} navigate    return open    \u{2318} return new tab",
         rowHeight: QuickOpenViewController.resultRowHeight)
 
-    private static let resultRowHeight: CGFloat = ChalkMetrics.s(46)
+    private static let resultRowHeight: CGFloat = 46
     private static let maxVisibleRows = 8
 
     private var selectedIndex = 0
@@ -103,8 +103,6 @@ final class QuickOpenViewController: NSViewController {
     }
 
     #if DEBUG
-    /// Set right before presenting, to measure command-to-visible latency. 0 = unset.
-    var openCommandTime: CFTimeInterval = 0
     #endif
 
     override func loadView() {
@@ -128,11 +126,6 @@ final class QuickOpenViewController: NSViewController {
         loadViewIfNeeded()
         reportContentHeight()
         #if DEBUG
-        if openCommandTime > 0 {
-            NSLog("[latency] QuickOpen command->visible %.0fms",
-                  (CACurrentMediaTime() - openCommandTime) * 1000)
-            openCommandTime = 0
-        }
         #endif
         // The editor webview holds the keyboard, and an immediate grab can
         // lose to it (its blur round-trips through the web process). Retry
@@ -199,7 +192,6 @@ final class QuickOpenViewController: NSViewController {
     var selectedIndexForTesting: Int { selectedIndex }
     func confirmSelectedForTesting(inNewTab: Bool = false) { openSelected(inNewTab: inNewTab) }
     func moveSelectionForTesting(down: Bool) { down ? moveDown() : moveUp() }
-    func cancelForTesting() { cancelPalette() }
     var searchFieldForTesting: NSTextField { frame.searchField }
     var tableViewForTesting: NSTableView { frame.tableView }
     /// becomeFirstResponder attempts by grabFocus.
@@ -258,13 +250,13 @@ final class PaletteResultCellView: FlippedView, PaletteRowContent {
     private let icon = NSImageView()
     private let nameLabel = NSTextField(labelWithString: "")
     private let pathLabel = NSTextField(labelWithString: "")
-    private let returnBadge = KeyBadgeView(text: "return", color: .chalkChromeFgSecondary, width: ChalkMetrics.s(42))
+    private let returnBadge = KeyBadgeView(text: "return", color: .chalkChromeFgSecondary, width: 42)
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
         icon.image = NSImage(systemSymbolName: "doc.text", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: ChalkMetrics.s(13), weight: .regular))
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
         icon.contentTintColor = .chalkChromeFgTertiary
         icon.imageScaling = .scaleNone
         icon.translatesAutoresizingMaskIntoConstraints = false
@@ -287,19 +279,19 @@ final class PaletteResultCellView: FlippedView, PaletteRowContent {
         addSubview(pathLabel)
         addSubview(returnBadge)
         NSLayoutConstraint.activate([
-            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ChalkMetrics.s(10)),
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: ChalkMetrics.s(16)),
+            icon.widthAnchor.constraint(equalToConstant: 16),
 
-            nameLabel.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: ChalkMetrics.s(11)),
+            nameLabel.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 11),
             nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: returnBadge.leadingAnchor, constant: -10),
-            nameLabel.topAnchor.constraint(equalTo: topAnchor, constant: ChalkMetrics.s(6)),
+            nameLabel.topAnchor.constraint(equalTo: topAnchor, constant: 6),
 
             pathLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             pathLabel.trailingAnchor.constraint(lessThanOrEqualTo: returnBadge.leadingAnchor, constant: -10),
             pathLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 1),
 
-            returnBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ChalkMetrics.s(10)),
+            returnBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             returnBadge.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }

@@ -64,7 +64,7 @@ final class SidebarTitlebarClickTests: XCTestCase {
     private func assertHeaderSitsOnTheChromeFloor() throws {
         let header = try XCTUnwrap(sidebar.firstHeaderFrameForTesting)
         let inRoot = root.view.convert(header, from: sidebar.view)
-        XCTAssertEqual(inRoot.minY, root.chromeReserveForTesting, accuracy: 1.5,
+        XCTAssertEqual(inRoot.minY, root.libraryTreeTop, accuracy: 1.5,
                        "the first header starts where the chrome ends")
     }
 
@@ -80,7 +80,7 @@ final class SidebarTitlebarClickTests: XCTestCase {
     /// the band's paint and its clicks belong to the Library's surface, not
     /// to the band and not to the titlebar.
     func testAClickInTheBandOverTheLibraryReachesTheLibrary() throws {
-        let reserve = root.chromeReserveForTesting
+        let reserve = root.libraryTreeTop
         XCTAssertGreaterThan(reserve, 10, "precondition: the chrome reserves a band")
         let point = root.view.convert(NSPoint(x: 100, y: reserve - 8), to: nil)
         let view = try hit(point)

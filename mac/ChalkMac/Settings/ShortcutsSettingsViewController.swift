@@ -16,9 +16,9 @@ protocol ShortcutRowViewDelegate: AnyObject {
 /// Column geometry shared by the rows and the column header so the labels sit over their columns.
 enum ShortcutColumnLayout {
     /// The enable checkbox ahead of the first column; unlabelled in the header.
-    static var checkboxWidth: CGFloat { ChalkMetrics.s(20) }
-    static var gap: CGFloat { ChalkMetrics.s(10) }
-    static var inset: CGFloat { ChalkMetrics.s(16) }
+    static var checkboxWidth: CGFloat { 20 }
+    static var gap: CGFloat { 10 }
+    static var inset: CGFloat { 16 }
     /// Fractions of the row's content width.
     static let triggerWidthMultiplier: CGFloat = 0.20
     static let replacementWidthMultiplier: CGFloat = 0.48
@@ -134,15 +134,15 @@ final class ShortcutsSettingsViewController: NSViewController {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.automaticallyAdjustsContentInsets = false
-        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: ChalkMetrics.s(16), right: 0)
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 16, right: 0)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(scrollView)
 
         NSLayoutConstraint.activate([
-            searchField.topAnchor.constraint(equalTo: view.topAnchor, constant: ChalkMetrics.s(12)),
-            searchField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: ChalkMetrics.s(20)),
-            searchField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -ChalkMetrics.s(20)),
-            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: ChalkMetrics.s(10)),
+            searchField.topAnchor.constraint(equalTo: view.topAnchor, constant: 12),
+            searchField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            searchField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -391,8 +391,10 @@ extension ShortcutsSettingsViewController: NSTableViewDataSource, NSTableViewDel
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = ShortcutTableRowView()
-        if case .shortcut = tableRows[row] { rowView.isCard = true }
-        if case .addRow = tableRows[row] { rowView.isCard = true }
+        switch tableRows[row] {
+        case .shortcut, .addRow: rowView.isCard = true
+        case .header, .footer: break
+        }
         return rowView
     }
 
@@ -407,17 +409,15 @@ extension ShortcutsSettingsViewController: NSTableViewDataSource, NSTableViewDel
             let footer = tableView.makeView(withIdentifier: ShortcutFooterView.identifier, owner: nil)
                 as? ShortcutFooterView ?? ShortcutFooterView()
             return footer
-        case .shortcut(let identity):
+        case .shortcut, .addRow:
             let view = tableView.makeView(withIdentifier: ShortcutRowView.identifier, owner: nil)
                 as? ShortcutRowView ?? ShortcutRowView()
             view.delegate = self
-            configure(view, with: row(for: identity))
-            return view
-        case .addRow:
-            let view = tableView.makeView(withIdentifier: ShortcutRowView.identifier, owner: nil)
-                as? ShortcutRowView ?? ShortcutRowView()
-            view.delegate = self
-            configure(view, with: nil)
+            if case .shortcut(let identity) = tableRows[index] {
+                configure(view, with: row(for: identity))
+            } else {
+                configure(view, with: nil)
+            }
             return view
         }
     }
@@ -538,7 +538,7 @@ final class ShortcutTableRowView: NSTableRowView {
 
 /// The cards' inset from the pane's edges.
 enum ChalkColumnInset {
-    static var cardInset: CGFloat { ChalkMetrics.s(20) }
+    static var cardInset: CGFloat { 20 }
 }
 
 /// One row of the shortcuts table: enable checkbox, trigger, replacement,
@@ -567,7 +567,7 @@ final class ShortcutRowView: FlippedView, NSTextFieldDelegate {
     override init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
-        let mono = NSFont.monospacedSystemFont(ofSize: ChalkMetrics.s(12.5), weight: .regular)
+        let mono = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
 
         for field in [triggerField, replacementField] {
             field.font = mono
@@ -591,19 +591,19 @@ final class ShortcutRowView: FlippedView, NSTextFieldDelegate {
         replacementField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         // Marks an edited built-in, which is why it offers Reset.
-        modifiedLabel.font = .systemFont(ofSize: ChalkMetrics.s(8.5), weight: .semibold)
+        modifiedLabel.font = .systemFont(ofSize: 8.5, weight: .semibold)
         modifiedLabel.textColor = .chalkTextFaint
         modifiedLabel.isHidden = true
         modifiedLabel.translatesAutoresizingMaskIntoConstraints = false
 
         optionsButton.isBordered = false
-        optionsButton.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .medium)
+        optionsButton.font = .systemFont(ofSize: 11, weight: .medium)
         optionsButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         optionsButton.translatesAutoresizingMaskIntoConstraints = false
         (optionsButton.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
 
         removalButton.isBordered = false
-        removalButton.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .medium)
+        removalButton.font = .systemFont(ofSize: 11, weight: .medium)
         removalButton.contentTintColor = .chalkTextMuted
         removalButton.target = self
         removalButton.action = #selector(removalTapped)
@@ -620,7 +620,7 @@ final class ShortcutRowView: FlippedView, NSTextFieldDelegate {
 
         let inset = ChalkColumnInset.cardInset + ShortcutColumnLayout.inset
         let gap = ShortcutColumnLayout.gap
-        let top = ChalkMetrics.s(8)
+        let top: CGFloat = 8
         NSLayoutConstraint.activate([
             enableButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
             enableButton.topAnchor.constraint(equalTo: topAnchor, constant: top),
@@ -631,7 +631,7 @@ final class ShortcutRowView: FlippedView, NSTextFieldDelegate {
             triggerField.widthAnchor.constraint(equalTo: widthAnchor, multiplier: ShortcutColumnLayout.triggerWidthMultiplier,
                                                 constant: -inset * 2 * ShortcutColumnLayout.triggerWidthMultiplier),
             modifiedLabel.leadingAnchor.constraint(equalTo: triggerField.leadingAnchor),
-            modifiedLabel.topAnchor.constraint(equalTo: triggerField.bottomAnchor, constant: ChalkMetrics.s(1)),
+            modifiedLabel.topAnchor.constraint(equalTo: triggerField.bottomAnchor, constant: 1),
 
             replacementField.leadingAnchor.constraint(equalTo: triggerField.trailingAnchor, constant: gap),
             replacementField.topAnchor.constraint(equalTo: topAnchor, constant: top),
@@ -648,7 +648,7 @@ final class ShortcutRowView: FlippedView, NSTextFieldDelegate {
             bottomAnchor.constraint(greaterThanOrEqualTo: modifiedLabel.bottomAnchor, constant: top),
             bottomAnchor.constraint(greaterThanOrEqualTo: replacementField.bottomAnchor, constant: top),
             bottomAnchor.constraint(greaterThanOrEqualTo: optionsButton.bottomAnchor, constant: top),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: ChalkMetrics.s(36)),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
         ])
     }
 
@@ -703,7 +703,7 @@ final class ShortcutRowView: FlippedView, NSTextFieldDelegate {
         let titleItem = NSMenuItem()
         titleItem.attributedTitle = NSAttributedString(
             string: isEmpty ? "no options" : labels.joined(separator: " \u{00B7} "),
-            attributes: [.font: NSFont.systemFont(ofSize: ChalkMetrics.s(11), weight: .medium),
+            attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium),
                          .foregroundColor: color])
         menu.addItem(titleItem)
         let target = identity
@@ -776,7 +776,6 @@ final class ShortcutRowView: FlippedView, NSTextFieldDelegate {
     var optionsTitleForTesting: String { optionsButton.menu?.items.first?.title ?? "" }
     var removalTitleForTesting: String? { removalButton.isHidden ? nil : removalButton.title }
     var isEnabledForTesting: Bool { isEnabled }
-    var isModifiedForTesting: Bool { !modifiedLabel.isHidden }
     #endif
 }
 
@@ -790,7 +789,7 @@ final class ShortcutColumnsHeaderView: FlippedView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
-        titleLabel.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         titleLabel.textColor = .chalkTextMuted
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         columns.translatesAutoresizingMaskIntoConstraints = false
@@ -811,12 +810,12 @@ final class ShortcutColumnsHeaderView: FlippedView {
         let gap = ShortcutColumnLayout.gap
         let inset = ChalkColumnInset.cardInset + ShortcutColumnLayout.inset
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: ChalkMetrics.s(14)),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 14),
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
-            columns.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: ChalkMetrics.s(5)),
+            columns.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 5),
             columns.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
             columns.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            bottomAnchor.constraint(equalTo: columns.bottomAnchor, constant: ChalkMetrics.s(6)),
+            bottomAnchor.constraint(equalTo: columns.bottomAnchor, constant: 6),
             trigger.leadingAnchor.constraint(equalTo: columns.leadingAnchor,
                                              constant: ShortcutColumnLayout.checkboxWidth + gap),
             trigger.widthAnchor.constraint(equalTo: columns.widthAnchor,
@@ -840,7 +839,7 @@ final class ShortcutColumnsHeaderView: FlippedView {
 
     private static func columnLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: ChalkMetrics.s(10), weight: .semibold)
+        label.font = .systemFont(ofSize: 10, weight: .semibold)
         label.textColor = .chalkTextMuted
         return label
     }
@@ -857,16 +856,16 @@ final class ShortcutFooterView: FlippedView {
             "Type in the last row to add a shortcut. Editing a built-in makes it "
             + "yours; Reset brings the built-in back. Use $1, $2 for placeholders, $0 for the final "
             + "cursor position, and #1, #2 for regex captures.")
-        label.font = .systemFont(ofSize: ChalkMetrics.s(11))
+        label.font = .systemFont(ofSize: 11)
         label.textColor = .chalkTextFaint
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
         let inset = ChalkColumnInset.cardInset + ShortcutColumnLayout.inset
         NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: topAnchor, constant: ChalkMetrics.s(10)),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            bottomAnchor.constraint(equalTo: label.bottomAnchor, constant: ChalkMetrics.s(10)),
+            bottomAnchor.constraint(equalTo: label.bottomAnchor, constant: 10),
         ])
     }
 

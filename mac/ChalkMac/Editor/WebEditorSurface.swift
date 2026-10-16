@@ -7,12 +7,12 @@ import os
 ///
 /// No key-equivalent lane of its own: AppKit evaluates the menu bar's key equivalents, and a
 /// Cmd-key the page consumes (`preventDefault`, see `SHELL_COMMANDS` in web/src/native-host.ts)
-/// comes back over the transport-internal `command` message instead. The two never both fire for
-/// one keystroke, so there is nothing to dedupe. Copy and cut are WebKit's own on AppKit.
+/// comes back over the transport-internal `command` message too. One press can arrive over both
+/// lanes, which `RootSplitViewController.admitShellAction` collapses. Copy and cut are WebKit's own on AppKit.
 final class EditorWebView: WKWebView {}
 
-/// The surface's view: holds the web view under the pre-paint cover, so the container's tab
-/// cross-fade (the host's alpha) and the cover never fight over one view.
+/// The surface's view: holds the web view under the pre-paint cover. The container installs
+/// and removes the host; the cover is the host's own business.
 final class EditorSurfaceHostView: NSView {
     /// Opaque, in the editor's tone, above the web view. An alpha of 0 on the web view was
     /// not enough: its content is a remote layer whose first frame reached the screen white
@@ -107,8 +107,8 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
 /// of the seed.
 final class WebEditorSurface: NSObject, EditorSurface {
     weak var delegate: EditorSurfaceDelegate?
-    /// The host, not the web view itself: the container fades the host at a
-    /// tab switch, while the web view's own alpha is the pre-paint cover.
+    /// The host, not the web view itself: the pre-paint cover lives beside the
+    /// web view inside it.
     var view: NSView { host }
     private let host = EditorSurfaceHostView()
 
@@ -195,11 +195,15 @@ final class WebEditorSurface: NSObject, EditorSurface {
             self.host.liftCover()
         }
         guard afterPaint else { return lift() }
+        afterNextPaint(lift)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: lift)
+    }
+
+    func afterNextPaint(_ completion: @escaping () -> Void) {
         webView.callAsyncJavaScript(
             "await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
             in: nil, in: .page
-        ) { _ in lift() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: lift)
+        ) { _ in completion() }
     }
 
     /// Called on the tab's first show. Until then the WKWebView holds no page, no web content
@@ -327,8 +331,7 @@ final class WebEditorSurface: NSObject, EditorSurface {
         // strip exposed when the view grows (a tab reinstalled after the
         // column widened behind it) wore the construction-time default for
         // the frames before the repaint, a block in the wrong tone.
-        let (red, green, blue) = theme.palette.editorBackground.components(dark: dark)
-        webView.underPageBackgroundColor = NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+        webView.underPageBackgroundColor = .chalkEditorBackground(dark: dark, theme: theme)
         applyAppearance()
     }
 
@@ -341,7 +344,6 @@ final class WebEditorSurface: NSObject, EditorSurface {
         webView.configuration.userContentController.userScripts
     }
     var desiredDarkForTesting: Bool { desiredDark }
-    var desiredThemeForTesting: ChalkTheme { desiredTheme }
     /// Counts `setAppearance` calls, including ones that push the theme already shown.
     private(set) var appearancePushCountForTesting = 0
     /// Host-to-editor messages in delivery order; queued ones appear when flushed.
@@ -543,12 +545,12 @@ final class WebEditorSurface: NSObject, EditorSurface {
         }
     }
 
-    /// Jump to a 1-based line.
     func captureSnapshot(_ completion: @escaping (NSImage?) -> Void) {
         guard isReady, !host.isCovering, webView.window != nil else { return completion(nil) }
         webView.takeSnapshot(with: nil) { image, _ in completion(image) }
     }
 
+    /// Jump to a 1-based line.
     func revealLine(_ line: Int) {
         webView.evaluateJavaScript(
             "window.__chalkEditor?.gotoLine(\(line))", completionHandler: nil)
@@ -586,6 +588,7 @@ final class WebEditorSurface: NSObject, EditorSurface {
               let json = String(data: data, encoding: .utf8) else { return nil }
         // JSON allows raw U+2028/U+2029 in strings but pre-ES2019 JS literals don't. Our WebKit
         // floor accepts them; escape anyway, since failure would be a silently dropped `init`.
+        guard json.contains("\u{2028}") || json.contains("\u{2029}") else { return json }
         return json
             .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
             .replacingOccurrences(of: "\u{2029}", with: "\\u2029")

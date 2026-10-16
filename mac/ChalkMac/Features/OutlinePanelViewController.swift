@@ -67,6 +67,10 @@ final class OutlinePanelViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Layer-backed, so the container's slide moves the panel as one unit:
+        // without a layer its frame snapped to its final place while its
+        // layer-backed children slid in, a dark block one frame ahead.
+        view.wantsLayer = true
         for hairline in [edge, headerRule, footerRule] {
             hairline.wantsLayer = true
             hairline.translatesAutoresizingMaskIntoConstraints = false

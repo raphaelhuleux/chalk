@@ -51,13 +51,17 @@ final class WindowLocationsTests: XCTestCase {
     }
 
     /// A list no restorable window owns is a leak from a process that died before journaling it.
-    func testDiscardAllKeepsOnlyTheNamedWindowsAndTheLegacyList() {
+    /// Only the sweeping shell's own ids are swept: another shell's lists share the domain.
+    func testDiscardAllKeepsTheNamedWindowsOtherShellsAndTheLegacyList() {
         defaults.set(legacy, forKey: WindowLocations.legacyKey)
-        _ = WindowLocations.store(forWindow: "live", isRestoredWindow: false, defaults: defaults)
-        _ = WindowLocations.store(forWindow: "dead", isRestoredWindow: false, defaults: defaults)
-        WindowLocations.discardAll(except: ["live"], defaults: defaults)
-        XCTAssertNotNil(defaults.object(forKey: WindowLocations.key(forWindow: "live")))
-        XCTAssertNil(defaults.object(forKey: WindowLocations.key(forWindow: "dead")))
+        _ = WindowLocations.store(forWindow: "mac-live", isRestoredWindow: false, defaults: defaults)
+        _ = WindowLocations.store(forWindow: "mac-dead", isRestoredWindow: false, defaults: defaults)
+        _ = WindowLocations.store(forWindow: "scene-other", isRestoredWindow: false, defaults: defaults)
+        WindowLocations.discardAll(except: ["mac-live"], idPrefix: "mac-", defaults: defaults)
+        XCTAssertNotNil(defaults.object(forKey: WindowLocations.key(forWindow: "mac-live")))
+        XCTAssertNil(defaults.object(forKey: WindowLocations.key(forWindow: "mac-dead")))
+        XCTAssertNotNil(defaults.object(forKey: WindowLocations.key(forWindow: "scene-other")),
+                        "another shell's list is not this shell's to sweep")
         XCTAssertNotNil(defaults.data(forKey: WindowLocations.legacyKey), "the legacy list is read-only")
     }
 }

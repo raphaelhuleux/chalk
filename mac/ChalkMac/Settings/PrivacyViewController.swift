@@ -157,12 +157,12 @@ final class PrivacyViewController: NSViewController {
             let rowViews = rows(in: section).map(makeRow)
             let card = SettingsCardView(title: section.title, rows: rowViews)
             let footer = NSTextField(wrappingLabelWithString: section.footer)
-            footer.font = .systemFont(ofSize: ChalkMetrics.s(11))
+            footer.font = .systemFont(ofSize: 11)
             footer.textColor = .chalkTextMuted
             let group = NSStackView(views: [card, footer])
             group.orientation = .vertical
             group.alignment = .leading
-            group.spacing = ChalkMetrics.s(8)
+            group.spacing = 8
             card.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true
             footer.widthAnchor.constraint(equalTo: group.widthAnchor, constant: -SettingsRowView.inset * 2).isActive = true
             return group
@@ -170,10 +170,10 @@ final class PrivacyViewController: NSViewController {
         let stack = NSStackView(views: cards)
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = ChalkMetrics.s(22)
+        stack.spacing = 22
         stack.translatesAutoresizingMaskIntoConstraints = false
         document.addSubview(stack)
-        let margin = ChalkMetrics.s(20)
+        let margin: CGFloat = 20
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: document.topAnchor, constant: margin),
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: margin),

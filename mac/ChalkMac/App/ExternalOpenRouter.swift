@@ -37,7 +37,7 @@ enum ExternalOpenRouter {
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         let roots = candidates.map { $0.root.libraryRoots.map(\.fileIdentity) }
 
-        if isDirectory(url) {
+        if url.isDirectoryOnDisk {
             if let index = ExternalOpenRouting.windowShowing(folder: url.fileIdentity, windowRoots: roots) {
                 candidates[index].bringForward()
             } else if receiver.isPristine {
@@ -55,9 +55,5 @@ enum ExternalOpenRouter {
         } else {
             receiver.openExternalDocument(url)
         }
-    }
-
-    private static func isDirectory(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? url.hasDirectoryPath
     }
 }

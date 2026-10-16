@@ -1,11 +1,17 @@
 import AppKit
 import ChalkKit
+import os
+
+private let noticeLog = Logger(subsystem: "com.huleux.chalk", category: "notice")
 
 extension NSViewController {
     /// A one-button notice as a sheet on this controller's window. Logged
     /// instead when there is no window (tests, a screen not yet shown).
     func presentChalkNotice(title: String?, message: String) {
-        guard let window = view.window else { return }
+        guard let window = view.window else {
+            noticeLog.notice("notice without a window: \(title ?? message, privacy: .public)")
+            return
+        }
         let alert = NSAlert()
         alert.messageText = title ?? message
         if title != nil { alert.informativeText = message }

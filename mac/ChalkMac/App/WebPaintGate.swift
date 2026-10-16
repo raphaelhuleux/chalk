@@ -66,9 +66,7 @@ final class WebPaintGate {
     }
 
     func begin() {
-        #if DEBUG
         DebugTrace.log("paint-gate begin")
-        #endif
         isActive = true
         // The release is armed BEFORE the async snapshot ask (the contract's
         // guaranteed-release clause): a snapshotter that never answers costs
@@ -101,23 +99,17 @@ final class WebPaintGate {
         finished = true
         snapshotBackstopWork?.cancel()
         cover = makeCover(bitmap)
-        #if DEBUG
         DebugTrace.log("paint-gate cover bitmap=\(bitmap != nil) cover=\(cover != nil)")
-        #endif
         reflow()
         let backstop = DispatchWorkItem { [weak self] in
-            #if DEBUG
             DebugTrace.log("paint-gate backstop")
-            #endif
             self?.dismiss()
         }
         paintBackstopWork = backstop
         DispatchQueue.main.asyncAfter(deadline: .now() + timing.paintBackstop,
                                       execute: backstop)
         paintGate { [weak self] in
-            #if DEBUG
             DebugTrace.log("paint-gate page painted")
-            #endif
             self?.dismiss()
         }
     }
@@ -125,9 +117,7 @@ final class WebPaintGate {
     private func dismiss() {
         guard !dismissed else { return }
         dismissed = true
-        #if DEBUG
         DebugTrace.log("paint-gate dismiss")
-        #endif
         paintBackstopWork?.cancel()
         guard let cover else {
             isActive = false

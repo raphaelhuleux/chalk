@@ -147,9 +147,6 @@ final class EditorContainerViewController: NSViewController {
     private var pendingDraftSave: (tab: Tab, text: String, proposedURL: URL, completion: (Bool) -> Void)?
     private var activeSavePanel: NSSavePanel?
 
-    /// Tab strip callbacks.
-    func selectTab(id: UUID) { activate(id: id) }
-    func requestCloseTab(id: UUID) { closeTab(id: id) }
 
     /// Drag-reorder commit: move tab `id` to strip position `index` (clamped). Only the order
     /// changes; session restore serializes `tabs` in order, so it persists.
@@ -233,10 +230,6 @@ final class EditorContainerViewController: NSViewController {
         addChild(outlinePanel)
         let panelView: NSView = outlinePanel.view
         panelView.translatesAutoresizingMaskIntoConstraints = false
-        // Layer-backed, so the slide moves the panel as one unit: without a
-        // layer the panel's own frame snapped to its final place while its
-        // layer-backed subviews slid in, a dark block one frame ahead of them.
-        panelView.wantsLayer = true
         // Honour a visibility the host set before the view loaded (session restore calls
         // `setOutlinePanelVisible` from the host's `init`). Hiding unconditionally left the flag
         // true over an invisible panel.
@@ -436,13 +429,10 @@ final class EditorContainerViewController: NSViewController {
     }
     /// Bounds, not frame: the slide moves the frame; the contract is that the size never changes.
     var contentViewBoundsForTesting: CGRect { contentView.bounds }
-    var contentViewForTesting: NSView { contentView }
     #endif
 
-    /// The active tab's webview, for the snapshot that masks the unfreeze reflow.
-    var activeSurfaceWebView: WKWebView? {
-        (activeTab?.surface as? WebEditorSurface)?.webView
-    }
+    /// The active tab's surface, for the covers a transition installs over it.
+    var activeSurface: EditorSurface? { activeTab?.surface }
 
     #if DEBUG
     /// Downcasts to the web surface: these readers are implementation evidence, not part of the
@@ -623,28 +613,13 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
-    /// A one-button notice in the window's sheet. Logged instead when there is no window.
-    func presentChalkNotice(title: String, message: String) {
-        guard let window = view.window else {
-            containerLog.notice("notice without a window: \(title, privacy: .public)")
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        alert.beginSheetModal(for: window)
-    }
-
     /// Apply an editor zoom to every open tab.
     func setFontScale(_ scale: Double) {
         tabs.forEach { $0.surface.setFontScale(scale) }
     }
 
-    /// Last values pushed, recorded only for tests. `adopt` seeds new tabs from `Preferences`.
+    /// The last measure pushed, recorded only for tests. `adopt` seeds new tabs from `Preferences`.
     private(set) var lastPushedMeasure: Double?
-    private(set) var lastPushedTextAlign: EditorTextAlignment?
-    private(set) var lastPushedLineHeight: Double?
 
     /// Apply the text column width (Settings slider) to every open tab.
     func setMeasure(_ px: Double) {
@@ -654,13 +629,11 @@ final class EditorContainerViewController: NSViewController {
 
     /// Apply the interline spacing (Settings slider) to every open tab.
     func setLineHeight(_ multiplier: Double) {
-        lastPushedLineHeight = multiplier
         for tab in tabs { tab.surface.setLineHeight(multiplier) }
     }
 
     /// Apply the wrapped-prose alignment (Settings) to every open tab.
     func setTextAlign(_ alignment: EditorTextAlignment) {
-        lastPushedTextAlign = alignment
         for tab in tabs { tab.surface.setTextAlign(alignment) }
     }
 
@@ -746,6 +719,11 @@ final class EditorContainerViewController: NSViewController {
         let urls = fileTabs.compactMap(\.url)
         let activeIndex = fileTabs.firstIndex { $0 === activeTab }
         return (urls, activeIndex)
+    }
+
+    /// The file-backed tabs as journal records, bookmarks included (drafts die with the window).
+    func sessionTabRecords() -> [WindowSession.TabRecord] {
+        tabs.compactMap { $0.sessionRecord() }
     }
 
     /// Activate by strip position (restoration; ignores out-of-range).
@@ -1032,9 +1010,7 @@ final class EditorContainerViewController: NSViewController {
         incoming.alphaValue = 1
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, !motionIsInstant,
               incoming.window != nil else {
-            #if DEBUG
             DebugTrace.log("tab cross-fade: instant swap")
-            #endif
             outgoing.removeFromSuperview()
             return
         }
@@ -1105,7 +1081,8 @@ final class EditorContainerViewController: NSViewController {
         ])
     }
 
-    private func activate(id: UUID) {
+    /// Tab strip callbacks.
+    func activate(id: UUID) {
         if let tab = tabs.first(where: { $0.id == id }) { activate(tab) }
     }
 
@@ -1117,7 +1094,7 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
-    private func closeTab(id: UUID) {
+    func closeTab(id: UUID) {
         if let tab = tabs.first(where: { $0.id == id }) { close(tab) }
     }
 

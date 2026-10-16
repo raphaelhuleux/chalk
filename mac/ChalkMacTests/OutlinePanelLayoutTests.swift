@@ -200,7 +200,7 @@ final class OutlinePanelLayoutTests: XCTestCase {
         let grip = container.outlineResizeGripFrameForTesting
         XCTAssertFalse(container.outlineResizeGripIsHiddenForTesting)
         XCTAssertEqual(grip.midX, panel.minX, accuracy: 0.5)
-        XCTAssertEqual(grip.width, ChalkMetrics.s(12), accuracy: 0.5)
+        XCTAssertEqual(grip.width, 12, accuracy: 0.5)
         XCTAssertEqual(grip.minY, panel.minY, accuracy: 0.5)
         XCTAssertEqual(grip.maxY, panel.maxY, accuracy: 0.5)
         container.setOutlinePanelVisible(false, animated: false)

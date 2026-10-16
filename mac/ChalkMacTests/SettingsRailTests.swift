@@ -85,7 +85,7 @@ final class SettingsRailTests: XCTestCase {
         let font = NSFont.systemFont(ofSize: ChalkMetrics.sidebarRowFontSize)
         let lineHeight = font.ascender - font.descender + font.leading
         XCTAssertGreaterThanOrEqual(
-            ChalkMetrics.settingsRailRowHeight, lineHeight + ChalkMetrics.s(10),
+            ChalkMetrics.settingsRailRowHeight, lineHeight + 10,
             "the row must clear the label's line height plus breathing room")
     }
 
@@ -173,15 +173,15 @@ final class SettingsRailGeometryTests: XCTestCase {
     /// The rail gives ground on a narrow container instead of eating a third
     /// of it; on a roomy one it keeps the spec width.
     func testRailWidthAdaptsToTheContainer() {
-        XCTAssertEqual(SettingsPresentation.railWidth(forContainerWidth: ChalkMetrics.s(900)),
-                       ChalkMetrics.s(190), accuracy: 0.5,
+        XCTAssertEqual(SettingsPresentation.railWidth(forContainerWidth: 900),
+                       190, accuracy: 0.5,
                        "a roomy container gets the spec width")
-        XCTAssertLessThan(SettingsPresentation.railWidth(forContainerWidth: ChalkMetrics.s(540)),
-                          ChalkMetrics.s(190),
+        XCTAssertLessThan(SettingsPresentation.railWidth(forContainerWidth: 540),
+                          190,
                           "a narrow container gives ground instead of eating a third of itself")
         XCTAssertGreaterThanOrEqual(
-            SettingsPresentation.railWidth(forContainerWidth: ChalkMetrics.s(320)),
-            ChalkMetrics.s(120),
+            SettingsPresentation.railWidth(forContainerWidth: 320),
+            120,
             "but never below the floor that still fits a category name")
     }
 }

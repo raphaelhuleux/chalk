@@ -11,8 +11,8 @@ final class SettingsRowView: FlippedView {
     private let disclosure = NSImageView()
     var onClick: (() -> Void)?
 
-    static let height: CGFloat = ChalkMetrics.s(44)
-    static let inset: CGFloat = ChalkMetrics.s(16)
+    static let height: CGFloat = 44
+    static let inset: CGFloat = 16
 
     init(title: String, detail: String? = nil, control: NSView? = nil, opensAScreen: Bool = false) {
         super.init(frame: .zero)
@@ -31,7 +31,7 @@ final class SettingsRowView: FlippedView {
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
         detailLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         disclosure.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: ChalkMetrics.s(11), weight: .semibold))
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
         disclosure.contentTintColor = .chalkTextFaint
         disclosure.imageScaling = .scaleNone
         disclosure.isHidden = !opensAScreen
@@ -63,8 +63,8 @@ final class SettingsRowView: FlippedView {
             trailingEdge = trailingAnchor
         }
         constraints += [
-            detailLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: ChalkMetrics.s(8)),
-            detailLabel.trailingAnchor.constraint(equalTo: trailingEdge, constant: control == nil ? -Self.inset : -ChalkMetrics.s(12)),
+            detailLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 8),
+            detailLabel.trailingAnchor.constraint(equalTo: trailingEdge, constant: control == nil ? -Self.inset : -12),
             detailLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ]
         NSLayoutConstraint.activate(constraints)
@@ -92,11 +92,11 @@ final class SettingsCardView: FlippedView {
     init(title: String, rows: [SettingsRowView]) {
         super.init(frame: .zero)
         caption.stringValue = title.uppercased()
-        caption.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .semibold)
+        caption.font = .systemFont(ofSize: 11, weight: .semibold)
         caption.textColor = .chalkTextMuted
         caption.translatesAutoresizingMaskIntoConstraints = false
         card.wantsLayer = true
-        card.layer?.cornerRadius = ChalkMetrics.s(10)
+        card.layer?.cornerRadius = 10
         card.layer?.cornerCurve = .continuous
         card.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .vertical
@@ -122,7 +122,7 @@ final class SettingsCardView: FlippedView {
         NSLayoutConstraint.activate([
             caption.topAnchor.constraint(equalTo: topAnchor),
             caption.leadingAnchor.constraint(equalTo: leadingAnchor, constant: SettingsRowView.inset),
-            card.topAnchor.constraint(equalTo: caption.bottomAnchor, constant: ChalkMetrics.s(8)),
+            card.topAnchor.constraint(equalTo: caption.bottomAnchor, constant: 8),
             card.leadingAnchor.constraint(equalTo: leadingAnchor),
             card.trailingAnchor.constraint(equalTo: trailingAnchor),
             card.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -136,7 +136,7 @@ final class SettingsCardView: FlippedView {
             self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
     }
 
-    private static let ruleInset: CGFloat = ChalkMetrics.s(16)
+    private static let ruleInset: CGFloat = 16
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -199,7 +199,7 @@ final class GeneralSettingsViewController: NSViewController {
     }
 
     /// The screen a row leads to, or nil for a row that only states a fact. Also the tests' seam.
-    func destinationForTesting(section: Int, row: Int) -> NSViewController? {
+    func destination(section: Int, row: Int) -> NSViewController? {
         guard section == 2, row < aboutRows.count else { return nil }
         switch aboutRows[row] {
         case .version: return nil
@@ -253,10 +253,10 @@ final class GeneralSettingsViewController: NSViewController {
         let stack = NSStackView(views: cards)
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = ChalkMetrics.s(22)
+        stack.spacing = 22
         stack.translatesAutoresizingMaskIntoConstraints = false
         document.addSubview(stack)
-        let margin = ChalkMetrics.s(20)
+        let margin: CGFloat = 20
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: document.topAnchor, constant: margin),
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: margin),
@@ -436,7 +436,7 @@ final class GeneralSettingsViewController: NSViewController {
     /// The About screens are sheets on the Settings window, as they are on
     /// an editor window from the Help menu.
     private func openAboutRow(_ index: Int) {
-        guard let destination = destinationForTesting(section: 2, row: index),
+        guard let destination = destination(section: 2, row: index),
               let window = view.window, window.attachedSheet == nil else { return }
         HelpSheet.present(destination, over: window) {}
     }
@@ -448,7 +448,7 @@ final class GeneralSettingsViewController: NSViewController {
         let control = NSSegmentedControl(labels: titles, trackingMode: .selectOne, target: self, action: action)
         control.selectedSegment = selected
         control.selectedSegmentBezelColor = .chalkAccent
-        control.font = .systemFont(ofSize: ChalkMetrics.s(12))
+        control.font = .systemFont(ofSize: 12)
         return control
     }
 
@@ -465,7 +465,7 @@ final class GeneralSettingsViewController: NSViewController {
         let slider = NSSlider(value: value, minValue: range.lowerBound, maxValue: range.upperBound,
                               target: self, action: action)
         slider.isContinuous = true
-        slider.widthAnchor.constraint(equalToConstant: ChalkMetrics.s(160)).isActive = true
+        slider.widthAnchor.constraint(equalToConstant: 160).isActive = true
         return slider
     }
 
@@ -509,8 +509,8 @@ final class AcknowledgementsViewController: NSViewController {
         textView.isSelectable = true
         textView.drawsBackground = false
         textView.textColor = .chalkTextMuted
-        textView.font = .monospacedSystemFont(ofSize: ChalkMetrics.s(11), weight: .regular)
-        textView.textContainerInset = NSSize(width: ChalkMetrics.s(16), height: ChalkMetrics.s(16))
+        textView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]

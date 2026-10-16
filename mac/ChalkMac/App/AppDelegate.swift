@@ -137,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let records = journal.load()
         // Lists of windows no record can bring back (a death before the first
         // journal write) would otherwise pile up in the defaults forever.
-        WindowLocations.discardAll(except: records.map(\.id), defaults: defaults)
+        WindowLocations.discardAll(except: records.map(\.id), idPrefix: Self.windowIDPrefix, defaults: defaults)
         for record in records {
             var frame: NSRect?
             if let stored = record.frame {
@@ -164,13 +164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AlphaSession.shared.markForeground()
     }
 
-    /// Every Cmd-Tab away: flush the dirty documents, write the crash net and
-    /// the journal. Chalk does not autosave; this is the one automatic flush.
+    /// Every Cmd-Tab away: the journal. The documents and the crash net are
+    /// the key window's resign-key flush (`EditorWindowController`), which
+    /// runs in the same turn; the other windows flushed when they lost key.
     func applicationDidResignActive(_ notification: Notification) {
-        for controller in editorWindows {
-            controller.root.saveAllDocuments()
-            controller.root.snapshotDirtyBuffers()
-        }
         writeJournal()
     }
 
@@ -210,8 +207,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Windows
 
+    /// This shell's window ids, so its Locations sweep never reaches the
+    /// Catalyst shell's scene-keyed lists once the two share a defaults domain.
+    static let windowIDPrefix = "mac-"
+
     @discardableResult
-    func openNewWindow(windowID: String = UUID().uuidString,
+    func openNewWindow(windowID: String = AppDelegate.windowIDPrefix + UUID().uuidString,
                        initialContent: SceneConnectContent = .openWelcome,
                        frame: NSRect? = nil,
                        isRestored: Bool = false) -> EditorWindowController {
@@ -317,9 +318,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showSettings() {
         let controller = settingsWindow ?? SettingsWindowController()
         settingsWindow = controller
-        #if DEBUG
-        controller.container.openCommandTime = CACurrentMediaTime()
-        #endif
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
     }
@@ -329,8 +327,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func cmdSettings(_ sender: Any?) { showSettings() }
 
     #if DEBUG
-    var settingsWindowForTesting: SettingsWindowController? { settingsWindow }
-
     /// Debug launch switches for screenshots and manual checks:
     /// `CHALK_AUDIT_STATE` (the audit harness, `AuditMode`), `CHALK_DEBUG_LIBRARY=<folder>`,
     /// `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel|settings|settings-shortcuts` and

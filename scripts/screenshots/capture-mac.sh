@@ -59,11 +59,20 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'quit_app; rm -rf "$TMP"' EXIT
-swiftc -O "$ROOT/scripts/screenshots/winid.swift" -o "$TMP/winid"
+# The helper is rebuilt only when its source is newer than the last build.
+WINID="$DD/winid"
+if [[ ! -x "$WINID" || "$ROOT/scripts/screenshots/winid.swift" -nt "$WINID" ]]; then
+  swiftc -O "$ROOT/scripts/screenshots/winid.swift" -o "$WINID"
+fi
 
 quit_app() {
-  pkill -f "$APP/Contents/MacOS/$BINARY" 2>/dev/null || true
-  sleep 2
+  # Wait only while something is actually quitting.
+  if pkill -f "$APP/Contents/MacOS/$BINARY" 2>/dev/null; then
+    for _ in $(seq 1 20); do
+      pgrep -qf "$APP/Contents/MacOS/$BINARY" || break
+      sleep 0.1
+    done
+  fi
 }
 
 # shot NAME FILE [ENV=VALUE ...] -- [launch arguments]
@@ -83,7 +92,7 @@ shot() {
     for _ in $(seq 20); do
       sleep 1
       pid="$(pgrep -f "$APP/Contents/MacOS/$BINARY" | head -1 || true)"
-      [[ -n "$pid" ]] && win="$("$TMP/winid" "$pid" 2>/dev/null | cut -d' ' -f1 || true)"
+      [[ -n "$pid" ]] && win="$("$WINID" "$pid" 2>/dev/null | cut -d' ' -f1 || true)"
       [[ -n "$win" ]] && break 2
     done
   done
@@ -92,7 +101,7 @@ shot() {
   sleep 4 # web view boot, KaTeX, the outline panel's delayed open
   # The window may have resized since it first appeared; look it up again.
   local again
-  again="$("$TMP/winid" "$pid" 2>/dev/null | cut -d' ' -f1 || true)"
+  again="$("$WINID" "$pid" 2>/dev/null | cut -d' ' -f1 || true)"
   [[ -n "$again" ]] && win="$again"
   screencapture -x -o -l "$win" "$TMP/$name.png"
   sips --resampleWidth "$WIDTH" "$TMP/$name.png" --out "$OUT/$name.png" >/dev/null

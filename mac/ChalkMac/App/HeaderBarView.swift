@@ -20,11 +20,25 @@ final class HeaderBarView: FlippedView {
 
     private let backdrop = FlippedView()
     private var stripLeading: NSLayoutConstraint!
-    /// Where the names start with no Library tiled: past the traffic lights
-    /// plus the gap. The host measures the lights off its window
-    /// (`setTrafficLightsClearance`); the spec constant is the seed.
-    private var stripBase: CGFloat = ChalkMetrics.tabStripLeading
     private var stripInset: CGFloat = 0
+    /// The last reading of `restingStart`; the spec constant seeds it before
+    /// any window.
+    private var measuredRestingStart: CGFloat = ChalkMetrics.tabStripLeading
+
+    /// Where the names start with no Library tiled: the traffic lights'
+    /// trailing edge plus `TabStripMetrics.trafficLightGap`, read off the
+    /// window's own zoom button rather than the spec constant, which was
+    /// measured on a short titlebar and sits 16pt short under the unified
+    /// one. Measured only while the button shows: full screen hides the
+    /// buttons, the last windowed reading stands, and the row does not jump.
+    var restingStart: CGFloat {
+        if let zoom = window?.standardWindowButton(.zoomButton), !zoom.isHidden,
+           let container = zoom.superview {
+            let edge = convert(zoom.frame, from: container).maxX
+            if edge > 0 { measuredRestingStart = edge + TabStripMetrics.trafficLightGap }
+        }
+        return measuredRestingStart
+    }
     private var stripTrailing: NSLayoutConstraint!
     private var libraryHole: CGRect?
     /// The outline panel's slice, cut out of the paint on the trailing edge
@@ -71,16 +85,22 @@ final class HeaderBarView: FlippedView {
             tabStrip.heightAnchor.constraint(equalToConstant: ChalkMetrics.tabStripHeight),
         ])
         refreshColors()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func viewDidChangeEffectiveAppearance() {
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
         super.viewDidChangeEffectiveAppearance()
         refreshColors()
+    }
+
+    /// The window's lights may sit elsewhere than the seed assumed.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        stripLeading.constant = restingStart + stripInset
     }
 
     @objc private func themeDidChange() { refreshColors() }
@@ -117,7 +137,7 @@ final class HeaderBarView: FlippedView {
     /// write is instant; a live divider drag is dense small deltas.
     func setStripLeadingInset(_ inset: CGFloat, animatedOver duration: TimeInterval? = nil) {
         stripInset = inset
-        let wanted = stripBase + inset
+        let wanted = restingStart + inset
         guard abs(stripLeading.constant - wanted) > 0.5 else { return }
         guard let duration, duration > 0, window != nil else {
             stripLeading.constant = wanted
@@ -132,20 +152,10 @@ final class HeaderBarView: FlippedView {
         }
     }
 
-    /// The row's resting start, from the window's leading edge: the measured
-    /// traffic lights' trailing edge plus the gap. Instant: it changes only
-    /// when the window's chrome does, never as motion.
-    func setTrafficLightsClearance(_ clearance: CGFloat) {
-        guard abs(stripBase - clearance) > 0.5 else { return }
-        stripBase = clearance
-        stripLeading.constant = stripBase + stripInset
-    }
-
     #if DEBUG
     /// The chips' inset past the traffic lights, as last written (the model
     /// value, even mid-animation).
-    var stripLeadingInsetForTesting: CGFloat { stripLeading.constant - stripBase }
-    var trafficLightsClearanceForTesting: CGFloat { stripBase }
+    var stripLeadingInsetForTesting: CGFloat { stripLeading.constant - measuredRestingStart }
     #endif
 
     /// The Library panel's rect, in this view's coordinates, cut out of the

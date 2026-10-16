@@ -20,6 +20,9 @@ public final class BookmarkStore {
     private let defaults: UserDefaults?
     private let key: String
     private var memory: Data?
+    /// The decoded list, kept until this store writes: it is the only writer
+    /// of its key, and `records()` is read on every layout, resolve and reload.
+    private var decoded: [LocationRecord]??
 
     public init(defaults: UserDefaults, key: String) {
         self.defaults = defaults
@@ -41,6 +44,7 @@ public final class BookmarkStore {
             return defaults.data(forKey: key)
         }
         set {
+            decoded = nil
             if let defaults { defaults.set(newValue, forKey: key) } else { memory = newValue }
         }
     }
@@ -59,8 +63,15 @@ public final class BookmarkStore {
     /// Mutations treat nil as hands-off: overwriting would lose every bookmark,
     /// which a later build might still read.
     private func loadRecords() -> [LocationRecord]? {
-        guard let data = storedData else { return [] }
-        return try? JSONDecoder().decode([LocationRecord].self, from: data)
+        if let decoded { return decoded }
+        let records: [LocationRecord]?
+        if let data = storedData {
+            records = try? JSONDecoder().decode([LocationRecord].self, from: data)
+        } else {
+            records = []
+        }
+        decoded = .some(records)
+        return records
     }
 
     private func save(_ records: [LocationRecord]) {

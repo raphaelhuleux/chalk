@@ -101,7 +101,4 @@ enum ChalkMetrics {
                 - NSFont.systemFont(ofSize: sidebarRowFontSize).descender
                 + CGFloat(ChromeMetrics.settingsRailRowFontPadding))
     }
-
-    /// Spec value helper kept for ported call sites: the identity on AppKit.
-    static func s(_ value: CGFloat) -> CGFloat { value }
 }

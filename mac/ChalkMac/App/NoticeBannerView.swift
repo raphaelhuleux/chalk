@@ -18,7 +18,7 @@ import ChalkKit
 final class NoticeBannerView: FlippedView {
     /// Composed rather than subclassed: ChalkGlassView is final, and the banner
     /// wants its own hit-testing anyway.
-    private let glass = ChalkGlassView(style: .glass, cornerRadius: ChalkMetrics.s(12), interactive: true)
+    private let glass = ChalkGlassView(style: .glass, cornerRadius: 12, interactive: true)
     private let onPrimary: () -> Void
     private let onDecline: () -> Void
     private var isAnswered = false
@@ -45,7 +45,7 @@ final class NoticeBannerView: FlippedView {
         ])
 
         let label = NSTextField(wrappingLabelWithString: message)
-        label.font = .systemFont(ofSize: ChalkMetrics.s(12))
+        label.font = .systemFont(ofSize: 12)
         label.textColor = .chalkTextBody
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -74,11 +74,11 @@ final class NoticeBannerView: FlippedView {
         let row = NSStackView(views: controls)
         row.orientation = .horizontal
         row.alignment = .centerY
-        row.spacing = ChalkMetrics.s(12)
+        row.spacing = 12
         row.translatesAutoresizingMaskIntoConstraints = false
         glass.contentView.addSubview(row)
 
-        let inset = ChalkMetrics.s(12)
+        let inset: CGFloat = 12
         NSLayoutConstraint.activate([
             row.topAnchor.constraint(equalTo: glass.contentView.topAnchor, constant: inset),
             row.bottomAnchor.constraint(equalTo: glass.contentView.bottomAnchor, constant: -inset),
@@ -94,7 +94,7 @@ final class NoticeBannerView: FlippedView {
     private static func makeButton(title: String, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: nil, action: action)
         button.isBordered = false
-        button.font = .systemFont(ofSize: ChalkMetrics.s(12), weight: .semibold)
+        button.font = .systemFont(ofSize: 12, weight: .semibold)
         button.contentTintColor = .chalkTextBody
         button.refusesFirstResponder = true
         return button

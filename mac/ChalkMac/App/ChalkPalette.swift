@@ -35,6 +35,14 @@ extension NSColor {
     /// Editor surface: equals the page's --vscode-editor-background.
     static let chalkEditorBackground = themed(\.editorBackground)
 
+    /// The same tone resolved for a given appearance and theme, for a consumer
+    /// that cannot resolve a dynamic colour itself (WebKit resolves one at set
+    /// time, under whatever appearance is current then).
+    static func chalkEditorBackground(dark: Bool, theme: ChalkTheme) -> NSColor {
+        let (red, green, blue) = theme.palette.editorBackground.components(dark: dark)
+        return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+    }
+
     /// Sidebar + header sidebar-segment.
     static let chalkChromeBackground = themed(\.chromeBackground)
 
@@ -173,6 +181,18 @@ extension NSFont {
     static func chalkMono(
         size: CGFloat, weight: NSFont.Weight = .regular, oblique: Bool = false
     ) -> NSFont {
+        let key = "\(size)|\(weight.rawValue)|\(oblique)"
+        if let font = chalkMonoCache[key] { return font }
+        let font = makeChalkMono(size: size, weight: weight, oblique: oblique)
+        chalkMonoCache[key] = font
+        return font
+    }
+
+    /// Every tab chip asks for the same few fonts on every strip rebuild;
+    /// the name lookup and the Core Text shear are not free.
+    private static var chalkMonoCache: [String: NSFont] = [:]
+
+    private static func makeChalkMono(size: CGFloat, weight: NSFont.Weight, oblique: Bool) -> NSFont {
         let names: [String]
         switch weight {
         case .semibold, .bold: names = ["IBMPlexMono-SemiBold"]

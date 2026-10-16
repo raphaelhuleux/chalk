@@ -39,6 +39,9 @@ protocol EditorSurface: AnyObject {
     /// A bitmap of what the surface shows right now, for the tab switch's cross-fade; nil when
     /// nothing is up. Not a HostPort message.
     func captureSnapshot(_ completion: @escaping (NSImage?) -> Void)
+    /// Calls back once the page has painted twice (two animation frames): the gate a covered
+    /// transition waits on before lifting its cover. A fixed delay would race the async repaint.
+    func afterNextPaint(_ completion: @escaping () -> Void)
 
     /// Live, debounced outline pushes to `onOutline` for the persistent panel. Off installs no
     /// listener, so keystrokes pay nothing.

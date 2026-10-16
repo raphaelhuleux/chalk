@@ -125,8 +125,6 @@ final class OutlinePaletteViewController: NSViewController {
     }
 
     #if DEBUG
-    /// Set right before presenting, to measure command-to-visible latency. 0 = unset.
-    var openCommandTime: CFTimeInterval = 0
     #endif
 
     override func loadView() {
@@ -148,11 +146,6 @@ final class OutlinePaletteViewController: NSViewController {
         loadViewIfNeeded()
         reportContentHeight()
         #if DEBUG
-        if openCommandTime > 0 {
-            NSLog("[latency] Outline command->visible %.0fms",
-                  (CACurrentMediaTime() - openCommandTime) * 1000)
-            openCommandTime = 0
-        }
         #endif
         // The editor webview holds the keyboard, and an immediate grab can
         // lose to it. Retry until we win; `willHide` cancels the chain.
@@ -218,7 +211,6 @@ final class OutlinePaletteViewController: NSViewController {
     var selectedIndexForTesting: Int { selectedIndex }
     var isEmptyStateVisibleForTesting: Bool { !frame.emptyLabel.isHidden }
     func confirmSelectedForTesting() { jumpToSelected() }
-    func cancelForTesting() { cancelPalette() }
     var searchFieldForTesting: NSTextField { frame.searchField }
     /// becomeFirstResponder attempts by grabFocus.
     private(set) var focusAttemptCountForTesting = 0
@@ -282,7 +274,7 @@ final class OutlinePaletteCellView: FlippedView, PaletteRowContent {
     private let icon = NSImageView()
     private let badgeLabel = NSTextField(labelWithString: "")
     private let titleLabel = NSTextField(labelWithString: "")
-    private let returnBadge = KeyBadgeView(text: "return", color: .chalkChromeFgSecondary, width: ChalkMetrics.s(42))
+    private let returnBadge = KeyBadgeView(text: "return", color: .chalkChromeFgSecondary, width: 42)
     private var iconLeading: NSLayoutConstraint!
     private var badgeGap: NSLayoutConstraint!
 
@@ -311,21 +303,21 @@ final class OutlinePaletteCellView: FlippedView, PaletteRowContent {
         addSubview(badgeLabel)
         addSubview(titleLabel)
         addSubview(returnBadge)
-        iconLeading = icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ChalkMetrics.s(10))
-        badgeGap = titleLabel.leadingAnchor.constraint(equalTo: badgeLabel.trailingAnchor, constant: ChalkMetrics.s(7))
+        iconLeading = icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10)
+        badgeGap = titleLabel.leadingAnchor.constraint(equalTo: badgeLabel.trailingAnchor, constant: 7)
         NSLayoutConstraint.activate([
             iconLeading,
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: ChalkMetrics.s(16)),
+            icon.widthAnchor.constraint(equalToConstant: 16),
 
-            badgeLabel.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: ChalkMetrics.s(9)),
+            badgeLabel.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 9),
             badgeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
             badgeGap,
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: returnBadge.leadingAnchor, constant: -10),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            returnBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ChalkMetrics.s(10)),
+            returnBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             returnBadge.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
@@ -334,7 +326,7 @@ final class OutlinePaletteCellView: FlippedView, PaletteRowContent {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     func configure(item: OutlineItem, indent: Int, query: String) {
-        iconLeading.constant = ChalkMetrics.s(10) + CGFloat(indent) * ChalkMetrics.outlineIndentUnit
+        iconLeading.constant = 10 + CGFloat(indent) * ChalkMetrics.outlineIndentUnit
 
         let symbol: String
         switch item.kind {
@@ -344,11 +336,11 @@ final class OutlinePaletteCellView: FlippedView, PaletteRowContent {
         case .frame: symbol = "rectangle.on.rectangle"
         }
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: ChalkMetrics.s(13), weight: .regular))
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
 
         badgeLabel.stringValue = item.badge ?? ""
         badgeLabel.isHidden = item.badge == nil
-        badgeGap.constant = item.badge == nil ? 0 : ChalkMetrics.s(7)
+        badgeGap.constant = item.badge == nil ? 0 : 7
 
         let isTop = item.kind == .heading && item.level <= 1
         titleLabel.attributedStringValue = paletteHighlightedTitle(

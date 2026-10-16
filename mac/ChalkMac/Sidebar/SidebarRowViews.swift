@@ -88,12 +88,7 @@ final class LibraryRowView: NSTableRowView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(
-            rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingArea = area
+        chalkReplaceTrackingArea(&trackingArea)
     }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
@@ -149,17 +144,17 @@ final class LibraryCellView: NSView, NSTextFieldDelegate {
 
     /// Row insets: 8pt leading for a folder (its chevron slot), 23pt for a file
     /// so the glyphs line up past the slot; 7pt between glyph and name.
-    static let folderLeading: CGFloat = ChalkMetrics.s(8)
-    static let fileLeading: CGFloat = ChalkMetrics.s(23)
-    static let iconTextPadding: CGFloat = ChalkMetrics.s(7)
-    static let chevronSlotWidth: CGFloat = ChalkMetrics.s(8)
+    static let folderLeading: CGFloat = 8
+    static let fileLeading: CGFloat = 23
+    static let iconTextPadding: CGFloat = 7
+    static let chevronSlotWidth: CGFloat = 8
     /// One nesting step.
-    static let indentUnit: CGFloat = ChalkMetrics.s(15)
-    static let trailingInset: CGFloat = ChalkMetrics.s(8)
+    static let indentUnit: CGFloat = 15
+    static let trailingInset: CGFloat = 8
     static let iconConfiguration = NSImage.SymbolConfiguration(
         pointSize: ChalkMetrics.sidebarRowFontSize - 1.5, weight: .regular)
     static let chevronConfiguration = NSImage.SymbolConfiguration(
-        pointSize: ChalkMetrics.s(8), weight: .semibold)
+        pointSize: 8, weight: .semibold)
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -202,6 +197,18 @@ final class LibraryCellView: NSView, NSTextFieldDelegate {
 
     override var isFlipped: Bool { true }
 
+    /// The seven configured glyphs, built once: `configure` runs on every
+    /// dequeue and selection repaint, and a symbol image is not free.
+    private static var symbolImages: [String: NSImage] = [:]
+    private static func symbolImage(_ name: String, configuration: NSImage.SymbolConfiguration) -> NSImage? {
+        let key = name + "|" + String(describing: configuration.hashValue)
+        if let image = symbolImages[key] { return image }
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)
+        symbolImages[key] = image
+        return image
+    }
+
     /// Paint one row. Idempotent: runs on dequeue and on every state change.
     /// `chevronSymbol` nil hides the slot (files, the sentinel).
     func configure(name: String, symbol: String?, chevronSymbol: String?,
@@ -214,16 +221,10 @@ final class LibraryCellView: NSView, NSTextFieldDelegate {
                                          : Self.fileLeading) + indent
         chevron.isHidden = !isFolder
         if let chevronSymbol {
-            chevron.image = NSImage(systemSymbolName: chevronSymbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(Self.chevronConfiguration)
+            chevron.image = Self.symbolImage(chevronSymbol, configuration: Self.chevronConfiguration)
         }
         icon.isHidden = symbol == nil
-        if let symbol {
-            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(Self.iconConfiguration)
-        } else {
-            icon.image = nil
-        }
+        icon.image = symbol.flatMap { Self.symbolImage($0, configuration: Self.iconConfiguration) }
         if isPlaceholder {
             // The "Empty" sentinel: faint, glyph-less, and its text starts where
             // a file's glyph would.
@@ -353,7 +354,7 @@ final class HeaderTrailingSlot: NSView {
         count.alignment = .right
         count.translatesAutoresizingMaskIntoConstraints = false
         chevron.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: ChalkMetrics.s(9), weight: .semibold))
+            .withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
         chevron.imageScaling = .scaleNone
         chevron.contentTintColor = .chalkTextFaint
         chevron.alphaValue = 0
@@ -416,11 +417,11 @@ final class LibraryHeaderCellView: NSView {
     let slot = HeaderTrailingSlot()
     private var nameTop: NSLayoutConstraint!
 
-    static let leading: CGFloat = ChalkMetrics.s(8)
-    static let trailing: CGFloat = ChalkMetrics.s(8)
+    static let leading: CGFloat = 8
+    static let trailing: CGFloat = 8
     /// The first area sits against the chrome floor, which already separates
     /// it; the 22pt block of air belongs BETWEEN areas.
-    static let firstTopMargin: CGFloat = ChalkMetrics.s(8)
+    static let firstTopMargin: CGFloat = 8
     static let topMargin: CGFloat = ChalkMetrics.sidebarSectionTopMargin
     static let bottomMargin: CGFloat = ChalkMetrics.sidebarSectionBottomMargin
     static let nameFont = NSFont.systemFont(ofSize: ChalkMetrics.sectionHeaderFontSize, weight: .semibold)
@@ -463,7 +464,7 @@ final class LibraryHeaderCellView: NSView {
         NSLayoutConstraint.activate([
             nameTop,
             nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.leading),
-            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: slot.leadingAnchor, constant: -ChalkMetrics.s(6)),
+            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: slot.leadingAnchor, constant: -6),
             secondaryLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             secondaryLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Self.trailing),
             secondaryLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: Self.secondaryGap),

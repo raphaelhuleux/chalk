@@ -13,8 +13,6 @@ final class SettingsContainerViewController: NSViewController {
     var onDismiss: (() -> Void)?
 
     #if DEBUG
-    /// Set right before presenting, to log command-to-visible latency. 0 = unset.
-    var openCommandTime: CFTimeInterval = 0
     #endif
 
     /// The rail's rows: General, then a banner over one row per shortcut
@@ -101,7 +99,7 @@ final class SettingsContainerViewController: NSViewController {
         railScroll.hasVerticalScroller = true
         railScroll.autohidesScrollers = true
         railScroll.automaticallyAdjustsContentInsets = false
-        railScroll.contentInsets = NSEdgeInsets(top: ChalkMetrics.s(14), left: 0, bottom: 0, right: 0)
+        railScroll.contentInsets = NSEdgeInsets(top: 14, left: 0, bottom: 0, right: 0)
 
         divider.wantsLayer = true
         divider.layer?.backgroundColor = NSColor.chalkBorderHard.cgColor
@@ -110,7 +108,7 @@ final class SettingsContainerViewController: NSViewController {
             sub.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(sub)
         }
-        railWidthConstraint = railScroll.widthAnchor.constraint(equalToConstant: ChalkMetrics.s(190))
+        railWidthConstraint = railScroll.widthAnchor.constraint(equalToConstant: 190)
         NSLayoutConstraint.activate([
             railScroll.topAnchor.constraint(equalTo: view.topAnchor),
             railScroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -136,11 +134,6 @@ final class SettingsContainerViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         #if DEBUG
-        if openCommandTime > 0 {
-            NSLog("[latency] Settings command->visible %.0fms",
-                  (CACurrentMediaTime() - openCommandTime) * 1000)
-            openCommandTime = 0
-        }
         #endif
     }
 
@@ -206,7 +199,7 @@ extension SettingsContainerViewController: NSTableViewDataSource, NSTableViewDel
     func numberOfRows(in tableView: NSTableView) -> Int { railItems.count }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        if case .banner = railItems[row] { return ChalkMetrics.s(30) }
+        if case .banner = railItems[row] { return 30 }
         return ChalkMetrics.settingsRailRowHeight
     }
 
@@ -245,7 +238,7 @@ final class SettingsRailRowView: NSTableRowView {
 
     override func drawSelection(in dirtyRect: NSRect) {
         guard isSelected else { return }
-        let rect = bounds.insetBy(dx: ChalkMetrics.s(10), dy: ChalkMetrics.s(2))
+        let rect = bounds.insetBy(dx: 10, dy: 2)
         NSColor.chalkAccent.withAlphaComponent(0.15).setFill()
         NSBezierPath(roundedRect: rect, xRadius: ChalkMetrics.rowCornerRadius,
                      yRadius: ChalkMetrics.rowCornerRadius).fill()
@@ -269,13 +262,13 @@ final class SettingsRailCellView: FlippedView {
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(icon)
         addSubview(label)
-        labelLeading = label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ChalkMetrics.s(20))
+        labelLeading = label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20)
         NSLayoutConstraint.activate([
-            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ChalkMetrics.s(20)),
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: ChalkMetrics.s(18)),
+            icon.widthAnchor.constraint(equalToConstant: 18),
             labelLeading,
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ChalkMetrics.s(8)),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
@@ -287,8 +280,8 @@ final class SettingsRailCellView: FlippedView {
         label.stringValue = item.title
         if case .banner = item {
             icon.isHidden = true
-            labelLeading.constant = ChalkMetrics.s(20)
-            label.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .semibold)
+            labelLeading.constant = 20
+            label.font = .systemFont(ofSize: 11, weight: .semibold)
             label.textColor = .chalkTextFaint
             return
         }
@@ -296,9 +289,9 @@ final class SettingsRailCellView: FlippedView {
         if case .category = item { indented = true } else { indented = false }
         icon.isHidden = false
         icon.image = item.icon.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
-            .withSymbolConfiguration(.init(pointSize: ChalkMetrics.s(13), weight: .medium))
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
         icon.contentTintColor = active ? .chalkAccent : .chalkTextMuted
-        labelLeading.constant = ChalkMetrics.s(indented ? 30 : 20) + ChalkMetrics.s(18) + ChalkMetrics.s(8)
+        labelLeading.constant = (indented ? 30 : 20) + 18 + 8
         label.font = .systemFont(ofSize: ChalkMetrics.sidebarRowFontSize, weight: active ? .medium : .regular)
         label.textColor = active ? .chalkTextPrimary : .chalkTextBody
     }

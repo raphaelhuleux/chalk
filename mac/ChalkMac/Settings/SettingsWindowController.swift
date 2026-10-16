@@ -90,9 +90,9 @@ enum SettingsPresentation {
     /// The rail width for a given container width. In a narrow window the
     /// rail shrinks rather than squeezing the three-column shortcuts table.
     static func railWidth(forContainerWidth width: CGFloat) -> CGFloat {
-        let full = ChalkMetrics.s(190)
+        let full: CGFloat = 190
         guard width > 0 else { return full }
         // At most a quarter of the container; the floor still fits "Linear algebra".
-        return max(ChalkMetrics.s(120), min(full, width * 0.25))
+        return max(120, min(full, width * 0.25))
     }
 }

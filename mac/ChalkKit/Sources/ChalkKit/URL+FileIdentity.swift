@@ -6,4 +6,9 @@ public extension URL {
     var fileIdentity: String {
         standardizedFileURL.resolvingSymlinksInPath().path
     }
+
+    /// Whether the item on disk is a directory; the URL's own spelling decides when it cannot be read.
+    var isDirectoryOnDisk: Bool {
+        (try? resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? hasDirectoryPath
+    }
 }

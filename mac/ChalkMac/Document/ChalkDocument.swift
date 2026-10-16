@@ -103,7 +103,7 @@ final class ChalkDocument: NSObject, NSFilePresenter {
     }
 
     private static func read(_ url: URL) throws -> String {
-        if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+        if url.isDirectoryOnDisk {
             throw LoadError.notAFile
         }
         return try decode(Data(contentsOf: url))

@@ -59,7 +59,7 @@ final class LibraryListStartTests: XCTestCase {
     /// The list starts ON the chrome floor (`libraryListStartsAtTheChromeFloor`).
     func testTheFirstAreaHeaderSitsOnTheChromeFloor() throws {
         openLibrary()
-        let reserve = root.chromeReserveForTesting
+        let reserve = root.libraryTreeTop
         XCTAssertGreaterThan(reserve, 0, "precondition: the chrome reserves something")
         XCTAssertEqual(try XCTUnwrap(listStart), reserve, accuracy: 1.5,
                        "the two columns begin their content together (offset=\(offset))")
@@ -102,7 +102,7 @@ final class LibraryListStartTests: XCTestCase {
         let windowed = try XCTUnwrap(listStart)
         root.applyTransitionForTesting(.window(.fullscreen))
         settle()
-        XCTAssertEqual(try XCTUnwrap(listStart), root.chromeReserveForTesting, accuracy: 1.5)
+        XCTAssertEqual(try XCTUnwrap(listStart), root.libraryTreeTop, accuracy: 1.5)
         root.applyTransitionForTesting(.window(.windowed))
         settle()
         XCTAssertEqual(try XCTUnwrap(listStart), windowed, accuracy: 1.0)

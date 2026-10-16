@@ -107,7 +107,7 @@ final class SidebarViewController: NSViewController {
     }
 
     /// Fallback clearance with no window: an unhosted column has no titlebar.
-    static let treeTopPadding = ChalkMetrics.s(24)
+    static let treeTopPadding: CGFloat = 24
     private var treeTopConstraint: NSLayoutConstraint?
 
     /// Internal, not private: the rename editor and the file operations reach
@@ -742,7 +742,11 @@ final class SidebarViewController: NSViewController {
     }
 
     @objc private func rowClicked(_ sender: Any?) {
-        let row = outlineView.clickedRow
+        handleClick(row: outlineView.clickedRow)
+    }
+
+    /// A click on a row: a Location header folds, a file or folder row activates.
+    private func handleClick(row: Int) {
         guard row >= 0 else { return }
         switch outlineView.item(atRow: row) {
         case let section as LibraryLocationItem:
@@ -752,6 +756,12 @@ final class SidebarViewController: NSViewController {
         default:
             break
         }
+    }
+
+    private func configure(_ header: LibraryHeaderCellView, for section: LibraryLocationItem) {
+        header.configure(location: section.location, isFirst: section === sections.first,
+                         count: section.count,
+                         collapsed: collapsedLocationIDs.contains(section.location.id))
     }
 
     // MARK: - The panel and the list
@@ -953,9 +963,7 @@ final class SidebarViewController: NSViewController {
             guard row >= 0,
                   let header = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? LibraryHeaderCellView
             else { continue }
-            header.configure(location: section.location, isFirst: section === sections.first,
-                             count: section.count,
-                             collapsed: collapsedLocationIDs.contains(section.location.id))
+            configure(header, for: section)
         }
     }
 
@@ -1172,14 +1180,7 @@ final class SidebarViewController: NSViewController {
         #if DEBUG
         lastNoticeMessageForTesting = message
         #endif
-        guard let window = view.window else {
-            Self.log.notice("file operation failed without a window to say so: \(message, privacy: .public)")
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.addButton(withTitle: "OK")
-        alert.beginSheetModal(for: window)
+        presentChalkNotice(title: nil, message: message)
     }
 
     // MARK: - Drag-move
@@ -1431,9 +1432,7 @@ extension SidebarViewController: NSOutlineViewDelegate {
         case let section as LibraryLocationItem:
             let header = outlineView.makeView(withIdentifier: LibraryHeaderCellView.identifier, owner: nil)
                 as? LibraryHeaderCellView ?? LibraryHeaderCellView()
-            header.configure(location: section.location, isFirst: section === sections.first,
-                             count: section.count,
-                             collapsed: collapsedLocationIDs.contains(section.location.id))
+            configure(header, for: section)
             return header
         case let item as LibraryRowItem:
             let cell = outlineView.makeView(withIdentifier: LibraryCellView.identifier, owner: nil)
@@ -1498,7 +1497,8 @@ extension SidebarViewController: NSOutlineViewDelegate {
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
         // The pill and the weight follow the selection; repaint what is on screen.
-        for row in 0..<outlineView.numberOfRows {
+        let visible = outlineView.rows(in: outlineView.visibleRect)
+        for row in visible.location..<(visible.location + visible.length) {
             guard let item = outlineView.item(atRow: row) as? LibraryRowItem,
                   let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? LibraryCellView
             else { continue }
@@ -1665,13 +1665,7 @@ extension SidebarViewController {
 
     /// Click a row or header at a point in the outline view, as `rowClicked` would.
     func clickForTesting(at point: CGPoint) {
-        let row = outlineView.row(at: point)
-        guard row >= 0 else { return }
-        switch outlineView.item(atRow: row) {
-        case let section as LibraryLocationItem: toggleFold(locationID: section.location.id)
-        case let item as LibraryRowItem: activate(item.node)
-        default: break
-        }
+        handleClick(row: outlineView.row(at: point))
     }
 
     /// Location fold state.
