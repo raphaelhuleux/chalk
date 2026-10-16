@@ -53,18 +53,23 @@ final class Sink: NSObject, SCStreamOutput {
 struct WinRec {
     static func main() async throws {
         let args = CommandLine.arguments
-        guard args.count == 5, let pid = Int32(args[1]), let seconds = Double(args[2]),
+        guard args.count == 5 || args.count == 6, let pid = Int32(args[1]), let seconds = Double(args[2]),
               let fps = Double(args[3]) else {
-            FileHandle.standardError.write(Data("usage: winrec <pid> <seconds> <fps> <outdir>\n".utf8))
+            FileHandle.standardError.write(Data("usage: winrec <pid> <seconds> <fps> <outdir> [<window width in pt>]\n".utf8))
             exit(2)
         }
+        // The app's largest window by default (the editor); a width picks another (Settings is 900).
+        let wantedWidth = args.count == 6 ? Double(args[5]) : nil
         let outDir = URL(fileURLWithPath: args[4], isDirectory: true)
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         // A window-server connection, which a bare command-line process lacks.
         _ = NSApplication.shared
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        let candidates = content.windows.filter { $0.owningApplication?.processID == pid && $0.windowLayer == 0 }
+        let candidates = content.windows.filter { window in
+            window.owningApplication?.processID == pid && window.windowLayer == 0
+                && (wantedWidth.map { abs(Double(window.frame.width) - $0) < 1 } ?? true)
+        }
         guard let window = candidates.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else {
             FileHandle.standardError.write(Data("no on-screen window for pid \(pid)\n".utf8))
             exit(1)

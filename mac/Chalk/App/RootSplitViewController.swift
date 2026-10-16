@@ -1597,7 +1597,7 @@ final class RootSplitViewController: NSViewController {
         guard editorView.window != nil else { return nil }
         let cover = PassthroughView()
         cover.wantsLayer = true
-        cover.chalkSetLayerBackground(.chalkEditorBackground)
+        cover.chalkSetLayerBackground(.chalkEditorBackground, under: editorView.effectiveAppearance)
         cover.clipsToBounds = true
         cover.frame = editorView.bounds
         if let image, let bitmapSource {

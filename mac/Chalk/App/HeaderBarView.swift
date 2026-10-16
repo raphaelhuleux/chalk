@@ -93,7 +93,7 @@ final class HeaderBarView: ThemedView {
     }
 
     override func refreshColors() {
-        backdrop.chalkSetLayerBackground(.chalkEditorBackground)
+        paint(backdrop, background: .chalkEditorBackground)
     }
 
     /// The empty paper between the names drags the window, as the titlebar

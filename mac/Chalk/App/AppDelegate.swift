@@ -339,7 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel|settings|settings-shortcuts` and
     /// `CHALK_DEBUG_SCRIPT=<seconds>:<action>,...` (actions: new-tab, close-tab, next-tab,
     /// toggle-sidebar, toggle-outline-panel, quick-open, zen, normal, dark, light, fullscreen,
-    /// open:<path>, scroll:<px>, snap:<png path>),
+    /// open:<path>, scroll:<px>, theme:<ink|atom|catppuccin|latex>, settings, snap:<png path>),
     /// which drives the shell on a clock so a window recording (`scripts/screenshots/winrec.swift`)
     /// can catch a flicker no screenshot shows.
     private func applyDebugLaunchEnvironment() {
@@ -361,11 +361,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         // The whole window frame (titlebar, toolbar, chrome) rendered in-process, so a
                         // full-screen window on another Space can still be inspected. WebKit's remote
                         // layer renders blank here; the chrome is what this is for.
-                        if let frame = root.view.window?.contentView?.superview,
-                           let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) {
+                        // Every visible window, as <path>-<index>.png; the editor window is 0.
+                        let base = String(parts[1].dropFirst(5))
+                        for (index, window) in NSApp.windows.filter(\.isVisible).enumerated() {
+                            guard let frame = window.contentView?.superview,
+                                  let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { continue }
                             frame.cacheDisplay(in: frame.bounds, to: rep)
                             try? rep.representation(using: .png, properties: [:])?
-                                .write(to: URL(fileURLWithPath: String(parts[1].dropFirst(5))))
+                                .write(to: URL(fileURLWithPath: "\(base)-\(index).png"))
                         }
                         return
                     }
@@ -375,7 +378,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             "(function(){ const s = document.querySelector('.cm-scroller'); if (s) s.scrollTop += \(px); })()")
                         return
                     }
+                    if parts[1].hasPrefix("theme:"), let theme = ChalkTheme(rawValue: String(parts[1].dropFirst(6))) {
+                        Preferences.colorTheme = theme
+                        SettingsBroadcast.applyGeneralSettings(roots: RootSplitViewController.everyLiveRoot())
+                        self.settingsWindow?.pinAppearance()
+                        return
+                    }
                     switch parts[1] {
+                    case "settings": self.showSettings()
+                    case "settings-light", "settings-dark":
+                        // The Appearance switch in Settings, through its own action.
+                        self.settingsWindow?.container.generalForTesting
+                            .selectAppearanceForTesting(parts[1] == "settings-dark" ? .dark : .light)
                     case "new-tab": root.cmdNewFile(nil)
                     case "close-tab": root.cmdCloseTab(nil)
                     case "next-tab": root.cmdNextTab(nil)
@@ -384,8 +398,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case "quick-open": root.cmdQuickOpen(nil)
                     case "zen": root.cmdEditingModeZen(nil)
                     case "normal": root.cmdEditingModeNormal(nil)
-                    case "dark": Preferences.themePreference = .dark; SettingsBroadcast.applyGeneralSettings(roots: RootSplitViewController.everyLiveRoot())
-                    case "light": Preferences.themePreference = .light; SettingsBroadcast.applyGeneralSettings(roots: RootSplitViewController.everyLiveRoot())
+                    case "dark", "light":
+                        // What the Settings switch does: the broadcast, then the Settings window's own pin.
+                        Preferences.themePreference = parts[1] == "dark" ? .dark : .light
+                        SettingsBroadcast.applyGeneralSettings(roots: RootSplitViewController.everyLiveRoot())
+                        self.settingsWindow?.pinAppearance()
                     case "fullscreen": root.view.window?.toggleFullScreen(nil)
                     default: break
                     }

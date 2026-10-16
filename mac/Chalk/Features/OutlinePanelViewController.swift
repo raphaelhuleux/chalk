@@ -179,7 +179,7 @@ final class OutlinePanelViewController: NSViewController {
     private func refreshColors() {
         guard isViewLoaded else { return }
         for hairline in [edge, headerRule, footerRule] {
-            hairline.chalkSetLayerBackground(.chalkPaletteDivider)
+            hairline.chalkSetLayerBackground(.chalkPaletteDivider, under: view.effectiveAppearance)
         }
     }
 

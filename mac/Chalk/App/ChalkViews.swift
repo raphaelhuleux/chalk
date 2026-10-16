@@ -28,17 +28,37 @@ class ThemedView: FlippedView {
         refreshColors()
     }
 
-    /// Re-resolve every cached colour. The base paints nothing.
+    /// Re-resolve every cached colour. The base paints nothing. A child's
+    /// layer is painted with `paint(_:background:)`, never with the child's
+    /// own appearance: see `chalkSetLayerBackground`.
     func refreshColors() {}
+
+    /// Resolve `color` under THIS view's appearance and write it to `child`'s layer.
+    func paint(_ child: NSView, background color: NSColor?) {
+        child.chalkSetLayerBackground(color, under: effectiveAppearance)
+    }
 }
 
 extension NSView {
-    /// A layer colour does not follow a dynamic `NSColor`: resolve it under
-    /// this view's appearance now. nil clears the fill.
-    func chalkSetLayerBackground(_ color: NSColor?) {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
+    /// A layer colour does not follow a dynamic `NSColor`: resolve it now,
+    /// under `appearance`. nil clears the fill.
+    ///
+    /// Pass the appearance of the view whose `viewDidChangeEffectiveAppearance`
+    /// is running. A descendant's `effectiveAppearance` still reports the old
+    /// appearance inside its ancestor's callback, and a view not yet in the
+    /// hierarchy reports the app's, so resolving under the receiver's own
+    /// appearance there paints the previous light/dark state (the band and the
+    /// Settings cards came up dark in light mode that way).
+    func chalkSetLayerBackground(_ color: NSColor?, under appearance: NSAppearance) {
+        appearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = color?.cgColor
         }
+    }
+
+    /// `chalkSetLayerBackground(_:under:)` under the receiver's own appearance:
+    /// for a view painting itself, outside any ancestor's appearance callback.
+    func chalkSetLayerBackground(_ color: NSColor?) {
+        chalkSetLayerBackground(color, under: effectiveAppearance)
     }
 
     /// Whether a style change here may animate: hosted, and Reduce Motion off.

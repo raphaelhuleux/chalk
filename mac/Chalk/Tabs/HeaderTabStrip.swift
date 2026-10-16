@@ -197,7 +197,7 @@ final class HeaderTabStrip: ThemedView {
     }
 
     override func refreshColors() {
-        underline.chalkSetLayerBackground(.chalkTabUnderline)
+        paint(underline, background: .chalkTabUnderline)
     }
 
     func update(_ items: [TabItem]) {
@@ -862,7 +862,8 @@ private final class HeaderTabName: FlippedView {
     /// never a size change.
     private func applyStyle() {
         label.attributedText = hovering ? hoverTitle : restTitle
-        slotDotView.chalkSetLayerBackground(isActiveItem ? .chalkTabDirtyDotActive : .chalkTabDirtyDotInactive)
+        slotDotView.chalkSetLayerBackground(isActiveItem ? .chalkTabDirtyDotActive : .chalkTabDirtyDotInactive,
+                                            under: effectiveAppearance)
         switch TabStripPolicy.slotContent(isDirty: isDirtyItem) {
         case .dot:
             slotDotView.alphaValue = slotHovering ? 0 : 1

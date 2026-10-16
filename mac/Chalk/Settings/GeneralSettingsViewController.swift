@@ -137,9 +137,9 @@ final class SettingsCardView: ThemedView {
     private static let ruleInset: CGFloat = 16
 
     override func refreshColors() {
-        card.chalkSetLayerBackground(.chalkCardBackground)
+        paint(card, background: .chalkCardBackground)
         for rule in stack.arrangedSubviews where !(rule is SettingsRowView) {
-            rule.chalkSetLayerBackground(.chalkCardSeparator)
+            paint(rule, background: .chalkCardSeparator)
         }
     }
 }
@@ -259,6 +259,7 @@ final class GeneralSettingsViewController: NSViewController {
             titles: ThemePreference.allCases.map(\.title),
             selected: Preferences.themePreference.rawValue,
             action: #selector(themeChanged))
+        appearanceControl = appearance
         let theme = makeThemeMenu()
         let autoHide = makeSwitch(isOn: Preferences.autoHideChrome, action: #selector(autoHideChromeToggled))
         return [
@@ -272,6 +273,16 @@ final class GeneralSettingsViewController: NSViewController {
         Preferences.themePreference = ThemePreference(rawValue: control.selectedSegment) ?? .auto
         onChange?()
     }
+
+    #if DEBUG
+    /// The Appearance segment as a click would set it, through the control's own action.
+    func selectAppearanceForTesting(_ preference: ThemePreference) {
+        loadViewIfNeeded()
+        appearanceControl?.selectedSegment = preference.rawValue
+        appearanceControl.map(themeChanged)
+    }
+    #endif
+    private weak var appearanceControl: NSSegmentedControl?
 
     /// A pop-up rather than segments: theme names are long and the list will grow.
     private func makeThemeMenu() -> NSPopUpButton {
