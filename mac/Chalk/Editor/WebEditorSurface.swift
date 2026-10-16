@@ -326,8 +326,13 @@ final class WebEditorSurface: NSObject, EditorSurface {
     #if DEBUG
     /// Whether the pre-paint cover has lifted.
     var isWebViewRevealedForTesting: Bool { !host.isCovering }
-    /// Run a script in the page (the debug script's `scroll:` action).
-    func evaluateForDebug(_ js: String) { webView.evaluateJavaScript(js, completionHandler: nil) }
+    /// Run a script in the page (the debug script's `scroll:` and `js:` actions); the
+    /// answer lands in the debug trace.
+    func evaluateForDebug(_ js: String) {
+        webView.evaluateJavaScript(js) { result, error in
+            DebugTrace.log("js result: \(result.map { "\($0)" } ?? error.map { "\($0)" } ?? "undefined")")
+        }
+    }
     var userScriptsForTesting: [WKUserScript] {
         webView.configuration.userContentController.userScripts
     }

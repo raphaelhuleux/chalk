@@ -339,7 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel|settings|settings-shortcuts` and
     /// `CHALK_DEBUG_SCRIPT=<seconds>:<action>,...` (actions: new-tab, close-tab, next-tab,
     /// toggle-sidebar, toggle-outline-panel, quick-open, zen, normal, dark, light, fullscreen,
-    /// open:<path>, scroll:<px>, theme:<ink|atom|catppuccin|latex>, settings, snap:<png path>),
+    /// open:<path>, scroll:<px>, theme:<ink|atom|catppuccin|latex>, settings, snap:<png path>, js:<script>),
     /// which drives the shell on a clock so a window recording (`scripts/screenshots/winrec.swift`)
     /// can catch a flicker no screenshot shows.
     private func applyDebugLaunchEnvironment() {
@@ -370,6 +370,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             try? rep.representation(using: .png, properties: [:])?
                                 .write(to: URL(fileURLWithPath: "\(base)-\(index).png"))
                         }
+                        return
+                    }
+                    if parts[1].hasPrefix("js:") {
+                        root.editor.activeWebSurfaceForDebug?.evaluateForDebug(String(parts[1].dropFirst(3)))
                         return
                     }
                     if parts[1].hasPrefix("scroll:"), let px = Int(parts[1].dropFirst(7)) {

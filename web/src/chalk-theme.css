@@ -56,6 +56,7 @@
   --vscode-editorHint-foreground: var(--ink-text-muted);
 
   --vscode-editorSuggestWidget-background: #161513;
+  --vscode-editorWidget-background: #161513;
   --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
   --vscode-editorSuggestWidget-border: #2a2825;
   --vscode-editorSuggestWidget-selectedBackground: #2a2825;
@@ -124,6 +125,7 @@
   --vscode-editorHint-foreground: #8a857d;
 
   --vscode-editorSuggestWidget-background: #f8f5ee;
+  --vscode-editorWidget-background: #f8f5ee;
   --vscode-editorSuggestWidget-foreground: #3a3942;
   --vscode-editorSuggestWidget-border: #e3e0db;
   --vscode-editorSuggestWidget-selectedBackground: #ece8e2;
@@ -186,6 +188,7 @@
   --vscode-editorHint-foreground: var(--ink-text-muted);
 
   --vscode-editorSuggestWidget-background: #20242b;
+  --vscode-editorWidget-background: #20242b;
   --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
   --vscode-editorSuggestWidget-border: #181a1f;
   --vscode-editorSuggestWidget-selectedBackground: #2c313a;
@@ -245,6 +248,7 @@
   --vscode-editorHint-foreground: var(--ink-text-muted);
 
   --vscode-editorSuggestWidget-background: #eaeaeb;
+  --vscode-editorWidget-background: #eaeaeb;
   --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
   --vscode-editorSuggestWidget-border: #dbdbdc;
   --vscode-editorSuggestWidget-selectedBackground: #dbdbdc;
@@ -305,6 +309,7 @@
   --vscode-editorHint-foreground: var(--ink-text-muted);
 
   --vscode-editorSuggestWidget-background: #292c3c;
+  --vscode-editorWidget-background: #292c3c;
   --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
   --vscode-editorSuggestWidget-border: #414559;
   --vscode-editorSuggestWidget-selectedBackground: #414559;
@@ -364,6 +369,7 @@
   --vscode-editorHint-foreground: var(--ink-text-muted);
 
   --vscode-editorSuggestWidget-background: #e6e9ef;
+  --vscode-editorWidget-background: #e6e9ef;
   --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
   --vscode-editorSuggestWidget-border: #ccd0da;
   --vscode-editorSuggestWidget-selectedBackground: #ccd0da;
@@ -477,6 +483,7 @@
   --vscode-editorHint-foreground: var(--ink-text-muted);
 
   --vscode-editorSuggestWidget-background: #262626;
+  --vscode-editorWidget-background: #262626;
   --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
   --vscode-editorSuggestWidget-border: #3a3a3a;
   --vscode-editorSuggestWidget-selectedBackground: #363636;
@@ -536,6 +543,7 @@
   --vscode-editorHint-foreground: var(--ink-text-muted);
 
   --vscode-editorSuggestWidget-background: #f6f6f6;
+  --vscode-editorWidget-background: #f6f6f6;
   --vscode-editorSuggestWidget-foreground: var(--ink-text-body);
   --vscode-editorSuggestWidget-border: #dadada;
   --vscode-editorSuggestWidget-selectedBackground: #e8e7e7;
