@@ -75,8 +75,11 @@ shot() {
   # can be dropped by LaunchServices without an error.
   for attempt in 1 2; do
     quit_app
+    # Dark unless the shot passes its own -chalk.themePreference (1 light, 2 dark).
+    local theme=(-chalk.themePreference 2)
+    [[ " $* " == *" -chalk.themePreference "* ]] && theme=()
     open -n -a "$APP" "${envs[@]}" --args \
-      -chalk.themePreference 2 -chalk.colorTheme atom "$@"
+      ${theme[@]+"${theme[@]}"} -chalk.colorTheme atom "$@"
     for _ in $(seq 20); do
       sleep 1
       pid="$(pgrep -f "$APP/Contents/MacOS/$BINARY" | head -1 || true)"
@@ -103,3 +106,4 @@ shot mac-mixed  "$SHOW/least-squares.md"  CHALK_AUDIT_SIZE=1100x900 CHALK_AUDIT_
 shot mac-tex    "$SHOW/least-squares.tex" CHALK_AUDIT_OUTLINE=1 CHALK_AUDIT_SIZE=1280x900 CHALK_AUDIT_LINE=3
 shot mac-beamer "$SHOW/slides.tex"        CHALK_AUDIT_SIZE=1100x900
 shot mac-mermaid "$SHOW/instruments.md"   CHALK_AUDIT_SIZE=1100x820 CHALK_AUDIT_LINE=2
+shot mac-light  "$SHOW/least-squares.tex" CHALK_AUDIT_OUTLINE=1 CHALK_AUDIT_SIZE=1280x900 CHALK_AUDIT_LINE=3 -- -chalk.themePreference 1

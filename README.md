@@ -78,6 +78,8 @@ Headings, lists, tables you edit in place, images (centred when they stand alone
 
 ![The same Markdown note in mixed view](docs/images/mac-mixed.png)
 
+![A LaTeX paper in the light theme, with the outline panel](docs/images/mac-light.png)
+
 ### In VS Code
 
 ![The Chalk editor showing a .tex file inside VS Code](docs/images/vscode.png)
