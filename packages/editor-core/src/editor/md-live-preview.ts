@@ -10,7 +10,7 @@ import { EditorState, Extension, RangeSetBuilder } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import '../styles/editor.css';
 import { liveLinkClickHandler, liveLinkMark } from './live-link';
-import { ImageWidget } from './image-widget';
+import { ImageWidget, isLoneImage, LONE_IMAGE_LINE } from './image-widget';
 import { glueEnd, glueStart } from './punctuation-glue';
 import { concealOverridden } from './pointer-gesture';
 import { createRevealGate, revealSignal } from './reveal-gate';
@@ -266,6 +266,11 @@ export function buildLivePreviewDecorations(
           const alt = altMatch ? altMatch[1] : '';
 
           if (src) {
+            // Nothing on the line precedes a lone image, so its line decoration still sorts first.
+            const line = state.doc.lineAt(node.from);
+            if (isLoneImage(line, node.from, node.to, /^\s*(\{[^}\n]*\})?\s*$/)) {
+              emit(line.from, line.from, LONE_IMAGE_LINE);
+            }
             emit(node.from, node.to, Decoration.replace({ widget: new ImageWidget(src, alt) }));
           }
           return false;

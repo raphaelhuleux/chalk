@@ -206,6 +206,12 @@
   border-radius: 4px;
 }
 
+/* A line holding only an image centres it, like a figure. Beats the host's
+   --chalk-text-align (justified prose) on that one line. */
+.cm-line.cm-live-image-line {
+  text-align: center;
+}
+
 .cm-live-image-missing {
   color: var(--vscode-descriptionForeground);
   font-style: italic;

@@ -1,5 +1,18 @@
-import { EditorView, WidgetType } from '@codemirror/view';
+import { Decoration, EditorView, WidgetType } from '@codemirror/view';
+import type { Line } from '@codemirror/state';
 import { assetResolverFacet } from './asset-resolver';
+
+/** Centres a line that holds one previewed image and nothing else. */
+export const LONE_IMAGE_LINE = Decoration.line({ class: 'cm-live-image-line' });
+
+/**
+ * Whether the image at `from..to` is alone on `line`: only whitespace before it, and after
+ * it only whitespace or what `trailing` allows (a Quarto `{width=…}` block, a TeX comment).
+ * An image inside a sentence or a list item stays where the text puts it.
+ */
+export function isLoneImage(line: Line, from: number, to: number, trailing: RegExp): boolean {
+  return /^\s*$/.test(line.text.slice(0, from - line.from)) && trailing.test(line.text.slice(to - line.from));
+}
 
 /**
  * An inline image (`![alt](src)` or `\includegraphics{src}`). http(s)/data

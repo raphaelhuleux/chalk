@@ -6,7 +6,7 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 import { Extension, RangeSetBuilder } from '@codemirror/state';
-import { ImageWidget } from './image-widget';
+import { ImageWidget, isLoneImage, LONE_IMAGE_LINE } from './image-widget';
 import { revealReplacedSource } from './reveal';
 import { inLineComment } from './tex-lines';
 
@@ -63,6 +63,8 @@ function buildTexImageDecorations(view: EditorView): DecorationSet {
 
       if (revealReplacedSource(cursor, start, end)) continue;
 
+      const line = state.doc.lineAt(start);
+      if (isLoneImage(line, start, end, /^\s*(%.*)?$/)) builder.add(line.from, line.from, LONE_IMAGE_LINE);
       builder.add(
         start,
         end,

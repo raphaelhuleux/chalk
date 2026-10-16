@@ -43,6 +43,37 @@ describe('image live preview', () => {
     });
   });
 
+  /** Lines whose image is centred: the ones holding nothing but the image. */
+  function centredLines(): string[] {
+    return [...root.querySelectorAll('.cm-line.cm-live-image-line')].map((l) => l.textContent ?? '');
+  }
+
+  it('centres a markdown image alone on its line, with or without a Quarto attribute block', () => {
+    mount('intro\n\n![a](a.png)\n\n  ![b](b.png){width=50%}\n\nsee ![c](c.png) here\n\n- ![d](d.png)\n', 'md', () =>
+      Promise.resolve(TINY_PNG),
+    );
+    expect(root.querySelectorAll('.cm-live-image').length).toBe(4);
+    expect(centredLines().length).toBe(2);
+  });
+
+  it('centres a lone includegraphics, a trailing comment allowed, and not one inside prose', () => {
+    mount(
+      'text\n\\includegraphics{a}\n\n  \\includegraphics[width=0.5\\textwidth]{b} % fig\n\nsee \\includegraphics{c} here\n',
+      'tex',
+      () => Promise.resolve(TINY_PNG),
+    );
+    expect(root.querySelectorAll('.cm-live-image').length).toBe(3);
+    expect(centredLines().length).toBe(2);
+  });
+
+  it('drops the centring with the widget when the caret reveals the source', () => {
+    const { view } = mount('intro\n\n![a](a.png)\n', 'md', () => Promise.resolve(TINY_PNG));
+    expect(centredLines().length).toBe(1);
+    view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf('a.png') } });
+    expect(root.querySelector('.cm-live-image')).toBeNull();
+    expect(centredLines().length).toBe(0);
+  });
+
   it('leaves a multi-line markdown image as raw source without throwing', () => {
     const { view } = mount('![alt\nwrapped](figures/plot.png)\n', 'md');
     expect(root.querySelector('.cm-live-image')).toBeNull();
