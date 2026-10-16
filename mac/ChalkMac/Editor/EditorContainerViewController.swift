@@ -447,6 +447,8 @@ final class EditorContainerViewController: NSViewController {
     #if DEBUG
     /// Downcasts to the web surface: these readers are implementation evidence, not part of the
     /// `EditorSurface` seam.
+    /// The active web surface, for the debug script's page-side actions.
+    var activeWebSurfaceForDebug: WebEditorSurface? { activeWebSurfaceForTesting }
     private var activeWebSurfaceForTesting: WebEditorSurface? {
         activeTab?.surface as? WebEditorSurface
     }
