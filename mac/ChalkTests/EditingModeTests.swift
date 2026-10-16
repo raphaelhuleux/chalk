@@ -40,40 +40,21 @@ final class EditingModeTests: XCTestCase {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: ChalkMetrics.motionStandard + 0.15))
     }
 
-    /// Zen hides the tab band; it must not touch
-    /// `additionalSafeAreaInsets`. The band is an OVERLAY (option 2a: the
-    /// editor runs full-bleed under it and gets its resting offset web-side,
-    /// the `editorChromeTopInset` `BandLayout.resolve` returns to
-    /// `applyBandLayout()`), so reserving header height on zen EXIT
-    /// pushed both columns down by 44 and, because the band's own pad reads
-    /// `view.safeAreaInsets.top`, inflated the band itself by the same amount
-    /// — a zen round trip left a fat black bar over the tabs (owner report
-    /// 2026-08-18). Launch leaves the inset at 0; leaving zen must return to
-    /// exactly that. Replaces the old expectation of `headerHeight`, which was
-    /// the pre-overlay model and had become a known-failing baseline entry.
-    /// The windowed tabs live in the AppKit NSToolbar and the UIKit band is
-    /// hidden at rest, showing only as the fallback when the glue fails to
-    /// load, so the band's resting visibility is not asserted here.
-    ///
-    /// The whole point of the test: the inset must be 0 throughout, and the
-    /// band must come back the size it launched.
+    /// Zen hides the tab band and a round trip must return it at the size it
+    /// launched: the band is an OVERLAY (the editor runs full-bleed under it
+    /// and gets its resting offset web-side), so nothing may reserve header
+    /// height on zen exit and push the columns down.
     @MainActor
     func testZenHidesTheHeaderWithoutMovingTheColumns() {
         let previousMode = Preferences.editingMode
         defer { Preferences.editingMode = previousMode }
 
-        // Hosted in a real window, not just loaded.
-        //
-        // An unhosted root has no safe area, and the band's height is
-        // `max(view.safeAreaInsets.top, tabStripHeight)`. With the inset at 0
-        // the floor always binds, so "the height at launch" was really the
-        // unlaid seed constant (s(44)) and the first presentation pass raised
-        // it to the s(46) floor. The test read that correction as a zen
-        // regression. docs/ui-correctness.md lists unhosted roots as the first
-        // way this class of test goes quietly wrong; this is one.
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first!
-        let window = UIWindow(windowScene: scene)
+        // Hosted in a real window, not just loaded: an unhosted root has no
+        // titlebar to measure, so the band's height there is only the floor.
+        // docs/ui-correctness.md lists unhosted roots as the first way this
+        // class of test goes quietly wrong.
+        
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
         let root = RootSplitViewController()
         window.rootViewController = root
         window.isHidden = false
@@ -84,17 +65,13 @@ final class EditingModeTests: XCTestCase {
             window.rootViewController = nil
         }
 
-        // The band's resting visibility is the toolbar's business; this
-        // test is about the inset and the round trip, not about ownership.
         let restingHidden = root.isHeaderHiddenForTesting
-        XCTAssertEqual(root.additionalSafeAreaInsets.top, 0)
         let band = root.headerBandHeightForTesting
 
         root.setEditingMode(.zen)
         pumpZenFade()
         XCTAssertTrue(root.isHeaderHiddenForTesting,
                       "zen hides the band")
-        XCTAssertEqual(root.additionalSafeAreaInsets.top, 0)
         XCTAssertEqual(Preferences.editingMode, .zen)
 
         root.setEditingMode(.normal)
@@ -102,7 +79,6 @@ final class EditingModeTests: XCTestCase {
         root.view.layoutIfNeeded()
         XCTAssertEqual(root.isHeaderHiddenForTesting, restingHidden,
                        "leaving zen returns the band to the visibility it launched with")
-        XCTAssertEqual(root.additionalSafeAreaInsets.top, 0)
         XCTAssertEqual(root.headerBandHeightForTesting, band, accuracy: 0.5,
                        "a zen round trip returns the band to its launch height")
     }
@@ -122,11 +98,10 @@ final class EditingModeTests: XCTestCase {
         defer { Preferences.editingMode = previousMode }
         Preferences.editingMode = .normal
 
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first!
+        
 
-        func host(_ root: RootSplitViewController) -> UIWindow {
-            let window = UIWindow(windowScene: scene)
+        func host(_ root: RootSplitViewController) -> NSWindow {
+            let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
             window.rootViewController = root
             window.isHidden = false
             window.layoutIfNeeded()

@@ -7,7 +7,7 @@ Naming one of these is enough to describe a chrome bug precisely.
 
 ## Where each rule is actually asserted
 
-`ChromeInvariantMatrixTests` walks all 32 cells of the state matrix on the AppKit shell (`ChalkMacTests`).
+`ChromeInvariantMatrixTests` walks all 32 cells of the state matrix (`ChalkTests`).
 In each cell it asserts every rule that both APPLIES there and is FALSIFIABLE there.
 A rule evaluated against absent geometry passes whatever the app did, so it is not counted as coverage and never reported as a pass.
 
@@ -19,20 +19,16 @@ The matrix host seeds one Library folder, so every Library-open cell has a first
 
 Coverage is still not uniform, and the differences are structural.
 The counts below are the ones the suite PRINTS (`ChromeInvariantMatrixTests falsifiable coverage`), read off a run rather than reasoned about.
-Windowed and full screen are the same chrome on the AppKit shell (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
+Windowed and full screen are the same chrome (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
 
 | Cells | Falsifiable rules | Why |
 | --- | --- | --- |
-| normal, Library open, outline open (4) | 15 of 19 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
-| normal, Library open, outline closed (4) | 11 of 19 | as above, minus the four `outlinePanel*` rules |
-| normal, Library closed, outline open (4) | 11 of 19 | as the first row, minus the three Library rules and the name row |
-| normal, Library closed, outline closed (4) | 7 of 19 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
-| zen, outline closed (8) | 4 of 19 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
-| zen, outline open (8) | 4 of 19 | zen forces the outline panel closed regardless of the request, so its four rules are never evidence here |
-
-Four rules are never evidence on the AppKit shell: `stripLeadingTracksTheDivider`, `stripVisibilityMatchesTheState`, `stripFadeMatchesTheState` and `bandAndStripNeverBothCarryTheTabs`.
-They describe the Catalyst app's contract with its `ChalkAppKitGlue` toolbar strip (`macStrip`, recorded at the post sites and checked against `MacStripExpectation.forState`); the AppKit shell has no glue, its strip is the band's own row, and `macStrip` is nil.
-They retire with the glue at cutover.
+| normal, Library open, outline open (4) | 15 of 15 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
+| normal, Library open, outline closed (4) | 11 of 15 | as above, minus the four `outlinePanel*` rules |
+| normal, Library closed, outline open (4) | 11 of 15 | as the first row, minus the three Library rules and the name row |
+| normal, Library closed, outline closed (4) | 7 of 15 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
+| zen, outline closed (8) | 4 of 15 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
+| zen, outline open (8) | 4 of 15 | zen forces the outline panel closed regardless of the request, so its four rules are never evidence here |
 
 ## The rules
 
@@ -80,22 +76,6 @@ Paper's Library is flush: its surface runs to the window's leading, top and bott
 
 The accent underline sits under the ACTIVE tab's label, spanning exactly it, one fixed gap below. It is the only mark that says which document you are in now that the chip is gone, so an underline that outruns its label, misses it, or lingers under the previous one is the tab row lying about the state.
 
-### `stripLeadingTracksTheDivider`
-
-The windowed Mac tab chips start at the Library divider while the Library is tiled and return to the traffic lights when it hides; a stale inset leaves the tabs floating over the panel or parked mid-window after it closed.
-
-### `stripVisibilityMatchesTheState`
-
-The titlebar strip's toolbar stands exactly when the state calls for it: full screen hands the tab row to the UIKit band, and zen keeps the toolbar standing while the chips fade. A recorded visibility that disagrees with the mode is a titlebar lying about the state — or a window that collapsed its content area in zen.
-
-### `stripFadeMatchesTheState`
-
-Outside zen the fade belongs to an active auto-hide scroll run only — a strip still faded in a normal resting state is the stale-fade handover bug (TabChromeOwnership) wearing a new state. Zen's FADE lane is the one state that RESTS faded (the faded, glue-hidden strip is the zen titlebar), so an un-faded strip standing over zen fails the same rule from the other side.
-
-### `bandAndStripNeverBothCarryTheTabs`
-
-One tab row, ever. The row moves between the app's UIKit band and the AppKit titlebar strip (TabChromeOwnership), and a handover that shows the new owner without quieting the old one puts the same tabs on screen twice — which is what the owner photographed on 2026-08-24: entering full screen hid the strip, the auto-hide re-application then posted an un-fade, and the un-fade un-hid it, so the revealed system titlebar carried a second tab row above the band.
-
 ### `chromeStaysInsideTheWindow`
 
 No chrome element hangs outside the window's bounds, which is how an off-screen column or a clipped strip first shows up.
@@ -112,4 +92,4 @@ The panel starts where the editor's content column starts: full-bleed under the 
 
 The panel pushes the editor while the column can spare the width and overlays it once the text would drop below the readable floor. The floor is the metrics table's number, so a panel that pushes a 300pt column or overlays a 900pt one is applying the wrong rule.
 
-_19 invariants._
+_15 invariants._

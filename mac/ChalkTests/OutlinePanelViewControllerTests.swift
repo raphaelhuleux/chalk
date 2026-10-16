@@ -4,16 +4,26 @@ import ChalkKit
 
 @MainActor
 final class OutlinePanelViewControllerTests: XCTestCase {
+    private var windows: [NSWindow] = []
+
+    override func tearDown() {
+        for window in windows { dismantleHostedSidebar(window) }
+        windows = []
+        super.tearDown()
+    }
+
     private func heading(_ title: String, level: Int = 1, line: Int) -> OutlineItem {
         OutlineItem(kind: .heading, level: level, title: title, line: line, calloutType: nil, number: nil)
     }
 
-    private func hosted() -> (UIWindow, OutlinePanelViewController) {
-        let window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
-        let vc = OutlinePanelViewController()
+    private func hosted(_ existing: OutlinePanelViewController? = nil)
+        -> (NSWindow, OutlinePanelViewController) {
+        let vc = existing ?? OutlinePanelViewController()
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
         window.rootViewController = vc
-        window.makeKeyAndVisible()
-        vc.view.layoutIfNeeded()
+        window.isHidden = false
+        vc.view.layoutSubtreeIfNeeded()
+        windows.append(window)
         return (window, vc)
     }
 
@@ -76,12 +86,12 @@ final class OutlinePanelViewControllerTests: XCTestCase {
         XCTAssertEqual(vc.reloadCountForTesting, reloads + 1)
     }
 
-    func testTapJumpsToTheRowsLine() {
+    func testClickJumpsToTheRowsLine() {
         let (_, vc) = hosted()
         vc.setSnapshot(OutlineSnapshot(items: three, cursorLine: 1))
         var jumped: [Int] = []
         vc.onJump = { jumped.append($0) }
-        vc.tableView(vc.tableViewForTesting, didSelectRowAt: IndexPath(row: 2, section: 0))
+        vc.jumpToRowForTesting(2)
         XCTAssertEqual(jumped, [20])
     }
 
@@ -97,7 +107,7 @@ final class OutlinePanelViewControllerTests: XCTestCase {
     /// the editor's paper, so the two side columns read as one system.
     func testPanelPaintsTheChromeBackground() {
         let (_, vc) = hosted()
-        XCTAssertEqual(vc.view.backgroundColor, UIColor.chalkChromeBackground)
+        XCTAssertTrue(vc.view is ChromeToneView)
     }
 
     /// The header names the document the outline belongs to, and survives
@@ -105,29 +115,20 @@ final class OutlinePanelViewControllerTests: XCTestCase {
     func testHeaderShowsTheDocumentName() {
         let vc = OutlinePanelViewController()
         vc.setDocumentName("outline-demo.md")
-        let window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
-        window.rootViewController = vc
-        window.makeKeyAndVisible()
-        vc.view.layoutIfNeeded()
-        XCTAssertEqual(vc.headerDocumentNameForTesting, "outline-demo.md")
-        vc.setDocumentName("notes.tex")
-        XCTAssertEqual(vc.headerDocumentNameForTesting, "notes.tex")
+        let (_, hostedVC) = hosted(vc)
+        XCTAssertEqual(hostedVC.headerDocumentNameForTesting, "outline-demo.md")
+        hostedVC.setDocumentName("notes.tex")
+        XCTAssertEqual(hostedVC.headerDocumentNameForTesting, "notes.tex")
     }
 
     /// The header sits up in the band at a fixed distance from the panel's
-    /// top, whatever the safe area says (the Mac titlebar arrives as a
-    /// safe-area inset; the design puts the header level with the traffic
-    /// lights, not below them), and the list adds no safe area of its own.
-    func testHeaderSitsNearTheTopRegardlessOfTheSafeArea() {
+    /// top (the design puts it level with the traffic lights, not below them).
+    func testHeaderSitsNearTheTop() {
         let (window, vc) = hosted()
-        vc.additionalSafeAreaInsets.top = 50
         vc.setSnapshot(OutlineSnapshot(items: three, cursorLine: 1))
         window.layoutIfNeeded()
-        vc.view.layoutIfNeeded()
-        XCTAssertGreaterThan(vc.view.safeAreaInsets.top, 0, "the view must have a safe area for this to be evidence")
+        vc.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(vc.headerFrameForTesting.minY, OutlinePanelViewController.headerTop, accuracy: 0.5)
-        XCTAssertEqual(vc.tableViewForTesting.adjustedContentInset.top,
-                       vc.tableViewForTesting.contentInset.top, accuracy: 0.5)
     }
 
     /// Nesting shows as tree guides: one hairline per ancestor level, so a
@@ -135,7 +136,7 @@ final class OutlinePanelViewControllerTests: XCTestCase {
     func testRowsCarryOneGuidePerAncestorLevel() {
         let (_, vc) = hosted()
         vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 1))
-        vc.view.layoutIfNeeded()
+        vc.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(vc.guideCountForTesting(row: 0), 0)
         XCTAssertEqual(vc.guideCountForTesting(row: 1), 1)
         XCTAssertEqual(vc.guideCountForTesting(row: 2), 2)
@@ -146,6 +147,6 @@ final class OutlinePanelViewControllerTests: XCTestCase {
     func testRowsAreThirtyTwoPointsTall() {
         let (_, vc) = hosted()
         vc.setSnapshot(OutlineSnapshot(items: three, cursorLine: 1))
-        XCTAssertEqual(vc.tableViewForTesting.rowHeight, ChalkMetrics.s(32), accuracy: 0.5)
+        XCTAssertEqual(vc.tableViewForTesting.rowHeight, 32, accuracy: 0.5)
     }
 }

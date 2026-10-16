@@ -1,4 +1,4 @@
-import UIKit
+import AppKit
 import ChalkKit
 import os
 
@@ -84,13 +84,13 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     /// seconds, so a fresher external write can carry the same date. A same-second, same-length write is
     /// still missed.
     private var syncedFileSize: Int?
-    /// One UIDocument write at a time. Trailing save() callers queue here and are replayed as one coalesced
+    /// One document write at a time. Trailing save() callers queue here and are replayed as one coalesced
     /// save from the in-flight completion; overlapping writes (resign-active and didEnterBackground both run
     /// saveAll) would read our own fresh mtime as an external conflict.
     private var saveInFlight = false
     private var queuedSaveCompletions: [((Bool) -> Void)?] = []
-    /// Watches `document` for `.inConflict` (iCloud picked a winner; the loser is invisible in the version
-    /// store). Re-armed for every new `document`, removed in `close()`.
+    /// Watches `document` for a gained conflict version (iCloud picked a winner; the loser is invisible in
+    /// the version store). Re-armed for every new `document`, removed in `close()`.
     private var documentStateObserver: NSObjectProtocol?
     /// The document `documentStateObserver` watches.
     private weak var conflictWatchedDocument: ChalkDocument?
@@ -247,8 +247,8 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         // baseline; the mod date is read inside the same block so `syncedModDate` matches the content.
         // Strict UTF-8 like ChalkDocument: bail rather than adopt a lossy decode.
         //
-        // `filePresenter: doc` is load-bearing: the open UIDocument is a presenter of this file on the main
-        // queue, and a nil-presenter coordinator would wait on notifying it while main may be busy.
+        // `filePresenter: doc` is load-bearing: the open document is a presenter of this file, and a
+        // nil-presenter coordinator would wait on notifying it while its queue may be busy.
         // Coordinating on its behalf skips self-notification but still serializes against other processes.
         //
         // Off the main thread: the read can block for seconds behind other writers (iCloud mid-sync).
@@ -342,7 +342,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
             delegate?.documentController(self, hasSaveConflictAt: doc.fileURL, backupAt: backup)
         }
         doc.text = text
-        doc.save(to: doc.fileURL, for: .forOverwriting) { [weak self] ok in
+        doc.save { [weak self] ok in
             guard let self else { return }
             self.saveInFlight = false
             let queued = self.queuedSaveCompletions
@@ -420,7 +420,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         }
         fileWatcher?.cancel()
         fileWatcher = nil
-        document?.close(completionHandler: nil)
+        document?.close()
         document = nil
         scopedURL?.stopAccessingSecurityScopedResource()
         scopedURL = nil
@@ -441,11 +441,11 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         }
         conflictWatchedDocument = doc
         documentStateObserver = NotificationCenter.default.addObserver(
-            forName: UIDocument.stateChangedNotification, object: doc, queue: .main
+            forName: ChalkDocument.stateChangedNotification, object: doc, queue: .main
         ) { [weak self] _ in
             self?.resolveConflictVersionsIfNeeded()
         }
-        if doc.documentState.contains(.inConflict) {
+        if doc.hasUnresolvedConflicts {
             resolveConflictVersionsIfNeeded()
         }
     }
@@ -454,7 +454,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     /// each aside, tell the host, and discard the copied ones. Copies run off-main (they can touch the
     /// ubiquity store).
     private func resolveConflictVersionsIfNeeded() {
-        guard let doc = document, doc.documentState.contains(.inConflict) else { return }
+        guard let doc = document, doc.hasUnresolvedConflicts else { return }
         let url = doc.fileURL
         guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
               !versions.isEmpty else { return }
@@ -496,11 +496,11 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     }
 
     /// Rebind to a file already moved/renamed on disk, WITHOUT reloading, so unsaved edits in `buffer`
-    /// survive and the next save writes to `newURL`. Dirty state lives in `buffer`, never in UIDocument's
-    /// change count, so closing the old handle never rewrites the vacated path. A rename that flips
+    /// survive and the next save writes to `newURL`. Dirty state lives in `buffer`, never in the document,
+    /// so closing the old handle never rewrites the vacated path. A rename that flips
     /// `.md`/`.tex` re-inits the surface from the live buffer, resetting CM6 undo history.
     func rebind(to newURL: URL) {
-        document?.close(completionHandler: nil)
+        document?.close()
         let doc = ChalkDocument(fileURL: newURL)
         document = doc
         // Never opened, but the next save registers it as a presenter, and then it can go into conflict.
@@ -558,7 +558,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         // seeding it.
         isLoaded = false
         fileWatcher?.cancel() // re-armed by adoptLoaded once the new file is read
-        document?.close(completionHandler: nil)
+        document?.close()
         let doc = ChalkDocument(fileURL: url)
         document = doc
         language = doc.language
@@ -653,7 +653,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
             log.notice("open-external rejected scheme: \(url.absoluteString, privacy: .private)")
             return
         }
-        UIApplication.shared.open(url)
+        NSWorkspace.shared.open(url)
     }
 
     func editor(_ surface: EditorSurface, resolveAsset src: String) async -> String? {

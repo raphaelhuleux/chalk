@@ -203,8 +203,8 @@ final class DocumentControllerSaveConflictTests: XCTestCase {
         openAndWait(url)
         controller.editor(surface, didEdit: "unsaved\n")
 
-        // Make the parent directory read-only: UIDocument's safe-save writes a
-        // sidecar then swaps it into the directory, which now fails.
+        // Make the parent directory read-only: the atomic write lands a sidecar
+        // then swaps it into the directory, which now fails.
         let dir = url.deletingLastPathComponent()
         try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
         addTeardownBlock {
@@ -237,7 +237,7 @@ final class DocumentControllerSaveConflictTests: XCTestCase {
             savedOK = ok
             saved.fulfill()
         }
-        // The UIDocument write is async; the rename lands before its completion.
+        // The coordinated write is async; the rename lands before its completion.
         controller.rebind(to: b)
         wait(for: [saved], timeout: 5)
 
@@ -337,13 +337,11 @@ final class DocumentControllerSaveConflictTests: XCTestCase {
         return url
     }
 
-    /// The "Kept in Chalk's folder" figure the Privacy screen shows.
+    /// The conflict copies kept in Chalk's folder, which is what the Privacy screen counts.
     private func privacyConflictCount() -> Int {
-        let defaults = UserDefaults(suiteName: "chalk-privacy-\(UUID().uuidString)")!
-        let screen = PrivacyViewController(alpha: AlphaSession(defaults: defaults))
-        let conflicts = screen.rowsForTesting(2)
-        XCTAssertEqual(conflicts.first?.0, "Kept in Chalk\u{2019}s folder")
-        return Int(conflicts.first?.1 ?? "") ?? -1
+        let dir = RecoveryStore.conflictCopiesDirectory
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        return names.filter { !$0.hasPrefix(".") }.count
     }
 
     private func openAndWait(_ url: URL) {

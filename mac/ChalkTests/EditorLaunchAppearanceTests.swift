@@ -13,16 +13,14 @@ import ChalkKit
 /// what took the old safety net away; layout is the replacement.
 @MainActor
 final class EditorLaunchAppearanceTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var container: EditorContainerViewController!
     private var file: URL!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first, "no scene to host in")
-        window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 900, height: 700)
+        
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 900, height: 700))
         container = EditorContainerViewController()
         container.hostOwnsAppearanceTransitions = true // C4: the host owns the flip
 
@@ -49,7 +47,7 @@ final class EditorLaunchAppearanceTests: XCTestCase {
         // the system's business (Catalyst answers with the Mac's own
         // appearance); what matters is that the window disagrees
         // with it, so the assertion below can fail.
-        window.overrideUserInterfaceStyle = detached ? .light : .dark
+        window.appearance = NSAppearance(named: detached ? .aqua : .darkAqua)
         window.rootViewController = container
         window.isHidden = false
         container.loadViewIfNeeded()
@@ -64,13 +62,13 @@ final class EditorLaunchAppearanceTests: XCTestCase {
     /// standing the hook down exists to prevent.
     func testASurfaceThatAlreadyAgreesIsNotPushedAgain() throws {
         container.open(url: file)
-        window.overrideUserInterfaceStyle = .dark
+        window.appearance = NSAppearance(named: .darkAqua)
         window.rootViewController = container
         window.isHidden = false
         container.loadViewIfNeeded()
         window.layoutIfNeeded()
 
-        container.pushAppearance(dark: true, theme: .ink) // what the covered flip does
+        container.pushAppearance(dark: true, theme: ChalkAppearance.theme) // what the covered flip does
         let pushes = container.activeSurfaceAppearancePushCountForTesting
         window.setNeedsLayout()
         window.layoutIfNeeded()

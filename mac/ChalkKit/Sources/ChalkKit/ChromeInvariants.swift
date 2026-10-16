@@ -65,7 +65,7 @@ public struct ChromeInvariant: Sendable {
     // COVERAGE-DOC-BEGIN
     // ## Where each rule is actually asserted
     //
-    // `ChromeInvariantMatrixTests` walks all 32 cells of the state matrix on the AppKit shell (`ChalkMacTests`).
+    // `ChromeInvariantMatrixTests` walks all 32 cells of the state matrix (`ChalkTests`).
     // In each cell it asserts every rule that both APPLIES there and is FALSIFIABLE there.
     // A rule evaluated against absent geometry passes whatever the app did, so it is not counted as coverage and never reported as a pass.
     //
@@ -77,20 +77,17 @@ public struct ChromeInvariant: Sendable {
     //
     // Coverage is still not uniform, and the differences are structural.
     // The counts below are the ones the suite PRINTS (`ChromeInvariantMatrixTests falsifiable coverage`), read off a run rather than reasoned about.
-    // Windowed and full screen are the same chrome on the AppKit shell (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
+    // Windowed and full screen are the same chrome (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
     //
     // | Cells | Falsifiable rules | Why |
     // | --- | --- | --- |
-    // | normal, Library open, outline open (4) | 15 of 19 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
-    // | normal, Library open, outline closed (4) | 11 of 19 | as above, minus the four `outlinePanel*` rules |
-    // | normal, Library closed, outline open (4) | 11 of 19 | as the first row, minus the three Library rules and the name row |
-    // | normal, Library closed, outline closed (4) | 7 of 19 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
-    // | zen, outline closed (8) | 4 of 19 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
-    // | zen, outline open (8) | 4 of 19 | zen forces the outline panel closed regardless of the request, so its four rules are never evidence here |
+    // | normal, Library open, outline open (4) | 15 of 15 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
+    // | normal, Library open, outline closed (4) | 11 of 15 | as above, minus the four `outlinePanel*` rules |
+    // | normal, Library closed, outline open (4) | 11 of 15 | as the first row, minus the three Library rules and the name row |
+    // | normal, Library closed, outline closed (4) | 7 of 15 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
+    // | zen, outline closed (8) | 4 of 15 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
+    // | zen, outline open (8) | 4 of 15 | zen forces the outline panel closed regardless of the request, so its four rules are never evidence here |
     //
-    // Four rules are never evidence on the AppKit shell: `stripLeadingTracksTheDivider`, `stripVisibilityMatchesTheState`, `stripFadeMatchesTheState` and `bandAndStripNeverBothCarryTheTabs`.
-    // They describe the Catalyst app's contract with its `ChalkAppKitGlue` toolbar strip (`macStrip`, recorded at the post sites and checked against `MacStripExpectation.forState`); the AppKit shell has no glue, its strip is the band's own row, and `macStrip` is nil.
-    // They retire with the glue at cutover.
     // COVERAGE-DOC-END
 
     /// Every rule the chrome must satisfy.
@@ -242,64 +239,6 @@ public struct ChromeInvariant: Sendable {
                     && abs(underline.width - label.width) < crossSourceEpsilon
                     && underline.minY > label.maxY - crossSourceEpsilon
                     && underline.minY < label.maxY + layout.underlineGap + crossSourceEpsilon
-            }),
-
-        ChromeInvariant(
-            name: "stripLeadingTracksTheDivider",
-            rationale: "The windowed Mac tab chips start at the Library divider while the Library is tiled and return to the traffic lights when it hides; a stale inset leaves the tabs floating over the panel or parked mid-window after it closed.",
-            // `macStrip` is nil unless the glue is loaded; its
-            // divider is what `pushStripLeadingInset` last decided.
-            appliesTo: { $0.macStrip != nil },
-            isFalsifiable: { $0.macStrip != nil },
-            holds: { layout in
-                guard let strip = layout.macStrip else { return true }
-                // The chips track the editor column's leading edge (what
-                // `pushStripLeadingInset` reads), 1.5pt past the panel on
-                // Catalyst, so the content column's minX is the oracle.
-                let expected = MacStripExpectation.forState(
-                    window: layout.state.window, sidebar: layout.state.sidebar,
-                    mode: layout.state.mode, glueAvailable: true,
-                    dividerX: layout.libraryPanel != nil ? layout.editorContent.minX : 0)
-                return abs(strip.dividerX - expected.dividerX) < crossSourceEpsilon
-            }),
-
-        ChromeInvariant(
-            name: "stripVisibilityMatchesTheState",
-            rationale: "The titlebar strip's toolbar stands exactly when the state calls for it: full screen hands the tab row to the UIKit band, and zen keeps the toolbar standing while the chips fade. A recorded visibility that disagrees with the mode is a titlebar lying about the state — or a window that collapsed its content area in zen.",
-            appliesTo: { $0.macStrip != nil },
-            isFalsifiable: { $0.macStrip != nil },
-            holds: { layout in
-                guard let strip = layout.macStrip else { return true }
-                let expected = MacStripExpectation.forState(
-                    window: layout.state.window, sidebar: layout.state.sidebar,
-                    mode: layout.state.mode, glueAvailable: true,
-                    dividerX: layout.libraryPanel?.maxX ?? 0)
-                return strip.visible == expected.visible
-            }),
-
-        ChromeInvariant(
-            name: "stripFadeMatchesTheState",
-            rationale: "Outside zen the fade belongs to an active auto-hide scroll run only — a strip still faded in a normal resting state is the stale-fade handover bug (TabChromeOwnership) wearing a new state. Zen's FADE lane is the one state that RESTS faded (the faded, glue-hidden strip is the zen titlebar), so an un-faded strip standing over zen fails the same rule from the other side.",
-            appliesTo: { $0.macStrip != nil },
-            isFalsifiable: { $0.macStrip != nil },
-            holds: { layout in
-                guard let strip = layout.macStrip else { return true }
-                let expected = MacStripExpectation.forState(
-                    window: layout.state.window, sidebar: layout.state.sidebar,
-                    mode: layout.state.mode, glueAvailable: true,
-                    dividerX: layout.libraryPanel?.maxX ?? 0)
-                return strip.faded == expected.faded
-            }),
-
-        ChromeInvariant(
-            name: "bandAndStripNeverBothCarryTheTabs",
-            rationale: "One tab row, ever. The row moves between the app's UIKit band and the AppKit titlebar strip (TabChromeOwnership), and a handover that shows the new owner without quieting the old one puts the same tabs on screen twice — which is what the owner photographed on 2026-08-24: entering full screen hid the strip, the auto-hide re-application then posted an un-fade, and the un-fade un-hid it, so the revealed system titlebar carried a second tab row above the band.",
-            appliesTo: { $0.macStrip != nil },
-            isFalsifiable: { $0.macStrip != nil },
-            holds: { layout in
-                guard let strip = layout.macStrip else { return true }
-                // A hidden band reports `.zero`.
-                return !(strip.visible && !layout.band.isEmpty)
             }),
 
         ChromeInvariant(

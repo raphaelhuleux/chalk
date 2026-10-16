@@ -64,6 +64,25 @@ final class WindowLocationsTests: XCTestCase {
                         "another shell's list is not this shell's to sweep")
         XCTAssertNotNil(defaults.data(forKey: WindowLocations.legacyKey), "the legacy list is read-only")
     }
+
+    /// The first AppKit launch over a Catalyst install: the Catalyst windows' lists, keyed by
+    /// scene sessions no AppKit window can restore, seed the first window, once.
+    func testTheOtherShellsListsSeedTheFirstWindowOnce() throws {
+        let a=[LocationRecord(id: "one", name: "One", bookmark: Data([1]))]
+        let b=[LocationRecord(id: "two", name: "Two", bookmark: Data([2])), LocationRecord(id: "one", name: "One", bookmark: Data([1]))]
+        defaults.set(try JSONEncoder().encode(a), forKey: WindowLocations.key(forWindow: "scene-A"))
+        defaults.set(try JSONEncoder().encode(b), forKey: WindowLocations.key(forWindow: "scene-B"))
+        XCTAssertFalse(WindowLocations.hasAnyList(withIDPrefix: "mac-", defaults: defaults))
+        let inherited = WindowLocations.records(ofWindowsNotPrefixed: "mac-", defaults: defaults)
+        XCTAssertEqual(inherited.map(\.id), ["one", "two"], "deduplicated by id, in key order")
+        WindowLocations.seedIfAbsent(window: "mac-first", with: inherited, defaults: defaults)
+        let store = WindowLocations.store(forWindow: "mac-first", isRestoredWindow: false, defaults: defaults)
+        XCTAssertEqual(store.records().map(\.id), ["one", "two"])
+        XCTAssertTrue(WindowLocations.hasAnyList(withIDPrefix: "mac-", defaults: defaults))
+        // Seeding never overwrites a list that exists.
+        WindowLocations.seedIfAbsent(window: "mac-first", with: [], defaults: defaults)
+        XCTAssertEqual(store.records().map(\.id), ["one", "two"])
+    }
 }
 
 final class ExternalOpenRoutingTests: XCTestCase {

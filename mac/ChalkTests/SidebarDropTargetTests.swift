@@ -3,20 +3,19 @@ import ChalkKit
 @testable import Chalk
 
 /// U12 drag-move landing zones. The reported bug: a file dragged out of a
-/// folder had nowhere to land at the Location's top level — only the thin
+/// folder had nowhere to land at the Location's top level; only the thin
 /// header strip resolved to a target, so dropping on a top-level row or in the
 /// blank space under the tree was refused.
 ///
-/// This drives the real collection view (rows laid out, sections built from a
+/// This drives the real outline view (rows laid out, sections built from a
 /// temp-dir Location) and asks where a drop at a given point would land.
 @MainActor
 final class SidebarDropTargetTests: XCTestCase {
-    private var window: UIWindow!
-    private var host: UIViewController!
+    private var window: NSWindow!
     private var sidebar: SidebarViewController!
     private var root: URL!
 
-    private var collectionView: UICollectionView { sidebar.collectionViewForTesting }
+    private var outlineView: LibraryOutlineView { sidebar.outlineViewForTesting }
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -30,54 +29,30 @@ final class SidebarDropTargetTests: XCTestCase {
         try "x".write(to: papers.appendingPathComponent("draft.tex"), atomically: true, encoding: .utf8)
         try "x".write(to: root.appendingPathComponent("index.md"), atomically: true, encoding: .utf8)
 
-        let location = Location(id: "test", name: "Root", url: root)
-        sidebar = SidebarViewController()
-        sidebar.locationsProvider = { [location] }
-        host = UIViewController()
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first!
-        window = UIWindow(windowScene: scene)
-        window.rootViewController = host
-        window.isHidden = false
-        host.addChild(sidebar)
-        sidebar.view.translatesAutoresizingMaskIntoConstraints = true
-        sidebar.view.frame = CGRect(x: 0, y: 0, width: 320, height: 600)
-        host.view.addSubview(sidebar.view)
-        sidebar.didMove(toParent: host)
-        sidebar.reload()
+        (sidebar, window) = makeHostedSidebar(locations: [Location(id: "test", name: "Root", url: root)])
         sidebar.expandAll() // Papers' children have to be rows for the nested case
-        window.layoutIfNeeded()
-        collectionView.layoutIfNeeded()
+        settleSidebar(sidebar, window)
     }
 
     override func tearDownWithError() throws {
-        window.isHidden = true
-        window.rootViewController = nil
+        dismantleHostedSidebar(window)
         window = nil
-        host = nil
         sidebar = nil
         try? FileManager.default.removeItem(at: root)
         try super.tearDownWithError()
     }
 
-    /// The index path of the row whose URL ends in `name`.
-    private func indexPath(forRowNamed name: String) throws -> IndexPath {
-        let path = try XCTUnwrap(
-            (0..<collectionView.numberOfSections).flatMap { section in
-                (0..<collectionView.numberOfItems(inSection: section)).map { IndexPath(item: $0, section: section) }
-            }.first { sidebar.itemURLForTesting(at: $0)?.lastPathComponent == name },
-            "no row named \(name) — the tree did not build")
-        return path
+    /// The row whose URL ends in `name`.
+    private func row(named name: String) throws -> Int {
+        let rows = sidebar.rowsForTesting(inSection: 0)
+        let node = try XCTUnwrap(rows.first { $0.url.lastPathComponent == name },
+                                 "no row named \(name); the tree did not build: \(rows.map(\.name))")
+        return try XCTUnwrap(sidebar.rowForTesting(node), "\(name) has no table row")
     }
 
-    /// Compare resolved paths, not raw ones.
-    ///
-    /// On macOS /var is a symlink to /private/var, and the temporary directory
-    /// reaches the two sides of these assertions by different routes: the test
-    /// builds its expectation from FileManager's URL, while the drop code has
-    /// been through the file system. The strings differ by that one prefix and
-    /// name the same directory. This is a real difference between the paths
-    /// and not a reason to compare something weaker than the destination.
+    /// Compare resolved paths, not raw ones: on macOS /var is a symlink to
+    /// /private/var, and the two sides reach the temporary directory by
+    /// different routes.
     private func assertSameDirectory(_ actual: URL?, _ expected: URL,
                                      _ message: String = "",
                                      file: StaticString = #filePath,
@@ -87,45 +62,52 @@ final class SidebarDropTargetTests: XCTestCase {
                        message, file: file, line: line)
     }
 
-    private func center(of indexPath: IndexPath) throws -> CGPoint {
-        try XCTUnwrap(collectionView.layoutAttributesForItem(at: indexPath)?.center)
+    private func center(ofRow row: Int) -> CGPoint {
+        let rect = outlineView.rect(ofRow: row)
+        return CGPoint(x: rect.midX, y: rect.midY)
     }
 
     func testDropOnFolderRowLandsInThatFolder() throws {
-        let path = try indexPath(forRowNamed: "Papers")
-        assertSameDirectory(sidebar.dropDestinationForTesting(at: try center(of: path), destination: path),
+        let row = try row(named: "Papers")
+        assertSameDirectory(sidebar.dropDestinationForTesting(at: center(ofRow: row)),
                             root.appendingPathComponent("Papers"))
     }
 
     func testDropOnTopLevelFileRowLandsAtTheLocationRoot() throws {
-        let path = try indexPath(forRowNamed: "index.md")
-        assertSameDirectory(sidebar.dropDestinationForTesting(at: try center(of: path), destination: path),
+        let row = try row(named: "index.md")
+        assertSameDirectory(sidebar.dropDestinationForTesting(at: center(ofRow: row)),
                             root,
                             "this is the way a file gets dragged back OUT of a folder")
     }
 
     func testDropOnNestedFileRowLandsInItsContainingFolder() throws {
-        let path = try indexPath(forRowNamed: "draft.tex")
-        assertSameDirectory(sidebar.dropDestinationForTesting(at: try center(of: path), destination: path),
+        let row = try row(named: "draft.tex")
+        assertSameDirectory(sidebar.dropDestinationForTesting(at: center(ofRow: row)),
                             root.appendingPathComponent("Papers"))
     }
 
     func testDropInBlankSpaceBelowTheTreeLandsAtTheLocationRoot() throws {
-        let blank = CGPoint(x: collectionView.bounds.midX,
-                            y: collectionView.contentSize.height + 40)
-        XCTAssertEqual(sidebar.dropDestinationForTesting(at: blank, destination: nil)?.path,
-                       root.path)
+        let lastRow = outlineView.rect(ofRow: outlineView.numberOfRows - 1)
+        let blank = CGPoint(x: outlineView.bounds.midX, y: lastRow.maxY + 40)
+        XCTAssertEqual(sidebar.dropDestinationForTesting(at: blank)?.path, root.path)
+    }
+
+    /// The table fills its clip view, so the blank space under the rows is
+    /// still the table's: a drop there arrives.
+    func testTheTableReachesTheBlankSpaceUnderTheRows() {
+        let lastRow = outlineView.rect(ofRow: outlineView.numberOfRows - 1)
+        XCTAssertGreaterThan(outlineView.bounds.height, lastRow.maxY + 40,
+                             "the outline view must extend past its last row to take drops there")
     }
 
     func testDropOnTheLocationHeaderStillLandsAtTheLocationRoot() throws {
-        let header = try XCTUnwrap(collectionView.collectionViewLayout.layoutAttributesForSupplementaryView(
-            ofKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: 0)))
-        XCTAssertEqual(sidebar.dropDestinationForTesting(at: header.center, destination: nil)?.path,
+        let header = try XCTUnwrap(sidebar.headerRectForTesting(section: 0))
+        XCTAssertEqual(sidebar.dropDestinationForTesting(at: CGPoint(x: header.midX, y: header.midY))?.path,
                        root.path)
     }
 
     func testDropAboveEverythingIsNoTarget() {
-        let above = CGPoint(x: collectionView.bounds.midX, y: -200)
-        XCTAssertNil(sidebar.dropDestinationForTesting(at: above, destination: nil))
+        let above = CGPoint(x: outlineView.bounds.midX, y: -200)
+        XCTAssertNil(sidebar.dropDestinationForTesting(at: above))
     }
 }

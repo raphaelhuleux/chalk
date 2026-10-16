@@ -3,15 +3,14 @@ import ChalkKit
 @testable import Chalk
 
 /// Shell wiring for the outline palette on a live RootSplitViewController:
-/// Cmd+; toggles the overlay, and the two palettes are mutually exclusive.
-/// Runs app-hosted (EditingModeTests pattern).
+/// ⌘P toggles the overlay, and the two palettes are mutually exclusive.
 @MainActor
 final class OutlineToggleTests: XCTestCase {
     private func makeRoot() -> RootSplitViewController {
         let root = RootSplitViewController()
         root.loadViewIfNeeded()
         root.view.frame = CGRect(x: 0, y: 0, width: 1180, height: 820)
-        root.view.layoutIfNeeded()
+        root.view.layoutSubtreeIfNeeded()
         return root
     }
 
@@ -37,8 +36,8 @@ final class OutlineToggleTests: XCTestCase {
     func testRapidSecondToggleIsCoalescedAsGhostDuplicate() {
         let root = makeRoot()
         root.cmdToggleOutline()
-        // Same press arriving via menu + pressesBegan + JS forward: the
-        // duplicates land within the window and must NOT close the palette.
+        // Same press arriving via the menu and the web forward: the duplicate
+        // lands within the window and must NOT close the palette.
         root.cmdToggleOutline()
         XCTAssertTrue(root.isOutlineVisibleForTesting)
     }
@@ -56,6 +55,16 @@ final class OutlineToggleTests: XCTestCase {
         root.cmdQuickOpen()
         XCTAssertTrue(root.isQuickOpenVisibleForTesting)
         XCTAssertFalse(root.isOutlineVisibleForTesting)
+    }
+
+    /// The web editor's forwarded commands reach the same toggles.
+    func testWebForwardedCommandsOpenThePalettes() {
+        let root = makeRoot()
+        root.simulateShellCommandForTesting(ShellCommand.quickOpen.rawValue)
+        XCTAssertTrue(root.isQuickOpenVisibleForTesting)
+        root.simulateShellCommandForTesting(ShellCommand.toggleOutline.rawValue)
+        XCTAssertTrue(root.isOutlineVisibleForTesting)
+        XCTAssertFalse(root.isQuickOpenVisibleForTesting)
     }
 
     /// The outline snapshot is per-document: switching the active tab while
@@ -79,7 +88,7 @@ final class OutlineToggleTests: XCTestCase {
         ])
         XCTAssertTrue(root.isOutlineVisibleForTesting)
 
-        // Active tab switches to b: the snapshot no longer matches — hide.
+        // Active tab switches to b: the snapshot no longer matches; hide.
         root.simulateTabsChangedForTesting([
             TabItem(id: a, name: "a.md", isDirty: true, isActive: false, isPreview: false),
             TabItem(id: b, name: "b.md", isDirty: false, isActive: true, isPreview: false),

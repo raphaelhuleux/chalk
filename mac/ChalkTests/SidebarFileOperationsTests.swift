@@ -4,7 +4,7 @@ import ChalkKit
 
 /// Duplicate and Move to Trash against a real temp directory, each followed by
 /// the undo the sidebar registers. Trash goes through `FileManager.trashItem`,
-/// which a sandbox can refuse — those tests skip rather than fail.
+/// which a sandbox can refuse; those tests skip rather than fail.
 @MainActor
 final class SidebarFileOperationsTests: XCTestCase {
     private var sidebar: SidebarViewController!
@@ -13,7 +13,7 @@ final class SidebarFileOperationsTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         // Inside Documents, not the temp directory: that is where real
-        // Locations live, and `trashItem` is volume-sensitive — testing it
+        // Locations live, and `trashItem` is volume-sensitive; testing it
         // anywhere else answers the wrong question.
         root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("chalk-ops-\(UUID().uuidString)")
@@ -41,8 +41,7 @@ final class SidebarFileOperationsTests: XCTestCase {
     }
 
     func testDuplicateCreatesANumberedCopyWithTheSameContents() throws {
-        // Off the main thread since 2026-08-24 (the sidebar freeze), so the
-        // assertions wait for the work rather than racing it.
+        // Off the main thread, so the assertions wait for the work rather than racing it.
         awaitFileWork(on: sidebar) { sidebar.duplicate(node("draft.tex")) }
         XCTAssertTrue(exists("draft 2.tex"))
         XCTAssertEqual(
@@ -60,7 +59,7 @@ final class SidebarFileOperationsTests: XCTestCase {
     }
 
     func testUndoRemovesTheDuplicate() throws {
-        try XCTSkipUnless(canTrash(), "this sandbox refuses trashItem")
+        try XCTSkipUnless(canTrash(in: root), "this sandbox refuses trashItem")
         awaitFileWork(on: sidebar) { sidebar.duplicate(node("draft.tex")) }
         XCTAssertTrue(exists("draft 2.tex"))
         awaitFileWork(on: sidebar) { sidebar.undoManager?.undo() }
@@ -69,13 +68,15 @@ final class SidebarFileOperationsTests: XCTestCase {
     }
 
     func testMoveToTrashRemovesTheFile() throws {
-        try XCTSkipUnless(canTrash(), "this sandbox refuses trashItem")
+        try XCTSkipUnless(canTrash(in: root), "this sandbox refuses trashItem")
         awaitFileWork(on: sidebar) { sidebar.moveToTrash(node("draft.tex")) }
         XCTAssertFalse(exists("draft.tex"))
     }
 
+    /// Recorded failing on the Catalyst shell (docs/known-failing-tests.md,
+    /// 2026-08-23); the plan fixes it in the Library phase.
     func testUndoRestoresATrashedFile() throws {
-        try XCTSkipUnless(canTrash(), "this sandbox refuses trashItem")
+        try XCTSkipUnless(canTrash(in: root), "this sandbox refuses trashItem")
         awaitFileWork(on: sidebar) { sidebar.moveToTrash(node("draft.tex")) }
         XCTAssertFalse(exists("draft.tex"))
         awaitFileWork(on: sidebar) { sidebar.undoManager?.undo() }
@@ -85,7 +86,6 @@ final class SidebarFileOperationsTests: XCTestCase {
             "hello")
     }
 
-    /// Probe once: some sandboxes have no Trash for the temp volume.
     /// Every window shows the Library, so each operation that changes the
     /// tree must tell them all, not reload only the window it ran in.
     func testEveryFileOperationTellsEveryLibrary() throws {
@@ -101,18 +101,15 @@ final class SidebarFileOperationsTests: XCTestCase {
         awaitFileWork(on: sidebar) { sidebar.createFolderForTesting(in: root) }
         XCTAssertEqual(posts, 3, "New Folder")
 
-        try XCTSkipUnless(canTrash(), "this sandbox refuses trashItem")
+        try XCTSkipUnless(canTrash(in: root), "this sandbox refuses trashItem")
         awaitFileWork(on: sidebar) { sidebar.moveToTrash(node("draft 2.tex")) }
         XCTAssertEqual(posts, 4, "Move to Trash")
     }
 
-    private func canTrash() -> Bool {
-        let probe = root.appendingPathComponent("trash-probe")
-        guard (try? Data().write(to: probe)) != nil else { return false }
-        var resulting: NSURL?
-        let ok = (try? FileManager.default.trashItem(at: probe, resultingItemURL: &resulting)) != nil
-        if let resulting = resulting as URL? { try? FileManager.default.removeItem(at: resulting) }
-        try? FileManager.default.removeItem(at: probe)
-        return ok
+    /// Copy puts the FILE on the pasteboard, so Cmd+V in Finder pastes a real file.
+    func testCopyPutsTheFileOnThePasteboard() throws {
+        sidebar.copyToPasteboard(node("draft.tex"))
+        let urls = NSPasteboard.general.readObjects(forClasses: [NSURL.self]) as? [URL]
+        XCTAssertEqual(urls?.first?.standardizedFileURL.path, root.appendingPathComponent("draft.tex").standardizedFileURL.path)
     }
 }

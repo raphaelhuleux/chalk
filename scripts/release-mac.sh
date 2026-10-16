@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 #
-# Build a signed Mac release of Chalk for direct download: the Mac Catalyst
-# shell by default, the AppKit shell (ChalkMac) with --appkit, until cutover
-# makes the AppKit shell the only one.
+# Build a signed Mac release of Chalk for direct download.
 #
 #   CHALK_SIGN_IDENTITY="Chalk Self-Signed" ./scripts/release-mac.sh
-#   CHALK_SIGN_IDENTITY="Chalk Self-Signed" ./scripts/release-mac.sh --appkit
 #
 # Maintainer path, notarised for Gatekeeper (needs a paid Apple Developer
 # account, a "Developer ID Application" certificate in the keychain and a
@@ -33,29 +30,7 @@ cd "$ROOT"
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 die() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 
-SHELL_KIND=catalyst
-for arg in "$@"; do
-  case "$arg" in
-    --appkit) SHELL_KIND=appkit ;;
-    *) die "unknown argument: $arg" ;;
-  esac
-done
-case "$SHELL_KIND" in
-  catalyst)
-    SCHEME=Chalk
-    DESTINATION='generic/platform=macOS,variant=Mac Catalyst'
-    PRODUCT=Chalk.app
-    BINARY=Chalk
-    HAS_GLUE=1
-    ;;
-  appkit)
-    SCHEME=ChalkMac
-    DESTINATION='generic/platform=macOS'
-    PRODUCT=ChalkMac.app
-    BINARY=ChalkMac
-    HAS_GLUE=0
-    ;;
-esac
+for arg in "$@"; do die "unknown argument: $arg"; done
 
 # --- 1. Refuse to build something nobody can reproduce ----------------------
 step "Checking the working tree"
@@ -127,9 +102,9 @@ step "Archiving"
 # (docs/issues/2026-08-19-sandbox-crash-loops-the-webview.md).
 xcodebuild archive \
   -project mac/Chalk.xcodeproj \
-  -scheme "$SCHEME" \
+  -scheme Chalk \
   -configuration Release \
-  -destination "$DESTINATION" \
+  -destination 'generic/platform=macOS' \
   -archivePath "$ARCHIVE" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$IDENTITY" \
@@ -156,8 +131,8 @@ xcodebuild -exportArchive \
   -exportPath "$OUT" \
   -exportOptionsPlist "$OUT/ExportOptions.plist"
 
-APP="$OUT/$PRODUCT"
-[ -d "$APP" ] || die "export produced no $PRODUCT. A Generic Xcode Archive with
+APP="$OUT/Chalk.app"
+[ -d "$APP" ] || die "export produced no Chalk.app. A Generic Xcode Archive with
        no export path usually means a nested target is missing SKIP_INSTALL."
 
 # --- 5. Audit ---------------------------------------------------------------
@@ -168,16 +143,12 @@ step "Auditing the export"
 fail=0
 check() { if eval "$2"; then echo "  ok    $1"; else echo "  FAIL  $1"; fail=1; fi; }
 
-check "signature is valid, and --deep traverses the nested glue" \
+check "signature is valid, --deep" \
       "codesign --verify --deep --strict '$APP' 2>/dev/null"
-if [ "$HAS_GLUE" = 1 ]; then
-  check "the AppKit glue is in Contents/PlugIns" \
-        "[ -d '$APP/Contents/PlugIns/ChalkAppKitGlue.bundle' ]"
-fi
 check "no debug dylibs shipped" \
       "! find '$APP' -name '*.debug.dylib' -o -name '__preview.dylib' | grep -q ."
 check "the binary is universal" \
-      "lipo -archs '$APP/Contents/MacOS/$BINARY' | grep -q x86_64 && lipo -archs '$APP/Contents/MacOS/$BINARY' | grep -q arm64"
+      "lipo -archs '$APP/Contents/MacOS/Chalk' | grep -q x86_64 && lipo -archs '$APP/Contents/MacOS/Chalk' | grep -q arm64"
 # Minification is invisible in a diff and its absence is invisible at runtime,
 # so it is asserted by size. The floor is 30% under the measured 2026-08-19
 # figure (997649 bytes); the ceiling is the unminified size, which is what
@@ -200,7 +171,7 @@ check "the app is not sandboxed" \
 # --- 6. Notarisation and packaging -----------------------------------------
 # ditto, not zip: it preserves the signature and the bundle's symlinks, which
 # `zip -r` does not, and a resigned-looking app fails Gatekeeper differently.
-ZIP="$OUT/${PRODUCT%.app}-$VERSION.zip"
+ZIP="$OUT/Chalk-$VERSION.zip"
 if [ -n "$NOTARY" ]; then
   step "Notarising"
   # notarytool takes a zip; the ticket is then stapled to the app itself, so
@@ -223,7 +194,6 @@ ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
 {
   echo "Chalk $VERSION (build $BUILD)"
-  echo "shell:      $SHELL_KIND"
   echo "commit:     $COMMIT"
   echo "built:      $BUILD_DATE"
   echo "identity:   $IDENTITY"

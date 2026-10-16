@@ -83,7 +83,7 @@ final class DocumentControllerReopenSafetyTests: XCTestCase {
     /// order-dependently (green alone, red after other suites, and green again
     /// under instrumentation). Two hypotheses were tested and both were wrong:
     /// `layerRecoveredText` landing in a buffer about to be replaced, and two
-    /// UIDocuments coordinating on one path. Root cause is not established.
+    /// presenters coordinating on one path. Root cause is not established.
     ///
     /// Trading a wedged tab for a crash-recovery path that drops the user's
     /// recovered text is the wrong trade, so the wedge stays until the

@@ -68,8 +68,8 @@ const swiftFiles = [];
     }
   }
 })(join(root, 'mac/Chalk'));
-// Both shells, and ChalkKit now that Diagnostics and LocationStore live there.
-for (const dir of ['mac/ChalkMac', 'mac/ChalkKit/Sources']) {
+// ChalkKit too, now that Diagnostics and LocationStore live there.
+for (const dir of ['mac/ChalkKit/Sources']) {
   (function walkMore(d) {
     for (const entry of readdirSync(d)) {
       const full = join(d, entry);
@@ -127,15 +127,7 @@ function interpolations(line) {
   return found;
 }
 
-const glueDir = join(root, 'mac/ChalkAppKitGlue');
 const logFiles = [...swiftFiles];
-(function walkGlue(dir) {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walkGlue(full);
-    else if (entry.endsWith('.swift')) logFiles.push(full);
-  }
-})(glueDir);
 
 for (const file of logFiles) {
   const lines = readFileSync(file, 'utf8').split('\n');

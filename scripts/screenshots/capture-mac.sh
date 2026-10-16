@@ -5,7 +5,6 @@
 #   ./scripts/screenshots/capture-mac.sh              # build Debug, capture every shot
 #   ./scripts/screenshots/capture-mac.sh --no-build   # reuse the last Debug build
 #   ./scripts/screenshots/capture-mac.sh --no-build mac-beamer   # only the named shots
-#   ./scripts/screenshots/capture-mac.sh --appkit                 # the AppKit shell (ChalkMac)
 #
 # Drives the Debug app (bundle ID com.huleux.chalk.debug, so the installed app's
 # settings are never touched) through the DEBUG-only `promo-file` audit state,
@@ -26,24 +25,13 @@ WIDTH=1600 # README images are shown at most ~900px wide; 1600 keeps them sharp 
 
 die() { printf 'error: %s\n' "$1" >&2; exit 1; }
 
-# Which shell to drive. Both read the same audit environment; the AppKit
-# shell is the ChalkMac scheme with its own product and bundle ID.
-SCHEME=Chalk
-APP="$DD/Build/Products/Debug-maccatalyst/Chalk.app"
+APP="$DD/Build/Products/Debug/Chalk.app"
 BINARY=Chalk
 BUNDLE_ID=com.huleux.chalk.debug
-DESTINATION='platform=macOS,variant=Mac Catalyst,arch=arm64'
 BUILD=1
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
     --no-build) BUILD=0 ;;
-    --appkit)
-      SCHEME=ChalkMac
-      APP="$DD/Build/Products/Debug/ChalkMac.app"
-      BINARY=ChalkMac
-      BUNDLE_ID=com.huleux.chalk.mac.debug
-      DESTINATION='platform=macOS,arch=arm64'
-      ;;
     *) die "unknown option $1" ;;
   esac
   shift
@@ -51,8 +39,8 @@ done
 ONLY=" $* "
 if [[ "$BUILD" == 1 ]]; then
   (cd "$ROOT/mac" && xcodegen generate --quiet)
-  xcodebuild build -project "$ROOT/mac/Chalk.xcodeproj" -scheme "$SCHEME" -configuration Debug \
-    -destination "$DESTINATION" \
+  xcodebuild build -project "$ROOT/mac/Chalk.xcodeproj" -scheme Chalk -configuration Debug \
+    -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO -quiet
 fi
 [[ -d "$APP" ]] || die "no Debug build at $APP; run without --no-build"

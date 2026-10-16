@@ -10,7 +10,7 @@ import ChalkKit
 /// is the t=0 facts (the slide engaged, the band not snapped away), the
 /// settled equality with fresh layouts, the instant-lane/animated-lane end
 /// states being identical, the recorded strip decisions matching
-/// `MacStripExpectation`, and the glide request the editor container relayed.
+/// and the glide request the editor container relayed.
 ///
 /// Like `SidebarSlideContractTests`, the animated tests run the REAL lane
 /// (`motionPolicyForTesting` stays `.system`) and wait out the clocks; the
@@ -36,9 +36,10 @@ final class ZenTransitionContractTests: XCTestCase {
         super.tearDown()
     }
 
-    /// A state whose UIKIT BAND is the visible tab UI, so the band fade has
-    /// something to fade: the windowed tabs belong to the AppKit strip, so
-    /// the cell is full screen.
+    /// Full screen: the band is the only chrome above the text there, so zen
+    /// changes the resting line (windowed, the system titlebar still
+    /// reserves and the line stays put), and the Library is open so the close
+    /// has something to do.
     private var bandState: UIState {
         return UIState(window: .fullscreen, sidebar: .shown,
                        mode: .normal, appearance: .light)
@@ -86,22 +87,12 @@ final class ZenTransitionContractTests: XCTestCase {
         XCTAssertEqual(reached.editorRestingTop, fresh.editorRestingTop, accuracy: 1.0,
                        "\(label): the resting line must land exactly where a fresh root rests")
         XCTAssertEqual(reached.reserveTop, fresh.reserveTop, accuracy: 1.0, label)
-        switch (reached.macStrip, fresh.macStrip) {
-        case (nil, nil): break
-        case let (a?, b?):
-            XCTAssertEqual(a.visible, b.visible, "\(label) strip visibility")
-            XCTAssertEqual(a.faded, b.faded, "\(label) strip fade")
-            XCTAssertEqual(a.dividerX, b.dividerX, accuracy: 1.0, "\(label) strip inset")
-        default:
-            XCTFail("\(label) macStrip: reached=\(String(describing: reached.macStrip)) "
-                    + "fresh=\(String(describing: fresh.macStrip))")
-        }
     }
 
     // MARK: - t=0 facts (the glide, not the snap)
 
     func testAnimatedZenEnterSlidesTheLibraryOutAndFadesTheBand() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled,
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled,
                       "Reduce Motion takes the instant placement; the t=0 facts are about the animated lane")
         let root = host.makeRoot(for: bandState)
         injectFastSettle(on: root)
@@ -112,7 +103,7 @@ final class ZenTransitionContractTests: XCTestCase {
         root.applyTransitionForTesting(.zen(true))
 
         // Same turn: the Library is leaving through the sidebar slide, and
-        // the band is fading — not snapped away by performWithoutAnimation.
+        // the band is fading, not snapped away.
         XCTAssertTrue(root.isSidebarTransitionInFlightForTesting,
                       "zen's Library close goes through the one sidebar slide (docs/motion.md C3)")
         XCTAssertFalse(root.isHeaderHiddenForTesting,
@@ -127,7 +118,7 @@ final class ZenTransitionContractTests: XCTestCase {
     // MARK: - Settled equality with fresh layouts
 
     func testAnimatedZenRoundTripLandsOnTheFreshLayouts() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled)
         let start = bandState
         let zenState = start.applying(.zen(true))
         let exitState = zenState.applying(.zen(false))
@@ -160,7 +151,7 @@ final class ZenTransitionContractTests: XCTestCase {
     // MARK: - Instant lane lands the animated lane's end state
 
     func testInstantZenLandsTheSameEndStateAsTheAnimatedLane() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled)
         let start = bandState
         let zenState = start.applying(.zen(true))
 
@@ -187,42 +178,10 @@ final class ZenTransitionContractTests: XCTestCase {
                        "the recorded resting inset must not depend on the lane")
     }
 
-    // MARK: - The Mac strip decision (fade lane)
-
-    func testZenStripDecisionMatchesTheExpectation() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
-        try XCTSkipIf(!SceneDelegate.isAppKitGlueAvailable,
-                      "no AppKit glue in this host: there is no strip to decide about")
-        let start = UIState(window: .windowed, sidebar: .shown,
-                            mode: .normal, appearance: .light)
-        let zenState = start.applying(.zen(true))
-        let root = host.makeRoot(for: start)
-        injectFastSettle(on: root)
-        host.settleToFixedPoint(root, state: start)
-
-        root.applyTransitionForTesting(.zen(true))
-        pumpUntilZenSettled(root)
-        let inZen = try XCTUnwrap(root.chromeLayout(for: zenState).macStrip)
-        let expected = MacStripExpectation.forState(
-            window: .windowed, sidebar: zenState.sidebar, mode: .zen,
-            glueAvailable: true, dividerX: 0)
-        XCTAssertEqual(inZen.visible, expected.visible,
-                       "the fade lane keeps the titlebar standing through zen")
-        XCTAssertEqual(inZen.faded, expected.faded,
-                       "zen rests with the chips faded on the fade lane")
-
-        root.applyTransitionForTesting(.zen(false))
-        pumpUntilZenSettled(root)
-        let after = try XCTUnwrap(root.chromeLayout(for: start.applying(.zen(true)).applying(.zen(false))).macStrip)
-        XCTAssertFalse(after.faded, "leaving zen un-fades the chips")
-        XCTAssertTrue(after.visible)
-    }
-
-
     // MARK: - The chrome-top glide request
 
     func testZenAsksTheActiveSurfaceToGlideTheChromeTop() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled)
         let root = host.makeRoot(for: bandState)
         injectFastSettle(on: root)
         host.settleToFixedPoint(root, state: bandState)

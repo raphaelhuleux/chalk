@@ -9,7 +9,7 @@ import ChalkKit
 final class CrossWindowPreferenceTests: XCTestCase {
     private var incomingScale: Double!
     private var incomingViewMode: ViewMode!
-    private var windows: [UIWindow] = []
+    private var windows: [NSWindow] = []
 
     override func setUp() {
         super.setUp()
@@ -21,18 +21,16 @@ final class CrossWindowPreferenceTests: XCTestCase {
     override func tearDown() {
         Preferences.editorFontScale = incomingScale
         Preferences.viewMode = incomingViewMode
-        windows.forEach { $0.isHidden = true }
+        for window in windows { dismantleHostedSidebar(window) }
         windows = []
         super.tearDown()
     }
 
-    /// A root in its own window of the host app's scene, so `everyLiveRoot()`
-    /// sees it, with one open tab.
-    private func hostedRoot() throws -> RootSplitViewController {
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first)
+    /// A root in its own window, so `everyLiveRoot()` (which scans
+    /// `NSApp.windows`) sees it, with one open tab.
+    private func hostedRoot() -> RootSplitViewController {
         let root = RootSplitViewController(initialContent: .openEmpty)
-        let window = UIWindow(windowScene: scene)
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1100, height: 760))
         window.rootViewController = root
         window.isHidden = false
         windows.append(window)
@@ -41,8 +39,10 @@ final class CrossWindowPreferenceTests: XCTestCase {
     }
 
     func testZoomReachesEveryWindow() throws {
-        let here = try hostedRoot()
-        let there = try hostedRoot()
+        let here = hostedRoot()
+        let there = hostedRoot()
+        XCTAssertTrue(RootSplitViewController.everyLiveRoot().contains { $0 === there },
+                      "precondition: the hosted window is a live window")
         Preferences.editorFontScale = 1.0
 
         here.cmdZoomIn()
@@ -55,8 +55,8 @@ final class CrossWindowPreferenceTests: XCTestCase {
     }
 
     func testDefaultViewModeReachesEveryWindow() throws {
-        let here = try hostedRoot()
-        let there = try hostedRoot()
+        let here = hostedRoot()
+        let there = hostedRoot()
         Preferences.viewMode = .preview
 
         here.setViewModeDefault(.source)

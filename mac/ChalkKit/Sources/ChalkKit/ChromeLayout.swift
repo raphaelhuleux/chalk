@@ -3,51 +3,6 @@ import Foundation
 // imported by this file.
 import CoreGraphics
 
-/// What the windowed Mac titlebar strip should look like in a given state,
-/// and (as `ChromeLayout.macStrip`) what the app last decided about it.
-///
-/// The strip's pixels live in ChalkAppKitGlue, which no test target links, so
-/// only the app's posts are asserted: MacStripBridge's `postLeadingInset`,
-/// `postVisibility` and `postFaded` record their decisions, and `forState` is
-/// the oracle they are checked against.
-public struct MacStripExpectation: Equatable, Sendable {
-    /// The sidebar divider while the Library is tiled, 0 (the traffic lights)
-    /// otherwise. In the reporting root's UIKit points, not Mac points.
-    public var dividerX: CGFloat
-    /// Whether the toolbar stands: only windowed, with the glue loaded. Zen
-    /// keeps it standing, faded; full screen hands the row to the UIKit band.
-    public var visible: Bool
-    /// The fade. At rest only zen is faded; otherwise only an active
-    /// auto-hide scroll run fades the strip (TabChromeOwnership).
-    public var faded: Bool
-
-    public init(dividerX: CGFloat, visible: Bool, faded: Bool) {
-        self.dividerX = dividerX
-        self.visible = visible
-        self.faded = faded
-    }
-
-    /// The strip state a resting window in `window`/`sidebar`/`mode` must
-    /// show. `dividerX` (the live editor column's leading edge) is echoed back
-    /// when the state calls for an inset and zeroed otherwise.
-    public static func forState(
-        window: UIState.WindowMode,
-        sidebar: UIState.SidebarState,
-        mode: UIState.ChromeMode,
-        glueAvailable: Bool,
-        dividerX: CGFloat
-    ) -> MacStripExpectation {
-        // Zen closes the Library whatever `sidebar` asked for.
-        let inset = (sidebar == .shown && mode != .zen) ? dividerX : 0
-        // Zen keeps the toolbar standing so the window content never
-        // resizes; full screen hands the tab row to the UIKit band.
-        let visible = glueAvailable && window == .windowed
-        // Only zen rests faded.
-        let faded = mode == .zen
-        return MacStripExpectation(dividerX: inset, visible: visible, faded: faded)
-    }
-}
-
 /// The chrome's geometry for one window state, as a value.
 ///
 /// `band` and `bandPaint` are separate because bugs have had a correct band
@@ -103,12 +58,8 @@ public struct ChromeLayout: Equatable, Sendable {
     /// The ACTIVE tab's frame, nil when no tab is active (or no row hosted).
     public var activeChip: CGRect?
     /// The active tab's label and its accent underline, in root coordinates.
-    /// Nil where the UIKit row is not the tab UI (windowed Mac).
     public var activeTabLabel: CGRect?
     public var activeTabUnderline: CGRect?
-    /// The titlebar strip's state as the app last decided it, nil when the
-    /// AppKit glue is unavailable.
-    public var macStrip: MacStripExpectation?
     /// The outline panel's frame, nil when hidden.
     public var outlinePanel: CGRect?
     /// True when the panel floats over the text instead of pushing it: the
@@ -136,7 +87,6 @@ public struct ChromeLayout: Equatable, Sendable {
                 activeChip: CGRect? = nil,
                 activeTabLabel: CGRect? = nil,
                 activeTabUnderline: CGRect? = nil,
-                macStrip: MacStripExpectation? = nil,
                 outlinePanel: CGRect? = nil,
                 outlinePanelIsOverlay: Bool = false,
                 outlinePanelPushMinimum: CGFloat = 0,
@@ -163,7 +113,6 @@ public struct ChromeLayout: Equatable, Sendable {
         self.activeChip = activeChip
         self.activeTabLabel = activeTabLabel
         self.activeTabUnderline = activeTabUnderline
-        self.macStrip = macStrip
         self.outlinePanel = outlinePanel
         self.outlinePanelIsOverlay = outlinePanelIsOverlay
         self.outlinePanelPushMinimum = outlinePanelPushMinimum

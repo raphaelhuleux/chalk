@@ -33,9 +33,14 @@ final class EditorSurfaceInstallTests: XCTestCase {
         return url
     }
 
-    private var activeSurfaceSuperview: UIView? {
-        editor.activeSurfaceWebView?.superview
+    /// The active surface's hosted view (the seam's `view`), which is what
+    /// the container installs; the web view inside it is the surface's own.
+    private var activeSurfaceView: NSView? {
+        guard let index = editor.tabItemsForTesting.firstIndex(where: \.isActive) else { return nil }
+        return editor.tabSurfaceForTesting(at: index)?.view
     }
+
+    private var activeSurfaceSuperview: NSView? { activeSurfaceView?.superview }
 
     func testFreshContainerShowsEmptyState() {
         XCTAssertTrue(editor.isEmptyStateVisibleForTesting,
@@ -54,7 +59,7 @@ final class EditorSurfaceInstallTests: XCTestCase {
     func testDedupeReactivateReinstallsDetachedSurface() throws {
         let url = try writeTempFile(name: "a.md", contents: "hello\n")
         editor.open(url: url)
-        editor.activeSurfaceWebView?.removeFromSuperview() // the pathology
+        activeSurfaceView?.removeFromSuperview() // the pathology
 
         editor.open(url: url) // dedupe branch: activeTab === tab
 
@@ -67,7 +72,7 @@ final class EditorSurfaceInstallTests: XCTestCase {
         let a = try writeTempFile(name: "a.md", contents: "aaa\n")
         let b = try writeTempFile(name: "b.md", contents: "bbb\n")
         editor.open(url: a) // uncommitted preview tab
-        editor.activeSurfaceWebView?.removeFromSuperview() // the pathology
+        activeSurfaceView?.removeFromSuperview() // the pathology
 
         editor.open(url: b, reuseCurrentIfClean: true) // sidebar browse click
 

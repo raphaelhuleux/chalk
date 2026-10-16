@@ -1,111 +1,83 @@
-import UIKit
+import AppKit
 import WebKit
 import ChalkKit
 import os
 
-/// The editor's WKWebView. A focused WKWebView (and Catalyst's flaky File-menu insertion) keeps
-/// several shell shortcuts from reaching our commands, so they are caught here and sent up the
-/// responder chain. Menu key equivalents are evaluated first and win when they work.
-final class EditorWebView: WKWebView {
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        for press in presses {
-            if let key = press.key, let action = Self.shellAction(for: key) {
-                // Walk our own responder chain so the command acts on THIS window's shell:
-                // `sendAction(to: nil)` uses the app-global first responder, which can sit in
-                // another scene after a multi-window restore. The nil target is a last resort
-                // for a detached view mid-teardown.
-                var responder: UIResponder? = self
-                while let current = responder {
-                    if current.responds(to: action) {
-                        UIApplication.shared.sendAction(action, to: current, from: self, for: nil)
-                        return // consume
-                    }
-                    responder = current.next
-                }
-                UIApplication.shared.sendAction(action, to: nil, from: self, for: nil)
-                return // consume
-            }
-        }
-        super.pressesBegan(presses, with: event)
+/// The editor's WKWebView.
+///
+/// No key-equivalent lane of its own: AppKit evaluates the menu bar's key equivalents, and a
+/// Cmd-key the page consumes (`preventDefault`, see `SHELL_COMMANDS` in web/src/native-host.ts)
+/// comes back over the transport-internal `command` message too. One press can arrive over both
+/// lanes, which `RootSplitViewController.admitShellAction` collapses. Copy and cut are WebKit's own on AppKit.
+final class EditorWebView: WKWebView {}
+
+/// The surface's view: holds the web view under the pre-paint cover. The container installs
+/// and removes the host; the cover is the host's own business.
+final class EditorSurfaceHostView: NSView {
+    /// Opaque, in the editor's tone, above the web view. An alpha of 0 on the web view was
+    /// not enough: its content is a remote layer whose first frame reached the screen white
+    /// regardless, for one frame, when the page process produced its first composite.
+    private let cover = PrePaintCoverView()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        cover.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(cover)
+        NSLayoutConstraint.activate([
+            cover.leadingAnchor.constraint(equalTo: leadingAnchor),
+            cover.trailingAnchor.constraint(equalTo: trailingAnchor),
+            cover.topAnchor.constraint(equalTo: topAnchor),
+            cover.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
     }
 
-    /// Copy/cut read the selection from CodeMirror's state over the `window.__chalkEditor` bridge
-    /// and write `UIPasteboard.general` directly: on Mac Catalyst the native `copy(_:)` empties the
-    /// pasteboard, and `execCommand('copy')` via evaluateJavaScript has no user activation, so
-    /// WebKit drops the clipboard write. Overriding covers Cmd+C/X, the menu bar and right-click.
-    override func copy(_ sender: Any?) {
-        evaluateJavaScript("window.__chalkEditor?.copySelection() ?? ''") { result, _ in
-            if let text = result as? String, !text.isEmpty {
-                UIPasteboard.general.string = text
-            }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// The web view goes under the cover.
+    func install(_ webView: NSView) {
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(webView, positioned: .below, relativeTo: cover)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            webView.topAnchor.constraint(equalTo: topAnchor),
+            webView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    var isCovering: Bool { !cover.isHidden }
+    func coverWebView() { cover.isHidden = false }
+    func liftCover() { cover.isHidden = true }
+}
+
+/// The pre-paint cover: the editor's tone under the current appearance and theme.
+final class PrePaintCoverView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(refresh), name: ChalkAppearance.themeDidChange, object: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
         }
     }
 
-    override func cut(_ sender: Any?) {
-        evaluateJavaScript("window.__chalkEditor?.cutSelection() ?? ''") { result, _ in
-            if let text = result as? String, !text.isEmpty {
-                UIPasteboard.general.string = text
-            }
-        }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 
-    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(copy(_:)) || action == #selector(cut(_:)) { return true }
-        return super.canPerformAction(action, withSender: sender)
-    }
-
-    // WebKit rebuilds its text interactions (and its selection highlight) on a window change.
-    // Deferred a turn so the content view's own didMoveToWindow has built them first.
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        guard window != nil else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            NativeSelectionHighlight.suppress(in: self)
-        }
-    }
-
-    private static func shellAction(for key: UIKey) -> Selector? {
-        // Flags first: this runs for every key, and plain typing must not pay for the String
-        // allocation below.
-        let mods = key.modifierFlags
-        guard mods.contains(.command) || mods.contains(.control) else { return nil }
-        return shellAction(
-            chars: key.charactersIgnoringModifiers.lowercased(),
-            isTab: key.keyCode == .keyboardTab,
-            command: mods.contains(.command),
-            shift: mods.contains(.shift),
-            control: mods.contains(.control))
-    }
-
-    /// The shortcut table, split out from `UIKey` (which has no public initializer) so tests can
-    /// catch a shortcut this lane silently drops.
-    static func shellAction(
-        chars: String, isTab: Bool, command: Bool, shift: Bool, control: Bool
-    ) -> Selector? {
-        if control, isTab || chars == "\t" {
-            return shift
-                ? #selector(RootSplitViewController.cmdPrevTab)
-                : #selector(RootSplitViewController.cmdNextTab)
-        }
-        guard command, !control else { return nil }
-        switch (chars, shift) {
-        case ("n", false): return #selector(RootSplitViewController.cmdNewFile)
-        case ("o", false): return #selector(RootSplitViewController.cmdQuickOpen)
-        case ("o", true): return #selector(RootSplitViewController.cmdAddLocation)
-        case ("j", false): return #selector(RootSplitViewController.cmdToggleSidebar)
-        case ("p", false): return #selector(RootSplitViewController.cmdToggleOutline)
-        case ("k", false): return #selector(RootSplitViewController.cmdToggleOutlinePanel)
-        case ("m", true): return #selector(RootSplitViewController.cmdCycleEditingMode)
-        case ("s", false): return #selector(RootSplitViewController.cmdSave)
-        case ("w", false): return #selector(RootSplitViewController.cmdCloseTab)
-        case (",", false): return #selector(RootSplitViewController.cmdSettings)
-        case ("=", false), ("+", true): return #selector(RootSplitViewController.cmdZoomIn)
-        case ("-", false): return #selector(RootSplitViewController.cmdZoomOut)
-        case ("0", false): return #selector(RootSplitViewController.cmdZoomReset)
-        default: return nil
-        }
-    }
+    @objc private func refresh() { needsDisplay = true }
 }
 
 /// `WKUserContentController` retains its handler strongly, so registering the surface directly
@@ -135,14 +107,18 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
 /// of the seed.
 final class WebEditorSurface: NSObject, EditorSurface {
     weak var delegate: EditorSurfaceDelegate?
-    var view: UIView { webView }
+    /// The host, not the web view itself: the pre-paint cover lives beside the
+    /// web view inside it.
+    var view: NSView { host }
+    private let host = EditorSurfaceHostView()
 
     /// Fires when recovery is exhausted (the watchdog reload also timed out, or the bundle is
     /// missing) so the shell shows an error instead of a blank tab. A closure, not a delegate
     /// method, because the delegate is DocumentController and this is a shell concern.
     var onFailedToBecomeReady: (() -> Void)?
 
-    private let webView: EditorWebView
+    /// Exposed for the shell's `takeSnapshot` covers and the tests; the seam is `view`.
+    let webView: EditorWebView
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private static let log = Logger(subsystem: "com.huleux.chalk", category: "surface")
@@ -183,8 +159,6 @@ final class WebEditorSurface: NSObject, EditorSurface {
     private static func fontSize(scale: Double) -> String { "\(baseFontSize * scale)px" }
 
     override init() {
-        // No WKProcessPool: it has no effect since iOS 15 and its deprecation warning would break
-        // the warnings-as-errors build (scripts/check.sh).
         let config = WKWebViewConfiguration()
         config.userContentController = WKUserContentController()
         webView = EditorWebView(frame: .zero, configuration: config)
@@ -194,26 +168,42 @@ final class WebEditorSurface: NSObject, EditorSurface {
         // User scripts are installed per load (installUserScripts): one carries the theme, which
         // the shell sets between construction and boot.
         webView.navigationDelegate = self
-        webView.scrollView.bounces = false
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        // Liquid Glass edge effects dim content under bars. This scroll view never scrolls
-        // (CodeMirror scrolls its own element) and `ChromeFadeView` does the feathering, so the
-        // effect only laid a dimmed slab over the first lines. See
-        // docs/issues/2026-09-17-macos-27-breaks-the-mac-chrome.md.
-        if #available(iOS 26.0, macCatalyst 26.0, *) {
-            for effect in [webView.scrollView.topEdgeEffect, webView.scrollView.bottomEdgeEffect,
-                           webView.scrollView.leftEdgeEffect, webView.scrollView.rightEdgeEffect] {
-                effect.isHidden = true
-            }
-        }
         // Boot is deferred to bootIfNeeded(): booting every restored background tab at launch
         // exhausted file descriptors. Pre-boot messages queue in `pending` like pre-ready ones.
-        // isOpaque false avoids WebKit's white pre-paint flash; the background is the editor
-        // colour, not .clear, so nothing behind the webview shows through before the page paints.
-        // See docs/issues/2026-07-24-blank-editor-on-open.md.
-        webView.isOpaque = false
-        webView.backgroundColor = .chalkEditorBackground
+        // The page's own `:root` background is the editor colour from the first paint (the theme
+        // seed is a document-start script), and the under-page colour covers overscroll. Before
+        // that first paint AppKit's WKWebView composites WHITE, and it has no public opaque
+        // switch (a private `drawsBackground` toggle is not an option), so the host keeps an
+        // opaque cover over the web view until the page has painted twice after `ready`.
+        webView.underPageBackgroundColor = .chalkEditorBackground
         webView.allowsLinkPreview = false
+        host.install(webView)
+    }
+
+    /// Bumped per cover, so a lift scheduled for one page generation cannot uncover the next.
+    private var coverGeneration = 0
+
+    /// Lift the cover once the page has composited the editor's tone: two animation frames
+    /// after `ready`, asked of the page itself (a fixed delay races the async repaint). The
+    /// backstop lifts it regardless, so a page whose frames never come is never a blank tab.
+    private func revealWebView(afterPaint: Bool) {
+        guard host.isCovering else { return }
+        coverGeneration += 1
+        let generation = coverGeneration
+        let lift = { [weak self] in
+            guard let self, self.coverGeneration == generation else { return }
+            self.host.liftCover()
+        }
+        guard afterPaint else { return lift() }
+        afterNextPaint(lift)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: lift)
+    }
+
+    func afterNextPaint(_ completion: @escaping () -> Void) {
+        webView.callAsyncJavaScript(
+            "await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
+            in: nil, in: .page
+        ) { _ in completion() }
     }
 
     /// Called on the tab's first show. Until then the WKWebView holds no page, no web content
@@ -282,6 +272,8 @@ final class WebEditorSurface: NSObject, EditorSurface {
     // Async, so a missing-bundle failure fired inside `bootIfNeeded()` reaches the shell after
     // its caller returns.
     private func notifyFailedToBecomeReady() {
+        // Not hidden behind the cover: the shell's error state must show.
+        revealWebView(afterPaint: false)
         DispatchQueue.main.async { [weak self] in self?.onFailedToBecomeReady?() }
     }
 
@@ -335,15 +327,23 @@ final class WebEditorSurface: NSObject, EditorSurface {
         #if DEBUG
         appearancePushCountForTesting += 1
         #endif
+        // The colour WebKit shows wherever the page has not painted yet: a
+        // strip exposed when the view grows (a tab reinstalled after the
+        // column widened behind it) wore the construction-time default for
+        // the frames before the repaint, a block in the wrong tone.
+        webView.underPageBackgroundColor = .chalkEditorBackground(dark: dark, theme: theme)
         applyAppearance()
     }
 
     #if DEBUG
+    /// Whether the pre-paint cover has lifted.
+    var isWebViewRevealedForTesting: Bool { !host.isCovering }
+    /// Run a script in the page (the debug script's `scroll:` action).
+    func evaluateForDebug(_ js: String) { webView.evaluateJavaScript(js, completionHandler: nil) }
     var userScriptsForTesting: [WKUserScript] {
         webView.configuration.userContentController.userScripts
     }
     var desiredDarkForTesting: Bool { desiredDark }
-    var desiredThemeForTesting: ChalkTheme { desiredTheme }
     /// Counts `setAppearance` calls, including ones that push the theme already shown.
     private(set) var appearancePushCountForTesting = 0
     /// Host-to-editor messages in delivery order; queued ones appear when flushed.
@@ -508,12 +508,12 @@ final class WebEditorSurface: NSObject, EditorSurface {
     private var wantsFocusOnReady = false
 
     func focusEditor() {
-        webView.becomeFirstResponder()
+        webView.window?.makeFirstResponder(webView)
         guard isReady else {
             wantsFocusOnReady = true
             return
         }
-        // Restore the DOM focus `blurEditor()` dropped: becomeFirstResponder alone leaves
+        // Restore the DOM focus `blurEditor()` dropped: first responder alone leaves
         // activeElement on <body> and keystrokes die. After the native grab so WebKit doesn't
         // re-assert behind a still-open overlay.
         webView.evaluateJavaScript(
@@ -523,7 +523,7 @@ final class WebEditorSurface: NSObject, EditorSurface {
     func blurEditor() {
         wantsFocusOnReady = false
         // Drop the DOM focus so WebKit has nothing to restore first responder for; the native
-        // resign is the palette's `endEditing(true)`.
+        // resign is the overlay's `makeFirstResponder`.
         webView.evaluateJavaScript(
             "document.activeElement && document.activeElement.blur()",
             completionHandler: nil)
@@ -543,6 +543,11 @@ final class WebEditorSurface: NSObject, EditorSurface {
             }
             completion(snapshot)
         }
+    }
+
+    func captureSnapshot(_ completion: @escaping (NSImage?) -> Void) {
+        guard isReady, !host.isCovering, webView.window != nil else { return completion(nil) }
+        webView.takeSnapshot(with: nil) { image, _ in completion(image) }
     }
 
     /// Jump to a 1-based line.
@@ -583,6 +588,7 @@ final class WebEditorSurface: NSObject, EditorSurface {
               let json = String(data: data, encoding: .utf8) else { return nil }
         // JSON allows raw U+2028/U+2029 in strings but pre-ES2019 JS literals don't. Our WebKit
         // floor accepts them; escape anyway, since failure would be a silently dropped `init`.
+        guard json.contains("\u{2028}") || json.contains("\u{2029}") else { return json }
         return json
             .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
             .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
@@ -613,6 +619,9 @@ extension WebEditorSurface: WKNavigationDelegate {
     /// WebKit killed our content process: reload, and the controller re-seeds on the next `ready`.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         isReady = false
+        // The reload paints white first, like a boot: cover it until the next `ready`.
+        coverGeneration += 1
+        host.coverWebView()
         // Stale queued messages would flush into the fresh editor; the controller re-seeds via
         // `editorDidResetConnection`.
         pending.removeAll()
@@ -674,7 +683,7 @@ extension WebEditorSurface: WKScriptMessageHandler {
             return
         }
 
-        // A shell shortcut the focused webview would otherwise consume (e.g. Cmd+S).
+        // A shell shortcut the focused webview consumed (e.g. Cmd+S).
         if type == "command", let name = body["name"] as? String {
             delegate?.editor(self, requestsCommand: name)
             return
@@ -703,6 +712,7 @@ extension WebEditorSurface: WKScriptMessageHandler {
                 return
             }
             isReady = true
+            revealWebView(afterPaint: true)
             Self.log.info("ready received; flushing \(self.pending.count) pending message(s)")
             // Reset the one-reload budget for a later crash reload.
             readyWatchdog?.cancel()
@@ -711,8 +721,6 @@ extension WebEditorSurface: WKScriptMessageHandler {
             // Before the seed, so the `init` builds the view with these settings.
             sendEditorSettings()
             delegate?.editorDidBecomeReady(self)
-            // Only one selection may paint: see NativeSelectionHighlight.
-            NativeSelectionHighlight.suppress(in: webView)
             flushPending()
             applyAppearance()
             applyCSSVariables()

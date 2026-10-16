@@ -23,7 +23,7 @@ final class ChromeMatrixHost {
     /// `BandLayout.resolve` is measured by `measuredBandInputs()`, which reads
     /// exactly that safe area, so an unhosted root reports the chips at the
     /// window's raw leading edge no matter what the sidebar is doing.
-    let window: UIWindow
+    let window: NSWindow
 
     /// The editing mode as the machine had it before the suite ran.
     ///
@@ -40,23 +40,28 @@ final class ChromeMatrixHost {
     /// fixed value; this snapshot is what makes that pin safe on the owner's
     /// machine.
     private let incomingSidebarWidthRaw: Any?
-    private static let sidebarWidthKey = "chalk.sidebarWidth"
+    private static let sidebarWidthKey = "chalk.sidebarWidth.appkit"
 
     /// Same reasoning as `incomingSidebarWidthRaw`, for the outline panel's
     /// pinned width.
     private let incomingOutlinePanelWidthRaw: Any?
-    private static let outlinePanelWidthKey = "chalk.outlinePanelWidth"
+    private static let outlinePanelWidthKey = "chalk.outlinePanelWidth.appkit"
+
+    /// One folder with one file, so every Library-open cell has a first area
+    /// header to measure: `libraryListStartsAtTheChromeFloor` is evidence only
+    /// against a measured header, and a detached root's Library is empty.
+    private let libraryFolder: URL
 
     init() {
+        libraryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chalk-matrix-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: libraryFolder, withIntermediateDirectories: true)
+        try? Data("# note\n".utf8).write(to: libraryFolder.appendingPathComponent("note.md"))
         incomingEditingMode = Preferences.editingMode
         incomingSidebarWidthRaw = UserDefaults.standard.object(forKey: Self.sidebarWidthKey)
         incomingOutlinePanelWidthRaw = UserDefaults.standard.object(forKey: Self.outlinePanelWidthKey)
         UserDefaults.standard.removeObject(forKey: Self.outlinePanelWidthKey)
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first else {
-            preconditionFailure("no connected UIWindowScene; the app host has no scene to window-host a root in")
-        }
-        window = UIWindow(windowScene: scene)
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
         window.isHidden = false
     }
 
@@ -75,6 +80,7 @@ final class ChromeMatrixHost {
         }
         window.isHidden = true
         window.rootViewController = nil
+        try? FileManager.default.removeItem(at: libraryFolder)
     }
 
     /// Windowed and fullscreen differ in size here; the size is not enough
@@ -106,11 +112,6 @@ final class ChromeMatrixHost {
         Preferences.editingMode = .normal
 
         let root = RootSplitViewController()
-        // A test root must not take part in the AppKit strip bridge: it can
-        // steal the live scene's bind and then toggle the REAL test-runner
-        // window's toolbar mid-suite (see the seam's comment). Set before
-        // the view loads so no bridge observer ever acts.
-        root.stripBridgeDetachedForTesting = true
         // Construction is placement, not motion (docs/motion.md: at rest,
         // nothing animates). Zen's chrome now FADES on the animated lane
         // (C3), so a zen cell built on `.system` would return mid-fade — the
@@ -123,14 +124,15 @@ final class ChromeMatrixHost {
         defer { root.motionPolicyForTesting = incomingPolicy }
         window.rootViewController = root
         root.loadViewIfNeeded()
-        root.overrideUserInterfaceStyle = state.appearance == .dark ? .dark : .light
-        root.preferredDisplayMode = state.sidebar == .shown ? .oneBesideSecondary : .secondaryOnly
+        root.view.appearance = NSAppearance(named: state.appearance == .dark ? .darkAqua : .aqua)
+        root.setLibraryLocationsForTesting([libraryFolder])
+        root.setSidebarVisible(state.sidebar == .shown)
         window.frame = CGRect(origin: .zero, size: Self.size(for: state))
         window.layoutIfNeeded()
         root.view.layoutIfNeeded()
-        // Full screen is a chrome MODE, not a window size: the
-        // UIKit band replaces the AppKit titlebar strip as the tab UI.
-        // Nothing else in a test can flip it.
+        // Full screen is a chrome MODE, not a window size: the band keeps
+        // its windowed height at the screen's top edge. Nothing else in a
+        // test can flip it.
         root.setMacFullscreenForTesting(state.window == .fullscreen)
         window.layoutIfNeeded()
         root.view.layoutIfNeeded()

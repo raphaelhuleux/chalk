@@ -73,9 +73,7 @@ final class ChromeInvariantTests: XCTestCase {
                                   width: 1000 - (panel?.maxX ?? 0), height: 800),
             reserveTop: 52,
             safeLeading: 0,
-            libraryFirstHeaderTop: sidebar ? 56 : nil,
-            macStrip: MacStripExpectation(
-                dividerX: panel?.maxX ?? 0, visible: true, faded: false))
+            libraryFirstHeaderTop: sidebar ? 56 : nil)
     }
 
     private func check(_ name: String, _ layout: ChromeLayout) -> Bool {
@@ -172,44 +170,6 @@ final class ChromeInvariantTests: XCTestCase {
         var layout = healthy()
         layout.activeChip?.origin.y += 5
         XCTAssertFalse(check("activeChipTopMeetsThePanelTop", layout))
-    }
-
-    func testStripLeadingRuleFailsOnAStaleDividerInset() {
-        var layout = macHealthy()
-        layout.macStrip?.dividerX = 0    // Library open, chips at the lights
-        XCTAssertFalse(check("stripLeadingTracksTheDivider", layout))
-        layout = macHealthy(sidebar: false)
-        layout.macStrip?.dividerX = 350  // Library closed, inset left behind
-        XCTAssertFalse(check("stripLeadingTracksTheDivider", layout))
-    }
-
-    func testStripVisibilityRuleFailsWhenZenCollapsedTheToolbarOnTheFadeLane() {
-        // The fade lane keeps the toolbar standing through zen (the chips
-        // fade instead) — a zen state whose recorded visibility is FALSE is a
-        // window that collapsed its titlebar on the wrong lane.
-        var layout = macHealthy()
-        layout.state = UIState(window: .windowed,
-                               sidebar: .hidden, mode: .zen, appearance: .dark)
-        layout.libraryPanel = nil
-        layout.macStrip = MacStripExpectation(dividerX: 0, visible: false, faded: true)
-        XCTAssertFalse(check("stripVisibilityMatchesTheState", layout))
-    }
-
-    func testStripFadeRuleFailsOnAStaleAutoHideFade() {
-        var layout = macHealthy()
-        layout.macStrip?.faded = true
-        XCTAssertFalse(check("stripFadeMatchesTheState", layout))
-    }
-
-    func testStripFadeRuleFailsWhenZenLeavesUnfadedChipsStanding() {
-        // The other direction of the same rule: a zen window whose chips are
-        // NOT faded is a titlebar showing tabs over a chrome-less mode.
-        var layout = macHealthy()
-        layout.state = UIState(window: .windowed,
-                               sidebar: .hidden, mode: .zen, appearance: .dark)
-        layout.libraryPanel = nil
-        layout.macStrip = MacStripExpectation(dividerX: 0, visible: true, faded: false)
-        XCTAssertFalse(check("stripFadeMatchesTheState", layout))
     }
 
     /// A header above the titlebar floor is a header sliding under the chrome.

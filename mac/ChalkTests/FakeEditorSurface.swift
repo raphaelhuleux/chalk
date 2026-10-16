@@ -1,4 +1,4 @@
-import UIKit
+import AppKit
 import ChalkKit
 @testable import Chalk
 
@@ -15,7 +15,7 @@ import ChalkKit
 /// controller never lets an `update` outrun the first `init` (the bug that left
 /// a freshly-opened note blank).
 final class FakeEditorSurface: EditorSurface {
-    let view: UIView = UIView()
+    let view: NSView = NSView()
     weak var delegate: EditorSurfaceDelegate?
 
     /// Languages passed to each `initialize`, in call order.
@@ -80,6 +80,8 @@ final class FakeEditorSurface: EditorSurface {
     func setFontScale(_ scale: Double) {}
     func focusEditor() {}
     func blurEditor() {}
+    func captureSnapshot(_ completion: @escaping (NSImage?) -> Void) { completion(nil) }
+    func afterNextPaint(_ completion: @escaping () -> Void) { DispatchQueue.main.async(execute: completion) }
     func teardown() {}
 
     // Shell-owned presentation: the container pushes these, and nothing in

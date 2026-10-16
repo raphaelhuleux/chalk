@@ -12,9 +12,9 @@ cd <repo root> && ./scripts/install-mac.sh
 ```
 
 That script ([scripts/install-mac.sh](../../../scripts/install-mac.sh)) is the whole
-path: quit the running app, `xcodegen generate`, build Mac Catalyst unsigned,
-audit the product, ad-hoc sign it inside out, verify, replace
-`~/Applications/Chalk.app`, launch it, and prove the AppKit glue loaded.
+path: quit the running app, `xcodegen generate`, build unsigned, audit the
+product, ad-hoc sign it inside out, verify, replace `~/Applications/Chalk.app`
+and launch it.
 
 Flags: `--no-launch`, `--config Debug`, `DEST=<path>`, `DD=<derived data>`.
 
@@ -44,16 +44,12 @@ chasing a bug in the app itself and warns when you use it.
 Each is a step in the script with a comment saying so. If you edit the script,
 these are what the shape is protecting:
 
-1. **`codesign --deep` over an already-signed bundle** corrupts the nested
-   `ChalkAppKitGlue.bundle` seal ("code has no resources but signature indicates
-   they must be present"). NSBundle then refuses to load it and the app runs its
-   UIKit tab fallback: no AppKit title-bar strip, wrong editor geometry, nothing
-   in any log. Sign innermost first with a plain `--force --sign -`, then the
-   app. **A deployed build with UIKit-looking tabs or a hard-clipped editor top
-   is a signature bug, not a layout bug.** Check the glue before touching
-   layout code. Sign *every* nested bundle, not only the glue: a Debug build
-   also embeds `ChalkTests.xctest` in `PlugIns`, and leaving it unsigned fails
-   the verify with the same line.
+1. **`codesign --deep` over an already-signed bundle** corrupts a nested
+   bundle's seal ("code has no resources but signature indicates they must be
+   present") and NSBundle then refuses to load it. Sign innermost first with a
+   plain `--force --sign -`, then the app, and sign *every* nested bundle: a
+   Debug build embeds `ChalkTests.xctest` in `PlugIns`, and leaving it unsigned
+   fails the verify with that line.
 2. **Entitlements on an ad-hoc signature.** Ad-hoc plus
    `com.apple.security.app-sandbox` kills the WKWebView content process: the
    editor page never runs, never signals `ready`, and you get a blank editor with
@@ -74,12 +70,10 @@ correct.
 
 ```bash
 codesign --verify --deep --strict ~/Applications/Chalk.app
-lsof -p "$(pgrep -f 'Chalk.app/Contents/MacOS/Chalk' | head -1)" | grep -i ChalkAppKitGlue
 ```
 
-The second line is the one that distinguishes a correct build from the UIKit
-fallback. A screenshot is the check for failure 2: the editor has to actually
-render text.
+A screenshot is the check for failure 2: the editor has to actually render
+text.
 
 ## When an editor change does not show up
 

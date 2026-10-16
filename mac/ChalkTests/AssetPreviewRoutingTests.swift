@@ -4,8 +4,9 @@ import ChalkKit
 
 /// The Library lists images and PDFs beside the documents (owner request,
 /// 2026-08-17). They are binary, so every open path has to fork: a document
-/// still opens in an editor tab, an asset opens in a Quick Look preview.
-/// A png reaching `editor.open` would render its bytes as Markdown.
+/// still opens in an editor tab, an asset goes to the preview. A png reaching
+/// `editor.open` would render its bytes as Markdown.
+///
 @MainActor
 final class AssetPreviewRoutingTests: XCTestCase {
     private var root: URL!
@@ -16,13 +17,15 @@ final class AssetPreviewRoutingTests: XCTestCase {
             .appendingPathComponent("chalk-asset-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try "# hi".write(to: root.appendingPathComponent("note.md"), atomically: true, encoding: .utf8)
-        // A REAL png: the sheet decodes it with `UIImage(contentsOfFile:)`, so
-        // a stub of magic bytes would exercise only the failure path.
-        let image = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
-            UIColor.red.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        // A REAL png, so the preview (once it decodes) exercises the success path.
+        let image = NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+            NSColor.red.setFill()
+            rect.fill()
+            return true
         }
-        try XCTUnwrap(image.pngData()).write(to: root.appendingPathComponent("figure.png"))
+        let tiff = try XCTUnwrap(image.tiffRepresentation)
+        let png = try XCTUnwrap(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+        try png.write(to: root.appendingPathComponent("figure.png"))
     }
 
     override func tearDownWithError() throws {
@@ -34,7 +37,7 @@ final class AssetPreviewRoutingTests: XCTestCase {
         let shell = RootSplitViewController()
         shell.loadViewIfNeeded()
         shell.view.frame = CGRect(x: 0, y: 0, width: 1180, height: 820)
-        shell.view.layoutIfNeeded()
+        shell.view.layoutSubtreeIfNeeded()
         return shell
     }
 
@@ -63,14 +66,17 @@ final class AssetPreviewRoutingTests: XCTestCase {
                       "expected a tab for \(note.lastPathComponent)")
     }
 
-    /// The sheet is in-process (an image view, not the Quick Look extension),
-    /// so it must actually be presented and carry the file.
+    /// The sheet is in-process (an image view, not Quick Look), so it must
+    /// actually be presented and carry the file.
     func testAssetPresentsAnInAppPreviewSheetOnce() throws {
         let shell = makeRoot()
-        let window = UIWindow.hostedForTesting(frame: shell.view.frame)
+        let window = NSWindow.hostedForTesting(frame: shell.view.frame)
         window.rootViewController = shell
         window.isHidden = false
-        defer { window.isHidden = true }
+        defer {
+            if let sheet = window.attachedSheet { window.endSheet(sheet) }
+            dismantleHostedSidebar(window)
+        }
 
         let png = root.appendingPathComponent("figure.png")
         shell.openFromLibrary(png)
@@ -78,11 +84,28 @@ final class AssetPreviewRoutingTests: XCTestCase {
         shell.openFromLibrary(png)
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
 
-        let nav = try XCTUnwrap(shell.presentedViewController as? UINavigationController)
-        let preview = try XCTUnwrap(nav.viewControllers.first as? AssetPreviewViewController)
+        let preview = try XCTUnwrap(shell.livePreviewForTesting)
         XCTAssertEqual(preview.url, png)
         XCTAssertEqual(preview.title, "figure.png")
-        XCTAssertNil(nav.presentedViewController, "a second click stacked another sheet")
+        XCTAssertFalse(preview.showsUnreadableMessageForTesting, "a real png decodes")
+        let sheet = try XCTUnwrap(window.attachedSheet, "the preview is a sheet on the window")
+        XCTAssertNil(sheet.attachedSheet, "a second click stacked another sheet")
+        XCTAssertTrue(sheet.contentViewController === preview)
+
+        // Done ends the sheet and clears the slot for the next preview.
+        preview.close()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+        XCTAssertNil(window.attachedSheet)
+        XCTAssertNil(shell.livePreviewForTesting)
+    }
+
+    /// A PDF goes through PDFKit; an unreadable file says so instead of crashing.
+    func testUnreadableAssetShowsAMessage() throws {
+        let broken = root.appendingPathComponent("broken.png")
+        try Data("not an image".utf8).write(to: broken)
+        let preview = AssetPreviewViewController(url: broken)
+        preview.loadViewIfNeeded()
+        XCTAssertTrue(preview.showsUnreadableMessageForTesting)
     }
 
     // MARK: - Sidebar row behaviour
@@ -108,8 +131,8 @@ final class AssetPreviewRoutingTests: XCTestCase {
     }
 
     /// "Open in New Tab"/"New Window" are meaningless for a png: the asset row
-    /// offers Quick Look in their place.
-    func testAssetRowMenuOffersQuickLookOnly() throws {
+    /// offers the preview in their place.
+    func testAssetRowMenuOffersPreviewOnly() throws {
         let sidebar = SidebarViewController()
         sidebar.locationsProvider = { [Location(id: "test", name: "Root", url: self.root)] }
         sidebar.loadViewIfNeeded()
@@ -122,24 +145,13 @@ final class AssetPreviewRoutingTests: XCTestCase {
         let menu = sidebar.rowMenu(
             for: FileNode(url: png, name: "figure.png", isDirectory: false))
 
-        XCTAssertNil(action(in: menu, titled: "Open in New Tab"))
-        XCTAssertNil(action(in: menu, titled: "Open in New Window"))
+        XCTAssertNil(item(in: menu, titled: "Open in New Tab"))
+        XCTAssertNil(item(in: menu, titled: "Open in New Window"))
         // Rename / Move to Trash still apply: it is a file in the Library.
-        XCTAssertNotNil(action(in: menu, titled: "Rename"))
-        XCTAssertNotNil(action(in: menu, titled: "Move to Trash"))
+        XCTAssertNotNil(item(in: menu, titled: "Rename"))
+        XCTAssertNotNil(item(in: menu, titled: "Move to Trash"))
 
-        let preview = try XCTUnwrap(action(in: menu, titled: "Preview"))
-        preview.performWithSender(nil, target: nil)
+        perform(try XCTUnwrap(item(in: menu, titled: "Preview")))
         XCTAssertEqual(previewed, [png])
-    }
-
-    private func action(in menu: UIMenu, titled title: String) -> UIAction? {
-        for element in menu.children {
-            if let action = element as? UIAction, action.title == title { return action }
-            if let submenu = element as? UIMenu, let hit = self.action(in: submenu, titled: title) {
-                return hit
-            }
-        }
-        return nil
     }
 }

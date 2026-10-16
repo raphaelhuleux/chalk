@@ -1,60 +1,64 @@
-import UIKit
+import AppKit
 import ChalkKit
 
-/// The Settings shell: a left rail (General, LaTeX Shortcuts categories) beside a content area that
-/// swaps child controllers. Owns everything sheet-wide so the tab controllers stay plain content.
-final class SettingsContainerViewController: UIViewController {
+/// The Settings shell: a left rail (General, LaTeX Shortcuts categories)
+/// beside a content area that swaps child controllers. Owns everything
+/// window-wide so the pane controllers stay plain content.
+final class SettingsContainerViewController: NSViewController {
     /// Called after a General setting changes so the coordinator can apply it live.
     var onChange: (() -> Void)?
     /// Called after any snippet edit so the coordinator can push hsnips to open editors.
     var onSnippetsChange: (() -> Void)?
-    /// Fired once dismissal completes, so the host can return keyboard focus to the editor.
+    /// Done, Esc or ⌘,: the host closes the window.
     var onDismiss: (() -> Void)?
 
     #if DEBUG
-    /// Set right before presenting, to log command-to-visible latency. 0 = unset.
-    var openCommandTime: CFTimeInterval = 0
     #endif
 
-    /// True when hosted in its own window rather than as a sheet. The window's title bar and
-    /// close button replace the nav bar and Done button.
-    var isWindowed = false
-
-    /// Section 0 is General; section 1 has one row per shortcut category, all backed by the one
-    /// shortcuts controller showing a different slice.
-    private enum RailItem {
+    /// The rail's rows: General, then a banner over one row per shortcut
+    /// category, all backed by the one shortcuts controller showing a
+    /// different slice.
+    enum RailItem: Equatable {
         case general
+        case banner(String)
         case category(ShortcutCategory)
 
         var title: String {
             switch self {
             case .general: return "General"
+            case .banner(let title): return title
             case .category(let c): return c.title
             }
         }
 
-        var icon: String {
+        var icon: String? {
             switch self {
             case .general: return "gearshape"
+            case .banner: return nil
             case .category(let c): return c.symbol
             }
         }
+
+        var isSelectable: Bool {
+            if case .banner = self { return false }
+            return true
+        }
     }
 
-    /// Built once: categories come from the bundled file, which cannot change while the sheet is up.
-    private lazy var railSections: [[RailItem]] = [
-        [.general],
-        ShortcutCategory.all(for: SnippetLibrary.shared.builtins).map(RailItem.category),
-    ]
+    /// Built once: categories come from the bundled file, which cannot change
+    /// while the window is up.
+    private lazy var railItems: [RailItem] =
+        [.general, .banner("LaTeX Shortcuts")]
+        + ShortcutCategory.all(for: SnippetLibrary.shared.builtins).map(RailItem.category)
 
-    private let railView = UITableView(frame: .zero, style: .plain)
-    private let contentContainer = UIView()
-    private var currentChild: UIViewController?
+    private let railView = NSTableView()
+    private let railScroll = NSScrollView()
+    private let divider = FlippedView()
+    private let contentContainer = FlippedView()
+    private var currentChild: NSViewController?
 
-    /// Retuned in `viewDidLayoutSubviews` so the rail narrows on a compact container. See
-    /// `SettingsPresentation.railWidth`.
-    private lazy var railWidthConstraint: NSLayoutConstraint =
-        railView.widthAnchor.constraint(equalToConstant: ChalkMetrics.s(190))
+    /// Retuned in `viewDidLayout` so the rail narrows on a compact window.
+    private var railWidthConstraint: NSLayoutConstraint!
 
     private lazy var generalVC: GeneralSettingsViewController = {
         let vc = GeneralSettingsViewController()
@@ -68,58 +72,51 @@ final class SettingsContainerViewController: UIViewController {
         return vc
     }()
 
+    override func loadView() {
+        view = ChromeToneView()
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Settings"
-        view.backgroundColor = .chalkChromeBackground
-        // Scaled like every Mac token: Catalyst draws the iPad idiom at 77%, and the contents go
-        // through `s()`, so a raw size would squeeze them.
-        preferredContentSize = ChalkMetrics.settingsDefaultSize
 
-        if isWindowed {
-            navigationController?.setNavigationBarHidden(true, animated: false)
-        } else {
-            let done = UIBarButtonItem(
-                barButtonSystemItem: .done, target: self, action: #selector(done))
-            done.tintColor = .chalkAccent // single-accent rule, not system blue
-            navigationItem.rightBarButtonItem = done
-        }
-
-        // Opaque nav bar in both scroll states so it honors the app's forced appearance.
-        let barAppearance = UINavigationBarAppearance()
-        barAppearance.configureWithOpaqueBackground()
-        barAppearance.backgroundColor = .chalkChromeBackground
-        barAppearance.shadowColor = .chalkBorderHard
-        barAppearance.titleTextAttributes = [.foregroundColor: UIColor.chalkTextPrimary]
-        navigationItem.standardAppearance = barAppearance
-        navigationItem.scrollEdgeAppearance = barAppearance
-
+        let column = NSTableColumn(identifier: .init("rail"))
+        column.resizingMask = .autoresizingMask
+        railView.addTableColumn(column)
+        railView.headerView = nil
+        railView.style = .plain
+        railView.intercellSpacing = .zero
+        railView.selectionHighlightStyle = .none
+        railView.backgroundColor = .clear
+        railView.focusRingType = .none
+        railView.allowsEmptySelection = false
+        railView.refusesFirstResponder = true
+        railView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         railView.dataSource = self
         railView.delegate = self
-        railView.backgroundColor = .chalkChromeBackground
-        railView.separatorStyle = .none
-        railView.alwaysBounceVertical = false
-        // Derived from the row font; a flat height clipped the labels.
-        railView.rowHeight = ChalkMetrics.settingsRailRowHeight
-        railView.contentInset = UIEdgeInsets(top: ChalkMetrics.s(14), left: 0, bottom: 0, right: 0)
+        railScroll.documentView = railView
+        railScroll.drawsBackground = false
+        railScroll.hasVerticalScroller = true
+        railScroll.autohidesScrollers = true
+        railScroll.automaticallyAdjustsContentInsets = false
+        railScroll.contentInsets = NSEdgeInsets(top: 14, left: 0, bottom: 0, right: 0)
 
-        let divider = UIView()
-        divider.backgroundColor = .chalkBorderHard
+        divider.wantsLayer = true
+        divider.layer?.backgroundColor = NSColor.chalkBorderHard.cgColor
 
-        contentContainer.backgroundColor = .chalkChromeBackground
-
-        for sub in [railView, divider, contentContainer] {
+        for sub in [railScroll, divider, contentContainer] {
             sub.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(sub)
         }
+        railWidthConstraint = railScroll.widthAnchor.constraint(equalToConstant: 190)
         NSLayoutConstraint.activate([
-            railView.topAnchor.constraint(equalTo: view.topAnchor),
-            railView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            railView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            railScroll.topAnchor.constraint(equalTo: view.topAnchor),
+            railScroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            railScroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             railWidthConstraint,
 
             divider.topAnchor.constraint(equalTo: view.topAnchor),
-            divider.leadingAnchor.constraint(equalTo: railView.trailingAnchor),
+            divider.leadingAnchor.constraint(equalTo: railScroll.trailingAnchor),
             divider.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             divider.widthAnchor.constraint(equalToConstant: 1),
 
@@ -129,55 +126,46 @@ final class SettingsContainerViewController: UIViewController {
             contentContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        railView.selectRow(at: IndexPath(row: 0, section: 0), animated: false, scrollPosition: .none)
+        railView.reloadData()
+        railView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         show(.general)
     }
 
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        // Claim first responder so Escape has a responder chain to dispatch through.
-        becomeFirstResponder()
+    override func viewDidAppear() {
+        super.viewDidAppear()
         #if DEBUG
-        if openCommandTime > 0 {
-            NSLog("[latency] Settings command->visible %.0fms",
-                  (CACurrentMediaTime() - openCommandTime) * 1000)
-            openCommandTime = 0
-        }
         #endif
     }
 
-    override var canBecomeFirstResponder: Bool { true }
-
-    override var keyCommands: [UIKeyCommand]? {
-        let esc = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(done))
-        // Win over any system handling of Escape, as Quick Open does.
-        esc.wantsPriorityOverSystemBehavior = true
-        return [esc]
-    }
+    /// Esc, from anywhere in the window.
+    override func cancelOperation(_ sender: Any?) { done() }
 
     /// Every close path funnels here so each fires `onDismiss`.
     @objc func done() {
-        guard !isWindowed else {
-            onDismiss?()
-            return
-        }
-        dismiss(animated: false) { [weak self] in self?.onDismiss?() }
+        onDismiss?()
     }
 
-    /// Cmd+, while the sheet is up. The menu resolves against the first responder, which is this
-    /// sheet and cuts RootSplitViewController out of the chain, so the same selector means close.
-    @objc func cmdSettings() { done() }
+    /// ⌘, while the window is key. The menu resolves against the first
+    /// responder, which is in this window and cuts the editor's root out of
+    /// the chain, so the same selector means close.
+    @objc func cmdSettings(_ sender: Any?) { done() }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
+    /// A coalesced snippet push must not outrun the window closing.
+    func flushPendingWork() {
+        shortcutsVC.flushPendingPush()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
         let wanted = SettingsPresentation.railWidth(forContainerWidth: view.bounds.width)
         if abs(railWidthConstraint.constant - wanted) > 0.5 {
             railWidthConstraint.constant = wanted
         }
+        railView.sizeLastColumnToFit()
     }
 
     private func show(_ item: RailItem) {
-        let next: UIViewController
+        let next: NSViewController
         switch item {
         case .general:
             next = generalVC
@@ -185,11 +173,12 @@ final class SettingsContainerViewController: UIViewController {
             // Set before the swap so the first layout already has the right rows.
             shortcutsVC.selectedCategory = category
             next = shortcutsVC
+        case .banner:
+            return
         }
         guard next !== currentChild else { return }
 
         if let current = currentChild {
-            current.willMove(toParent: nil)
             current.view.removeFromSuperview()
             current.removeFromParent()
         }
@@ -202,91 +191,145 @@ final class SettingsContainerViewController: UIViewController {
             next.view.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
             next.view.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
         ])
-        next.didMove(toParent: self)
         currentChild = next
     }
 }
 
-extension SettingsContainerViewController: UITableViewDataSource, UITableViewDelegate {
-    func numberOfSections(in tableView: UITableView) -> Int { railSections.count }
+extension SettingsContainerViewController: NSTableViewDataSource, NSTableViewDelegate {
+    func numberOfRows(in tableView: NSTableView) -> Int { railItems.count }
 
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        railSections[section].count
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        if case .banner = railItems[row] { return 30 }
+        return ChalkMetrics.settingsRailRowHeight
     }
 
-    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        section == 1 ? "LaTeX Shortcuts" : nil
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        railItems[row].isSelectable
     }
 
-    func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
-        guard let header = view as? UITableViewHeaderFooterView else { return }
-        header.textLabel?.textColor = .chalkTextFaint
-        header.textLabel?.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .semibold)
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        SettingsRailRowView()
     }
 
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let item = railSections[indexPath.section][indexPath.row]
-        let indented = indexPath.section == 1
-        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
-
-        // Selected row: inset rounded pill with an accent wash, matching the sidebar.
-        cell.configurationUpdateHandler = { cell, state in
-            let active = state.isSelected || state.isHighlighted
-
-            var config = cell.defaultContentConfiguration()
-            config.text = item.title
-            config.textProperties.font = .systemFont(
-                ofSize: ChalkMetrics.sidebarRowFontSize,
-                weight: active ? .medium : .regular)
-            config.textProperties.color = active ? .chalkTextPrimary : .chalkTextBody
-            config.image = UIImage(systemName: item.icon)
-            config.imageProperties.tintColor = active ? .chalkAccent : .chalkTextMuted
-            config.imageProperties.preferredSymbolConfiguration =
-                UIImage.SymbolConfiguration(pointSize: ChalkMetrics.s(13), weight: .medium)
-            // Set all four margins: the default vertical margins (~15pt each) leave a ~32pt row's
-            // label about 2pt tall, drawn as a clipped sliver. Same as
-            // SidebarViewController.compactRowMargins.
-            config.directionalLayoutMargins = NSDirectionalEdgeInsets(
-                top: ChalkMetrics.s(5),
-                leading: ChalkMetrics.s(indented ? 30 : 20),
-                bottom: ChalkMetrics.s(5),
-                trailing: ChalkMetrics.s(8))
-            cell.contentConfiguration = config
-
-            var bg = UIBackgroundConfiguration.clear()
-            if active {
-                bg.backgroundColor = UIColor.chalkAccent.withAlphaComponent(0.15)
-                bg.cornerRadius = ChalkMetrics.rowCornerRadius
-                bg.backgroundInsets = NSDirectionalEdgeInsets(
-                    top: ChalkMetrics.s(2), leading: ChalkMetrics.s(10),
-                    bottom: ChalkMetrics.s(2), trailing: ChalkMetrics.s(10))
-            }
-            cell.backgroundConfiguration = bg
-        }
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let cell = tableView.makeView(withIdentifier: SettingsRailCellView.identifier, owner: nil)
+            as? SettingsRailCellView ?? SettingsRailCellView()
+        cell.configure(item: railItems[row], active: tableView.selectedRow == row)
         return cell
     }
 
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        show(railSections[indexPath.section][indexPath.row])
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let row = railView.selectedRow
+        guard railItems.indices.contains(row) else { return }
+        show(railItems[row])
+        // The weight and tint follow the selection; repaint what is on screen.
+        for visible in 0..<railView.numberOfRows {
+            (railView.view(atColumn: 0, row: visible, makeIfNecessary: false) as? SettingsRailCellView)?
+                .configure(item: railItems[visible], active: visible == row)
+        }
+    }
+}
+
+/// A rail row: the accent wash pill while selected, matching the sidebar.
+final class SettingsRailRowView: NSTableRowView {
+    override var isFlipped: Bool { true }
+    override func drawBackground(in dirtyRect: NSRect) {}
+    override func drawSeparator(in dirtyRect: NSRect) {}
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard isSelected else { return }
+        let rect = bounds.insetBy(dx: 10, dy: 2)
+        NSColor.chalkAccent.withAlphaComponent(0.15).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: ChalkMetrics.rowCornerRadius,
+                     yRadius: ChalkMetrics.rowCornerRadius).fill()
+    }
+}
+
+/// A rail row's content: glyph and title, or the banner's small caps title.
+final class SettingsRailCellView: FlippedView {
+    static let identifier = NSUserInterfaceItemIdentifier("settings-rail")
+    let icon = NSImageView()
+    let label = NSTextField(labelWithString: "")
+    private var labelLeading: NSLayoutConstraint!
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        identifier = Self.identifier
+        icon.imageScaling = .scaleNone
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(icon)
+        addSubview(label)
+        labelLeading = label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20)
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 18),
+            labelLeading,
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func configure(item: SettingsContainerViewController.RailItem, active: Bool) {
+        label.stringValue = item.title
+        if case .banner = item {
+            icon.isHidden = true
+            labelLeading.constant = 20
+            label.font = .systemFont(ofSize: 11, weight: .semibold)
+            label.textColor = .chalkTextFaint
+            return
+        }
+        let indented: Bool
+        if case .category = item { indented = true } else { indented = false }
+        icon.isHidden = false
+        icon.image = item.icon.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+        icon.contentTintColor = active ? .chalkAccent : .chalkTextMuted
+        labelLeading.constant = (indented ? 30 : 20) + 18 + 8
+        label.font = .systemFont(ofSize: ChalkMetrics.sidebarRowFontSize, weight: active ? .medium : .regular)
+        label.textColor = active ? .chalkTextPrimary : .chalkTextBody
     }
 }
 
 // MARK: - Testing hooks
 
+#if DEBUG
 extension SettingsContainerViewController {
-    var railViewForTesting: UITableView { railView }
+    var railViewForTesting: NSTableView { railView }
 
-    /// What the rail claims to offer, section by section.
+    /// What the rail claims to offer: General alone, then the categories under the banner.
     var railTitlesForTesting: [[String]] {
-        railSections.map { $0.map(\.title) }
+        let categories = railItems.compactMap { item -> String? in
+            if case .category = item { return item.title }
+            return nil
+        }
+        return [["General"], categories]
     }
 
-    /// What a rail row actually renders: the text is set in `configurationUpdateHandler`, so a row
-    /// can have a title and still paint blank.
+    /// The rail's rows as laid out, banner included.
+    var railRowTitlesForTesting: [String] { railItems.map(\.title) }
+
+    /// What a rail row actually renders.
     func railCellTextForTesting(section: Int, row: Int) -> String? {
-        let path = IndexPath(row: row, section: section)
-        let cell = tableView(railView, cellForRowAt: path)
-        cell.configurationUpdateHandler?(cell, cell.configurationState)
-        return (cell.contentConfiguration as? UIListContentConfiguration)?.text
+        let title = railTitlesForTesting[section][row]
+        guard let index = railItems.firstIndex(where: { $0.title == title && $0.isSelectable }) else { return nil }
+        return (railView.view(atColumn: 0, row: index, makeIfNecessary: true) as? SettingsRailCellView)?.label.stringValue
     }
+
+    func selectRailForTesting(section: Int, row: Int) {
+        let title = railTitlesForTesting[section][row]
+        guard let index = railItems.firstIndex(where: { $0.title == title && $0.isSelectable }) else { return }
+        railView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+    }
+
+    var currentPaneForTesting: NSViewController? { currentChild }
+    var generalForTesting: GeneralSettingsViewController { generalVC }
+    var shortcutsForTesting: ShortcutsSettingsViewController { shortcutsVC }
 }
+#endif

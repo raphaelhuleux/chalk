@@ -11,12 +11,12 @@ import ChalkKit
 /// one definition; these tests pin what the numbers are supposed to produce.
 @MainActor
 final class TabNameRowTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var strip: HeaderTabStrip!
 
     override func setUp() {
         super.setUp()
-        window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 900, height: 60))
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 900, height: 60))
         strip = HeaderTabStrip(
             frame: CGRect(x: 0, y: 0, width: 900, height: ChalkMetrics.tabStripHeight))
         window.addSubview(strip)

@@ -44,9 +44,8 @@ final class SidebarInlineRenameTests: XCTestCase {
 
     func testCommitRenamesOnDiskAndEndsEditing() {
         sidebar.beginRename(draft())
-        // The move runs off the main thread (2026-08-24 freeze), so the on-disk
-        // assertions wait for it; the editor state below is decided
-        // synchronously and would hold either way.
+        // The move runs off the main thread, so the on-disk assertions wait
+        // for it; the editor state below is decided synchronously.
         awaitFileWork(on: sidebar) { sidebar.commitRename("notes.tex") }
         XCTAssertTrue(exists("notes.tex"))
         XCTAssertFalse(exists("draft.tex"))
@@ -70,7 +69,7 @@ final class SidebarInlineRenameTests: XCTestCase {
 
     func testCollisionKeepsTheEditorOpenAndTouchesNothing() {
         sidebar.beginRename(draft())
-        sidebar.commitRename("taken.tex")
+        XCTAssertFalse(sidebar.commitRename("taken.tex"), "a rejected name reports so")
         XCTAssertTrue(sidebar.isRenamingForTesting, "a rejected name must not close the editor")
         XCTAssertTrue(exists("draft.tex"))
         XCTAssertEqual(try? String(contentsOf: root.appendingPathComponent("taken.tex"), encoding: .utf8),
@@ -96,6 +95,8 @@ final class SidebarInlineRenameTests: XCTestCase {
         sidebar.beginRename(draft())
         awaitFileWork(on: sidebar) { sidebar.commitRename("Draft.tex") }
         XCTAssertFalse(sidebar.isRenamingForTesting, "a case-only change is a real rename")
+        XCTAssertTrue(FileTree.children(of: root).contains { $0.name == "Draft.tex" },
+                      "the new spelling is on disk")
     }
 
     func testUnchangedNameJustClosesTheEditor() {
@@ -141,7 +142,7 @@ final class SidebarInlineRenameTests: XCTestCase {
                              name: "taken.tex", isDirectory: false)
         sidebar.activate(other)
         XCTAssertFalse(sidebar.isRenamingForTesting,
-                       "tapping another row must close the in-flight rename")
+                       "clicking another row must close the in-flight rename")
     }
 
     /// The rename is CANCELLED, not committed: the owner's stated expectation is
@@ -165,7 +166,7 @@ final class SidebarInlineRenameTests: XCTestCase {
         XCTAssertEqual(opened, [root.appendingPathComponent("taken.tex")])
     }
 
-    /// Clicking the row that is ALREADY renaming must not cancel it — that is a
+    /// Clicking the row that is ALREADY renaming must not cancel it: that is a
     /// click inside the live text field, not a click away.
     func testClickingTheRenamingRowItselfKeepsTheEditorOpen() {
         let node = draft()
@@ -180,5 +181,28 @@ final class SidebarInlineRenameTests: XCTestCase {
         sidebar.onOpenFile = { opened.append($0) }
         sidebar.activate(draft())
         XCTAssertEqual(opened, [root.appendingPathComponent("draft.tex")])
+    }
+
+    // MARK: - The field in a hosted row
+
+    /// In a window the renaming row's name is a live field holding the
+    /// keyboard, with the base name selected so typing keeps ".tex".
+    func testTheHostedRowEditsInPlace() throws {
+        let (hosted, window) = makeHostedSidebar(locations: [Location(id: "test", name: "Root", url: root)])
+        defer { dismantleHostedSidebar(window) }
+        let node = try XCTUnwrap(hosted.rowsForTesting(inSection: 0).first { $0.name == "draft.tex" })
+        hosted.beginRename(node)
+        settleSidebar(hosted, window)
+        let cell = try XCTUnwrap(hosted.cellForTesting(node))
+        XCTAssertTrue(cell.isEditingForTesting)
+        XCTAssertTrue(cell.label.isEditable)
+        let editor = try XCTUnwrap(cell.label.currentEditor(), "the field holds the keyboard")
+        XCTAssertEqual(editor.selectedRange, NSRange(location: 0, length: 5), "the base name is selected")
+        hosted.cancelRename()
+        settleSidebar(hosted, window)
+        XCTAssertFalse(cell.isEditingForTesting)
+        XCTAssertFalse(cell.label.isEditable)
+        XCTAssertTrue(window.firstResponder === hosted.outlineViewForTesting,
+                      "the tree takes the keyboard back")
     }
 }

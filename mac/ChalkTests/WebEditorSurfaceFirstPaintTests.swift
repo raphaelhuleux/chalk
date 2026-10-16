@@ -66,4 +66,39 @@ final class WebEditorSurfaceFirstPaintTests: XCTestCase {
             documentStartSources(surface).contains { $0.contains("__chalkWantsScrollTelemetry") },
             "the chrome auto-hide telemetry opt-in must still be injected")
     }
+
+    // MARK: - The white before the first paint
+
+    private func waitUntilRevealed(_ surface: WebEditorSurface, _ what: String) {
+        let deadline = Date().addingTimeInterval(2)
+        while !surface.isWebViewRevealedForTesting && Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+        XCTAssertTrue(surface.isWebViewRevealedForTesting, what)
+    }
+
+    /// AppKit's WKWebView composites white until the page paints, and the
+    /// shell has no public opaque switch: the surface keeps an opaque cover
+    /// over its web view until the page has painted after `ready`.
+    func testTheWebViewStaysCoveredUntilReady() {
+        let surface = WebEditorSurface()
+        surface.bootIfNeeded()
+        XCTAssertFalse(surface.isWebViewRevealedForTesting, "a booting page must not show its white")
+        XCTAssertTrue(surface.webView.isDescendant(of: surface.view), "the web view lives inside the host")
+        surface.handleHostMessage(body: ["type": "ready"])
+        XCTAssertFalse(surface.isWebViewRevealedForTesting, "ready alone is not a paint; the page answers, or the backstop")
+        waitUntilRevealed(surface, "the cover lifts once the page has painted (or the backstop fires)")
+    }
+
+    /// A reload after a web-process crash paints white first, like a boot.
+    func testACrashedPageIsCoveredAgainUntilItsNextReady() {
+        let surface = WebEditorSurface()
+        surface.bootIfNeeded()
+        surface.handleHostMessage(body: ["type": "ready"])
+        waitUntilRevealed(surface, "precondition: the first page is showing")
+        surface.webViewWebContentProcessDidTerminate(surface.webView)
+        XCTAssertFalse(surface.isWebViewRevealedForTesting)
+        surface.handleHostMessage(body: ["type": "ready"])
+        waitUntilRevealed(surface, "the reloaded page shows again")
+    }
 }

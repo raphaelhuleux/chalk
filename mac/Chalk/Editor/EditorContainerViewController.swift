@@ -1,4 +1,4 @@
-import UIKit
+import AppKit
 import WebKit
 import ChalkKit
 import os
@@ -6,9 +6,31 @@ import os
 /// File names are personal data, so they interpolate as `.private`.
 private let containerLog = Logger(subsystem: "com.huleux.chalk", category: "editor-container")
 
+/// The container's root view: flipped, clipping, and reporting appearance
+/// flips to the controller.
+final class EditorContainerView: FlippedView {
+    var onAppearanceChange: (() -> Void)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChange?()
+    }
+
+    @objc private func themeDidChange() { onAppearanceChange?() }
+}
+
 /// Hosts the open tabs and shows the active tab's editor surface. Each tab owns its surface and
 /// document controller, so switching tabs preserves cursor, scroll and undo.
-final class EditorContainerViewController: UIViewController {
+final class EditorContainerViewController: NSViewController {
     private var tabs: [Tab] = []
     private var activeTab: Tab?
 
@@ -16,11 +38,11 @@ final class EditorContainerViewController: UIViewController {
     /// when another window changes its mode. The default serves a container with no host (tests).
     var currentEditingMode: () -> EditingMode = { Preferences.editingMode }
 
-    private let contentView = UIView()
+    private let contentView = FlippedView()
     /// "No document open". Visibility is set explicitly by `refreshEmptyState()`, never by
     /// occlusion: a detached surface must not read as an empty window under a live chip.
     /// See docs/issues/2026-07-24-blank-editor-on-open.md.
-    private var emptyStateView: UIView?
+    private var emptyStateView: NSView?
 
     /// Crash net for the no-autosave model: dirty buffers snapshot here and are offered back on
     /// the next launch. A graceful close or save clears its snapshot.
@@ -48,11 +70,8 @@ final class EditorContainerViewController: UIViewController {
     /// Fired after the panel opens, closes, resizes or changes mode, so the host can cut it out
     /// of the tab band's paint.
     var onOutlinePanelLayoutChanged: (() -> Void)?
-    /// The pointer entered (true) or left (false) the resize grip. UIKit has no resize pointer
-    /// shape, so the host sets the cursor where it can (AppKit glue on Mac).
-    var onOutlineResizeHover: ((Bool) -> Void)?
     /// Straddles the panel's leading edge, in THIS view so it can extend over the editor's side.
-    private let outlineResizeGrip = UIView()
+    private let outlineResizeGrip = ColumnResizeGrip()
     /// Last frame announced through `onOutlinePanelLayoutChanged`, so only a layout pass that
     /// actually moved the panel re-cuts the band.
     private var lastAnnouncedOutlinePanelFrame: CGRect?
@@ -64,17 +83,14 @@ final class EditorContainerViewController: UIViewController {
     private var outlinePanelTrailing: NSLayoutConstraint?
     private var contentTrailingToEdge: NSLayoutConstraint?
     private var contentTrailingToPanel: NSLayoutConstraint?
-    private var outlineResizeStartWidth: CGFloat = 0
 
-    /// The host names the exact band height to clear. Not the safe-area top: the editor runs
-    /// full-bleed under the transparent titlebar.
+    /// The host names the exact band height to clear.
     func setTopClearance(_ clearance: CGFloat) {
         guard let contentTop, abs(contentTop.constant - clearance) > 0.5 else { return }
         contentTop.constant = clearance
     }
 
-    /// The content's real top edge. Overlay covers must use it instead of the safe area, which
-    /// differs under the full-bleed titlebar.
+    /// The content's real top edge. Overlay covers must use it.
     var topClearance: CGFloat { contentTop?.constant ?? 0 }
 
     /// Fired when the open tabs change so the host can redraw the strip.
@@ -128,11 +144,9 @@ final class EditorContainerViewController: UIViewController {
 
     /// In-flight draft save. Non-nil only while the save panel is up, which also guards against a
     /// second Cmd+S opening a second panel.
-    private var pendingDraftSave: (tab: Tab, text: String, tempDir: URL, completion: (Bool) -> Void)?
+    private var pendingDraftSave: (tab: Tab, text: String, proposedURL: URL, completion: (Bool) -> Void)?
+    private var activeSavePanel: NSSavePanel?
 
-    /// Tab strip callbacks.
-    func selectTab(id: UUID) { activate(id: id) }
-    func requestCloseTab(id: UUID) { closeTab(id: id) }
 
     /// Drag-reorder commit: move tab `id` to strip position `index` (clamped). Only the order
     /// changes; session restore serializes `tabs` in order, so it persists.
@@ -145,47 +159,39 @@ final class EditorContainerViewController: UIViewController {
         refreshTabBar()
     }
 
-    /// Hide the navigation bar the split view wraps this column in. Under Liquid Glass it draws
-    /// even when empty: on macOS 27, a bar over the first heading. Here, not in `viewDidLoad`, because a collapse swaps in a different wrapper.
-    /// See docs/issues/2026-09-17-macos-27-breaks-the-mac-chrome.md.
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        navigationController?.setNavigationBarHidden(true, animated: false)
+    override func loadView() {
+        let root = EditorContainerView()
+        root.wantsLayer = true
+        // A frozen-width content view can overhang the leading edge mid-slide; it must never
+        // paint over the sidebar.
+        root.clipsToBounds = true
+        root.onAppearanceChange = { [weak self] in
+            guard let self else { return }
+            self.refreshBackground()
+            // Standalone containers (tests) follow their own appearance; under a root that
+            // orchestrates the covered transition, this hook stands down.
+            guard !self.hostOwnsAppearanceTransitions else { return }
+            self.pushAppearance(dark: self.view.effectiveAppearance.isChalkDark,
+                                theme: ChalkAppearance.theme)
+        }
+        view = root
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .chalkEditorBackground
-        // Standalone containers (tests) follow their own traits; under a root that orchestrates
-        // the covered transition, this hook stands down (`hostOwnsAppearanceTransitions`).
-        registerForTraitChanges([UITraitUserInterfaceStyle.self, ChalkThemeTrait.self]) {
-            (container: Self, _: UITraitCollection) in
-            guard !container.hostOwnsAppearanceTransitions else { return }
-            container.pushAppearance(
-                dark: container.traitCollection.userInterfaceStyle == .dark,
-                theme: container.traitCollection.chalkTheme)
-        }
-        // A frozen-width content view can overhang the leading edge mid-slide; it must never
-        // paint over the sidebar.
-        view.clipsToBounds = true
+        refreshBackground()
 
         contentView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(contentView)
         addEmptyState() // below the surfaces; shown only while no tab is active
 
-        // Horizontal edges pin to the safe area: Catalyst from macOS 27 keeps this column
-        // full-size and carves the Library out of the safe area.
-        // See docs/issues/2026-09-17-macos-27-breaks-the-mac-chrome.md.
-        let leading = contentView.leadingAnchor.constraint(
-            equalTo: view.safeAreaLayoutGuide.leadingAnchor)
+        let leading = contentView.leadingAnchor.constraint(equalTo: view.leadingAnchor)
         contentLeading = leading
-        // Top pins to the raw top plus the host's clearance (`setTopClearance`), never the safe
-        // area: the editor runs full-bleed under the
-        // transparent titlebar with the resting offset done web-side (`setChromeTopInset`).
+        // Top pins to the raw top plus the host's clearance (`setTopClearance`): the editor runs
+        // full-bleed under the transparent titlebar with the resting offset done web-side.
         let top = contentView.topAnchor.constraint(equalTo: view.topAnchor)
         contentTop = top
-        let trailingToEdge = contentView.trailingAnchor.constraint(
-            equalTo: view.safeAreaLayoutGuide.trailingAnchor)
+        let trailingToEdge = contentView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         contentTrailingToEdge = trailingToEdge
         NSLayoutConstraint.activate([
             top,
@@ -194,8 +200,7 @@ final class EditorContainerViewController: UIViewController {
             contentView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        // Feathers scrolled text out before it reaches the tab chips. UIKit-side so it underlies
-        // the AppKit strip in both windowed and full-screen titlebars; sized by `setChromeTopInset`.
+        // Feathers scrolled text out before it reaches the tab chips; sized by `setChromeTopInset`.
         chromeFade.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(chromeFade)
         let fadeHeight = chromeFade.heightAnchor.constraint(equalToConstant: 0)
@@ -215,22 +220,27 @@ final class EditorContainerViewController: UIViewController {
             name: .chalkDocumentDidSave, object: nil)
     }
 
+    private func refreshBackground() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
+        }
+    }
+
     private func installOutlinePanel() {
         addChild(outlinePanel)
-        let panelView: UIView = outlinePanel.view
+        let panelView: NSView = outlinePanel.view
         panelView.translatesAutoresizingMaskIntoConstraints = false
         // Honour a visibility the host set before the view loaded (session restore calls
-        // `setOutlinePanelVisible` from the host's `init`, and that call's `layoutIfNeeded` runs
-        // this installer). Hiding unconditionally left the flag true over an invisible panel.
+        // `setOutlinePanelVisible` from the host's `init`). Hiding unconditionally left the flag
+        // true over an invisible panel.
         panelView.isHidden = !isOutlinePanelVisible
-        // Above the chrome fade on Mac: the fade is for text, and over the panel it hid its top.
+        // Above the chrome fade: the fade is for text, and over the panel it hid its top.
         view.addSubview(panelView)
-        outlinePanel.didMove(toParent: self)
 
         let width = panelView.widthAnchor.constraint(equalToConstant: Preferences.outlinePanelWidth)
         outlinePanelWidth = width
         let trailing = panelView.trailingAnchor.constraint(
-            equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+            equalTo: view.trailingAnchor,
             constant: isOutlinePanelVisible ? 0 : Preferences.outlinePanelWidth)
         outlinePanelTrailing = trailing
         contentTrailingToPanel = contentView.trailingAnchor.constraint(equalTo: panelView.leadingAnchor)
@@ -249,30 +259,44 @@ final class EditorContainerViewController: UIViewController {
         view.addSubview(grip)
         NSLayoutConstraint.activate([
             grip.centerXAnchor.constraint(equalTo: panelView.leadingAnchor),
-            grip.widthAnchor.constraint(equalToConstant: ChalkMetrics.s(12)),
+            grip.widthAnchor.constraint(equalToConstant: 12),
             grip.topAnchor.constraint(equalTo: panelView.topAnchor),
             grip.bottomAnchor.constraint(equalTo: panelView.bottomAnchor),
         ])
-        grip.addGestureRecognizer(
-            UIPanGestureRecognizer(target: self, action: #selector(outlinePanelResizeDragged(_:))))
-        grip.addGestureRecognizer(
-            UIHoverGestureRecognizer(target: self, action: #selector(outlineResizeGripHovered(_:))))
+        grip.onDragBegan = { [weak self] in
+            self?.outlineResizeStartWidth = self?.outlinePanelWidth?.constant ?? 0
+        }
+        grip.onDragged = { [weak self] dx in
+            guard let self else { return }
+            self.setOutlinePanelWidth(self.outlineResizeStartWidth - dx, persist: false)
+        }
+        grip.onDragEnded = { [weak self] in
+            guard let self else { return }
+            self.setOutlinePanelWidth(self.outlinePanelWidth?.constant ?? 0, persist: true)
+        }
 
         // A pre-load `setOutlinePanelVisible` ran this with nil constraints. The column may still
-        // be unsized, so `viewDidLayoutSubviews` re-evaluates it.
+        // be unsized, so `viewDidLayout` re-evaluates it.
         updateOutlinePanelMode()
     }
+
+    private var outlineResizeStartWidth: CGFloat = 0
 
     /// Show or hide the panel. The webview reflows inside the container rather than sliding under
     /// chrome, so a plain constraint animation is enough (no WebPaintGate).
     func setOutlinePanelVisible(_ visible: Bool, animated: Bool) {
         guard visible != isOutlinePanelVisible else { return }
         isOutlinePanelVisible = visible
-        let panelView: UIView = outlinePanel.view
+        let panelView: NSView = outlinePanel.view
         if visible {
             panelView.isHidden = false
             outlineResizeGrip.isHidden = false
             updateOutlinePanelMode()
+            // Place the panel at its off-screen start before the slide: a
+            // hidden view keeps a stale frame, and un-hiding it inside the
+            // animated pass showed that frame for one frame at the top
+            // trailing corner before the slide began.
+            view.layoutSubtreeIfNeeded()
             seedOutlinePanel()
             activeTab?.surface.setOutlineSubscription(true)
         } else {
@@ -283,7 +307,7 @@ final class EditorContainerViewController: UIViewController {
         }
         outlinePanelTrailing?.constant = visible ? 0 : (outlinePanelWidth?.constant ?? 0)
         // Read the live flag, not `visible`: with a fast close-then-open, this hide's completion
-        // fires after the reopen, and `finished` is no help since it is false on interruption.
+        // fires after the reopen.
         let finish = { [weak self] in
             guard let self else { return }
             if !self.isOutlinePanelVisible {
@@ -292,13 +316,15 @@ final class EditorContainerViewController: UIViewController {
             }
             self.onOutlinePanelLayoutChanged?()
         }
-        if animated {
-            UIView.animate(withDuration: ChalkMetrics.motionSidebar, delay: 0,
-                           options: [.curveEaseInOut]) {
-                self.view.layoutIfNeeded()
-            } completion: { _ in finish() }
+        if animated, view.window != nil {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = ChalkMetrics.motionSidebar
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
+                self.view.layoutSubtreeIfNeeded()
+            }, completionHandler: finish)
         } else {
-            view.layoutIfNeeded()
+            view.layoutSubtreeIfNeeded()
             finish()
         }
     }
@@ -311,7 +337,7 @@ final class EditorContainerViewController: UIViewController {
         // would jump it sideways. `unfreezeContentWidth` re-evaluates after the reflow.
         guard frozenContentWidth == nil else { return }
         guard isOutlinePanelVisible, let width = outlinePanelWidth?.constant else { return }
-        let column = view.safeAreaLayoutGuide.layoutFrame.width
+        let column = view.bounds.width
         let overlay = column - width < ChalkMetrics.outlinePanelPushMinimumEditorWidth
         let pushActive = contentTrailingToPanel?.isActive ?? false
         guard overlay != outlinePanelIsOverlay || pushActive == overlay else { return }
@@ -343,28 +369,8 @@ final class EditorContainerViewController: UIViewController {
         updateOutlinePanelMode()
         if persist { Preferences.outlinePanelWidth = clamped }
         if isOutlinePanelVisible {
-            view.layoutIfNeeded()
+            view.layoutSubtreeIfNeeded()
             onOutlinePanelLayoutChanged?()
-        }
-    }
-
-    @objc private func outlineResizeGripHovered(_ hover: UIHoverGestureRecognizer) {
-        switch hover.state {
-        case .began, .changed: onOutlineResizeHover?(true)
-        default: onOutlineResizeHover?(false)
-        }
-    }
-
-    @objc private func outlinePanelResizeDragged(_ pan: UIPanGestureRecognizer) {
-        switch pan.state {
-        case .began:
-            outlineResizeStartWidth = outlinePanelWidth?.constant ?? 0
-        case .changed:
-            setOutlinePanelWidth(outlineResizeStartWidth - pan.translation(in: view).x, persist: false)
-        case .ended, .cancelled:
-            setOutlinePanelWidth(outlinePanelWidth?.constant ?? 0, persist: true)
-        default:
-            break
         }
     }
 
@@ -392,10 +398,10 @@ final class EditorContainerViewController: UIViewController {
         frozenContentWidth = frozen
     }
 
-    /// The animatable half of the slide, set inside the caller's animation block. The text column
-    /// is centered, so half the width change lands it where the post-reflow layout will.
-    func slideContent(by offset: CGFloat) {
-        contentView.transform = CGAffineTransform(translationX: offset, y: 0)
+    /// The animatable half of the slide, on the caller's clock. The text column is centered, so
+    /// half the width change lands it where the post-reflow layout will.
+    func slideContent(by offset: CGFloat, over duration: TimeInterval) {
+        contentView.layer?.chalkSlide(toTranslationX: offset, over: duration)
     }
 
     /// Restore edge-pinning: the transition's single width reflow, while nothing is moving.
@@ -406,9 +412,9 @@ final class EditorContainerViewController: UIViewController {
         #endif
         frozen.isActive = false
         frozenContentWidth = nil
-        contentView.transform = .identity
+        contentView.layer?.chalkEndSlide()
         contentLeading?.isActive = true
-        view.layoutIfNeeded()
+        view.layoutSubtreeIfNeeded()
         // The slide may have crossed the push/overlay threshold while frozen.
         updateOutlinePanelMode()
     }
@@ -418,20 +424,21 @@ final class EditorContainerViewController: UIViewController {
     /// width, so "one transition, one reflow" is assertable.
     private(set) var reflowCountForTesting = 0
     var isContentWidthFrozenForTesting: Bool { frozenContentWidth != nil }
-    var contentTransformForTesting: CGAffineTransform { contentView.transform }
+    var contentTransformForTesting: CGAffineTransform {
+        contentView.layer.map { CATransform3DGetAffineTransform($0.transform) } ?? .identity
+    }
     /// Bounds, not frame: the slide moves the frame; the contract is that the size never changes.
     var contentViewBoundsForTesting: CGRect { contentView.bounds }
-    var contentViewForTesting: UIView { contentView }
     #endif
 
-    /// The active tab's webview, for the snapshot that masks the unfreeze reflow.
-    var activeSurfaceWebView: WKWebView? {
-        activeTab?.surface.view as? WKWebView
-    }
+    /// The active tab's surface, for the covers a transition installs over it.
+    var activeSurface: EditorSurface? { activeTab?.surface }
 
     #if DEBUG
     /// Downcasts to the web surface: these readers are implementation evidence, not part of the
     /// `EditorSurface` seam.
+    /// The active web surface, for the debug script's page-side actions.
+    var activeWebSurfaceForDebug: WebEditorSurface? { activeWebSurfaceForTesting }
     private var activeWebSurfaceForTesting: WebEditorSurface? {
         activeTab?.surface as? WebEditorSurface
     }
@@ -447,10 +454,15 @@ final class EditorContainerViewController: UIViewController {
     var activeSurfaceHeadingColorsForTesting: HeadingColors? {
         activeWebSurfaceForTesting?.headingColorsForTesting
     }
+    private var lastTracedLayout = ""
     #endif
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        #if DEBUG
+        let line = "layout content=\(contentView.frame) active=\(activeTab?.surface.view.frame ?? .zero) panelHidden=\(outlinePanel.isViewLoaded ? outlinePanel.view.isHidden : true) panel=\(outlinePanel.isViewLoaded ? outlinePanel.view.frame : .zero) frozen=\(frozenContentWidth != nil)"
+        if line != lastTracedLayout { lastTracedLayout = line; DebugTrace.log(line) }
+        #endif
         syncActiveSurfaceAppearance()
         updateOutlinePanelMode()
         let panelFrame = outlinePanelFrame
@@ -460,14 +472,14 @@ final class EditorContainerViewController: UIViewController {
         }
     }
 
-    /// Make the active surface agree with the resolved traits; a no-op when it already does.
-    /// The launch tab is activated before this container has a window, so its trait reads
-    /// `.unspecified` and the page comes up light under dark chrome; layout catches that. It cannot
-    /// fight a covered transition, which flips the traits and pushes the theme in one turn.
+    /// Make the active surface agree with the resolved appearance; a no-op when it already does.
+    /// The launch tab is activated before this container has a window, so its appearance reads
+    /// the system's and the page comes up light under dark chrome; layout catches that. It cannot
+    /// fight a covered transition, which flips the appearance and pushes the theme in one turn.
     func syncActiveSurfaceAppearance() {
         guard view.window != nil, activeTab != nil else { return }
-        let dark = traitCollection.userInterfaceStyle == .dark
-        let theme = traitCollection.chalkTheme
+        let dark = view.effectiveAppearance.isChalkDark
+        let theme = ChalkAppearance.theme
         guard pushedDark != dark || pushedTheme != theme else { return }
         pushAppearance(dark: dark, theme: theme)
     }
@@ -478,8 +490,8 @@ final class EditorContainerViewController: UIViewController {
     private var pushedTheme: ChalkTheme?
 
     /// Set when the host runs the covered appearance transition and pushes the theme itself
-    /// (docs/motion.md "Appearance"); the trait hook then stands down, since it would flip the page
-    /// outside the cover. Standalone containers (tests) keep the hook.
+    /// (docs/motion.md "Appearance"); the appearance hook then stands down, since it would flip
+    /// the page outside the cover. Standalone containers (tests) keep the hook.
     var hostOwnsAppearanceTransitions = false
 
     /// The orchestrator's push (active surface only).
@@ -508,7 +520,7 @@ final class EditorContainerViewController: UIViewController {
 
     /// Settings toggled "Color Markdown Headings": re-push to every open tab.
     func applyHeadingColors() {
-        let dark = pushedDark ?? (traitCollection.userInterfaceStyle == .dark)
+        let dark = pushedDark ?? view.effectiveAppearance.isChalkDark
         let colors = headingColors(dark: dark)
         for tab in tabs { tab.surface.setHeadingColors(colors) }
     }
@@ -532,7 +544,6 @@ final class EditorContainerViewController: UIViewController {
             active.url = url                 // update the dedupe key + chip title
             active.controller.reopen(url: url)
             // Through activate, not a bare refreshTabBar, so a detached surface is re-installed.
-            // See docs/issues/2026-07-24-blank-editor-on-open.md.
             activate(active)
             return
         }
@@ -580,24 +591,26 @@ final class EditorContainerViewController: UIViewController {
             message: "The editor for \u{201C}\(tab.displayName)\u{201D} didn\u{2019}t start. Your file is untouched. Try closing the tab and reopening it; if this keeps happening, reinstall the app.")
     }
 
-    /// `UIDocument.open` failed (revoked scope, unreadable file, fd exhaustion). Retry reopens in
-    /// the same tab; Close removes it so chip and body agree.
+    /// The document read failed (revoked scope, unreadable file, fd exhaustion). Retry reopens in
+    /// the same tab; Close removes it so chip and body agree. Without a window to sheet on
+    /// (tests), the tab simply stays, which is also the sheet's Cancel.
     private func presentDocumentOpenFailure(for tab: Tab, url: URL) {
-        let alert = UIAlertController(
-            title: "Couldn\u{2019}t Open \u{201C}\(tab.displayName)\u{201D}",
-            message: "The file couldn\u{2019}t be read. It may have moved, or access was denied. The file on disk is untouched.",
-            preferredStyle: .alert)
-        alert.applyChalkAppearance()
-        alert.addAction(UIAlertAction(title: "Retry", style: .default) { [weak self, weak tab] _ in
+        guard let window = view.window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Couldn\u{2019}t Open \u{201C}\(tab.displayName)\u{201D}"
+        alert.informativeText = "The file couldn\u{2019}t be read. It may have moved, or access was denied. The file on disk is untouched."
+        alert.addButton(withTitle: "Retry")
+        alert.addButton(withTitle: "Close Tab")
+        alert.beginSheetModal(for: window) { [weak self, weak tab] response in
             guard let self, let tab else { return }
-            tab.controller.reopen(url: url)
-            self.activate(tab)
-        })
-        alert.addAction(UIAlertAction(title: "Close Tab", style: .default) { [weak self, weak tab] _ in
-            guard let self, let tab else { return }
-            self.performClose(tab)
-        })
-        presentOnTop(alert)
+            switch response {
+            case .alertFirstButtonReturn:
+                tab.controller.reopen(url: url)
+                self.activate(tab)
+            default:
+                self.performClose(tab)
+            }
+        }
     }
 
     /// Apply an editor zoom to every open tab.
@@ -605,10 +618,8 @@ final class EditorContainerViewController: UIViewController {
         tabs.forEach { $0.surface.setFontScale(scale) }
     }
 
-    /// Last values pushed, recorded only for tests. `adopt` seeds new tabs from `Preferences`.
+    /// The last measure pushed, recorded only for tests. `adopt` seeds new tabs from `Preferences`.
     private(set) var lastPushedMeasure: Double?
-    private(set) var lastPushedTextAlign: EditorTextAlignment?
-    private(set) var lastPushedLineHeight: Double?
 
     /// Apply the text column width (Settings slider) to every open tab.
     func setMeasure(_ px: Double) {
@@ -618,13 +629,11 @@ final class EditorContainerViewController: UIViewController {
 
     /// Apply the interline spacing (Settings slider) to every open tab.
     func setLineHeight(_ multiplier: Double) {
-        lastPushedLineHeight = multiplier
         for tab in tabs { tab.surface.setLineHeight(multiplier) }
     }
 
     /// Apply the wrapped-prose alignment (Settings) to every open tab.
     func setTextAlign(_ alignment: EditorTextAlignment) {
-        lastPushedTextAlign = alignment
         for tab in tabs { tab.surface.setTextAlign(alignment) }
     }
 
@@ -667,13 +676,12 @@ final class EditorContainerViewController: UIViewController {
     /// overlay's text field can take focus without WebKit re-asserting.
     func blurActiveSurface() { activeTab?.surface.blurEditor() }
 
-    /// A shell command forwarded from a page, because a focused webview swallows the key before
-    /// the menu sees it.
+    /// A shell command forwarded from a page (the keys the page consumes, see
+    /// `SHELL_COMMANDS` in native-host.ts).
     var onShellCommand: ((String) -> Void)?
 
-    /// Flush every file-backed tab (clean ones no-op) on background or resign-active. Drafts are
-    /// skipped: saving one would present the save panel mid-background. `completion` fires once
-    /// every async write has landed, so callers can keep the process alive until then.
+    /// Flush every file-backed tab (clean ones no-op) on resign-active. Drafts are skipped: saving
+    /// one would present the save panel. `completion` fires once every async write has landed.
     func saveAll(completion: (() -> Void)? = nil) {
         let group = DispatchGroup()
         for tab in tabs where tab.url != nil {
@@ -687,11 +695,10 @@ final class EditorContainerViewController: UIViewController {
 
     /// Cmd+W falls through to closing the window when nothing is open.
     var hasOpenTabs: Bool { !tabs.isEmpty }
-    /// Drafts included: the launch-settle sweep must never destroy a window holding a draft.
+    /// Drafts included.
     var openTabCount: Int { tabs.count }
-    /// Editor half of `RootSplitViewController.stateSummary`: tells an empty window from one whose
-    /// live tab shows no surface. See docs/issues/2026-08-18-window-comes-up-empty-after-switching.md.
-    /// Never names the file: the line is logged `.public` (SceneStateLineRedactionTests).
+    /// Editor half of the window's state line: tells an empty window from one whose live tab
+    /// shows no surface. Never names the file: the line is logged `.public`.
     var diagnosticSummary: String {
         let kind = activeTab == nil ? "none" : (activeTab?.url == nil ? "draft" : "file")
         let installed = activeTab.map { $0.surface.view.superview != nil }
@@ -703,7 +710,7 @@ final class EditorContainerViewController: UIViewController {
     func nextTab() { cycle(+1) }
     func previousTab() { cycle(-1) }
 
-    // MARK: - Scene restoration
+    // MARK: - Window restoration
 
     /// File-backed tab URLs in strip order and the active tab's index. Drafts are skipped, so the
     /// index counts the returned URLs, not `tabs`.
@@ -712,6 +719,11 @@ final class EditorContainerViewController: UIViewController {
         let urls = fileTabs.compactMap(\.url)
         let activeIndex = fileTabs.firstIndex { $0 === activeTab }
         return (urls, activeIndex)
+    }
+
+    /// The file-backed tabs as journal records, bookmarks included (drafts die with the window).
+    func sessionTabRecords() -> [WindowSession.TabRecord] {
+        tabs.compactMap { $0.sessionRecord() }
     }
 
     /// Activate by strip position (restoration; ignores out-of-range).
@@ -730,7 +742,7 @@ final class EditorContainerViewController: UIViewController {
     /// layers onto that tab as unsaved edits (it is newer than disk); otherwise it opens in a new
     /// tab, or as a draft if the file is gone. Each snapshot is re-keyed under its new tab id
     /// BEFORE the old record is cleared, so a failed open never loses the text.
-    /// With `matchingOwnTabsOnly`, a connecting scene claims only records matching its own
+    /// With `matchingOwnTabsOnly`, a restoring window claims only records matching its own
     /// restored tabs; the process-wide leftover drain (`false`) runs once, a turn later.
     func restoreRecoveredBuffers(matchingOwnTabsOnly: Bool = false) {
         loadViewIfNeeded()
@@ -772,8 +784,8 @@ final class EditorContainerViewController: UIViewController {
     }
 
     /// Snapshot every dirty tab now and drop snapshots of clean ones. Called by the timer and on
-    /// scene resign/background. Text is captured on main (COW, O(1)) and encoded and written on
-    /// `recoveryQueue`, under a background task so the batch commits before a force-quit.
+    /// resign-active. Text is captured on main (COW, O(1)) and encoded and written on
+    /// `recoveryQueue`.
     func snapshotDirtyBuffers() {
         var writes: [(id: String, text: String, fileURL: URL?)] = []
         var clears: [String] = []
@@ -788,13 +800,9 @@ final class EditorContainerViewController: UIViewController {
         }
         guard !writes.isEmpty || !clears.isEmpty else { return }
         let store = recovery
-        let task = UIApplication.shared.beginBackgroundTask(withName: "chalk.recovery.snapshot")
         recoveryQueue.async {
             for w in writes { Self.writeSnapshot(to: store, id: w.id, text: w.text, fileURL: w.fileURL) }
             for id in clears { store.clear(id: id) }
-            if task != .invalid {
-                DispatchQueue.main.async { UIApplication.shared.endBackgroundTask(task) }
-            }
         }
     }
 
@@ -847,12 +855,8 @@ final class EditorContainerViewController: UIViewController {
     /// Every URL whose open failure reached the user, so a test can wait for the failure itself.
     private(set) var openFailuresForTesting: [URL] = []
 
-    /// The file a draft save handed the save panel, while the panel is up.
-    var pendingDraftSaveFileForTesting: URL? {
-        guard let dir = pendingDraftSave?.tempDir else { return nil }
-        return (try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil))?.first
-    }
+    /// The file a draft save proposes to the save panel, while the save is pending.
+    var pendingDraftSaveFileForTesting: URL? { pendingDraftSave?.proposedURL }
 
     var isEmptyStateVisibleForTesting: Bool {
         guard let emptyStateView else { return false }
@@ -944,22 +948,22 @@ final class EditorContainerViewController: UIViewController {
 
     // MARK: - Internals
 
-    /// Tab-dedupe comparison. A raw `URL ==` misses aliases such as `/private/var/…` (document
-    /// picker) versus `/var/…` (file tree), which would open one file in two tabs.
+    /// Tab-dedupe comparison. A raw `URL ==` misses aliases such as `/private/var/…` versus
+    /// `/var/…`, which would open one file in two tabs.
     private static func sameFile(_ a: URL, _ b: URL) -> Bool {
         a.fileIdentity == b.fileIdentity
     }
 
     private func activate(_ tab: Tab) {
         if activeTab !== tab {
-            let outgoing = activeTab?.surface.view
+            let outgoingSurface = activeTab?.surface
             if isOutlinePanelVisible { activeTab?.surface.setOutlineSubscription(false) }
             activeTab = tab
             // Dress the incoming surface (appearance, chrome-top) BEFORE install, so it never
             // flashes a stale theme or band height (docs/motion.md "Tab switch").
-            pushedDark = traitCollection.userInterfaceStyle == .dark
-            pushedTheme = traitCollection.chalkTheme
-            pushAppearance(to: tab.surface, dark: pushedDark == true, theme: traitCollection.chalkTheme)
+            pushedDark = view.effectiveAppearance.isChalkDark
+            pushedTheme = ChalkAppearance.theme
+            pushAppearance(to: tab.surface, dark: pushedDark == true, theme: ChalkAppearance.theme)
             #if DEBUG
             activateEventTrailForTesting.append("appearance")
             #endif
@@ -977,12 +981,11 @@ final class EditorContainerViewController: UIViewController {
                 seedOutlinePanel()
                 tab.surface.setOutlineSubscription(true)
             }
-            if let outgoing, outgoing !== tab.surface.view {
-                crossFade(from: outgoing, to: tab.surface.view)
+            if let outgoingSurface, outgoingSurface.view !== tab.surface.view {
+                crossFade(from: outgoingSurface, to: tab.surface)
             }
         } else {
             // Re-activating the active tab still installs, so a detached surface is repaired.
-            // See docs/issues/2026-07-24-blank-editor-on-open.md.
             ensureInstalled(tab)
         }
         refreshEmptyState()
@@ -995,34 +998,57 @@ final class EditorContainerViewController: UIViewController {
         }
     }
 
-    /// docs/motion.md "Tab switch": an alpha cross-fade with both surfaces hosted and geometry
-    /// untouched. Reduce Motion, the instant test policy and an unhosted container swap instantly.
-    private func crossFade(from outgoing: UIView, to incoming: UIView) {
-        guard !UIAccessibility.isReduceMotionEnabled, !motionIsInstant,
+    /// docs/motion.md "Tab switch": a cross-fade with both surfaces hosted and geometry untouched.
+    /// On AppKit the fade is on a BITMAP of the outgoing page: a web view's content is a remote
+    /// layer that ignores an ancestor's alpha, so an alpha cross-fade cut in one frame. The
+    /// incoming goes in under the outgoing, which keeps the screen until its snapshot lands (or
+    /// the backstop gives up on it); then the bitmap replaces it on top and fades out.
+    /// Reduce Motion, the instant test policy and an unhosted container swap instantly.
+    private func crossFade(from outgoingSurface: EditorSurface, to incomingSurface: EditorSurface) {
+        let outgoing = outgoingSurface.view
+        let incoming = incomingSurface.view
+        incoming.alphaValue = 1
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, !motionIsInstant,
               incoming.window != nil else {
+            DebugTrace.log("tab cross-fade: instant swap")
             outgoing.removeFromSuperview()
-            incoming.alpha = 1
             return
         }
-        contentView.bringSubviewToFront(incoming)
-        // Start a freshly installed view transparent; one rejoining mid-fade keeps its state.
-        if incoming.layer.animationKeys()?.isEmpty != false, incoming.alpha == 1 {
-            incoming.alpha = 0
-        }
-        #if DEBUG
-        activateEventTrailForTesting.append("fade-begin")
-        #endif
-        UIView.animate(withDuration: ChalkMetrics.motionFast,
-                       delay: 0,
-                       options: [.curveEaseOut, .beginFromCurrentState]) {
-            incoming.alpha = 1
-            outgoing.alpha = 0
-        } completion: { [weak self] _ in
-            // A rapid switch can make `outgoing` active again mid-fade: never remove it then.
-            guard outgoing !== self?.activeTab?.surface.view else { return }
+        contentView.addSubview(incoming, positioned: .below, relativeTo: outgoing)
+        var swapped = false
+        let swap: (NSImage?) -> Void = { [weak self] image in
+            guard !swapped, let self else { return }
+            swapped = true
+            // A rapid switch can make `outgoing` active again before its bitmap lands: never
+            // remove it then, and never paint a stale bitmap over it.
+            guard outgoing !== self.activeTab?.surface.view else { return }
+            guard let image else {
+                outgoing.removeFromSuperview()
+                return
+            }
+            let bitmap = NSImageView(image: image)
+            bitmap.imageScaling = .scaleAxesIndependently
+            bitmap.wantsLayer = true
+            bitmap.frame = outgoing.frame
+            self.contentView.addSubview(bitmap, positioned: .above, relativeTo: nil)
             outgoing.removeFromSuperview()
-            outgoing.alpha = 1 // ready for its next hosting
+            #if DEBUG
+            self.activateEventTrailForTesting.append("fade-begin")
+            DebugTrace.log("tab cross-fade: bitmap fade over \(ChalkMetrics.motionFast)")
+            #endif
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = ChalkMetrics.motionFast
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                bitmap.animator().alphaValue = 0
+            }, completionHandler: {
+                bitmap.removeFromSuperview()
+            })
         }
+        // Always a turn later, even for a surface that answers at once: the contract is both
+        // surfaces hosted through the switch's turn (TabSwitchContractTests).
+        outgoingSurface.captureSnapshot { image in DispatchQueue.main.async { swap(image) } }
+        // A snapshot that never lands (a page that is not up) must not hold the old page.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { swap(nil) }
     }
 
     #if DEBUG
@@ -1055,7 +1081,8 @@ final class EditorContainerViewController: UIViewController {
         ])
     }
 
-    private func activate(id: UUID) {
+    /// Tab strip callbacks.
+    func activate(id: UUID) {
         if let tab = tabs.first(where: { $0.id == id }) { activate(tab) }
     }
 
@@ -1067,7 +1094,7 @@ final class EditorContainerViewController: UIViewController {
         }
     }
 
-    private func closeTab(id: UUID) {
+    func closeTab(id: UUID) {
         if let tab = tabs.first(where: { $0.id == id }) { close(tab) }
     }
 
@@ -1105,29 +1132,27 @@ final class EditorContainerViewController: UIViewController {
         activate(tabs[(i + delta + tabs.count) % tabs.count])
     }
 
+    /// Save, Discard, Cancel as a window sheet. Without a window (tests) the tab stays, which is
+    /// Cancel.
     private func confirmClose(_ tab: Tab) {
-        // Deliberately a system-styled alert. On Catalyst an alert is its own window and follows the
-        // system appearance, so force the app's appearance on it.
-        let alert = UIAlertController(
-            title: "Save changes to \u{201C}\(tab.displayName)\u{201D}?",
-            message: nil, preferredStyle: .alert)
-        alert.applyChalkAppearance()
-        alert.addAction(UIAlertAction(title: "Save", style: .default) { [weak self] _ in
-            // Close only on a confirmed write; a failed save keeps the tab and its buffer.
-            let runSave = { tab.controller.save { ok in if ok { self?.performClose(tab) } } }
-            // A draft's save panel is refused while anything is presented, and this handler can
-            // run mid-dismissal: continue from the dismissal completion.
-            if let self, self.presentedViewController != nil {
-                self.dismiss(animated: true, completion: runSave)
-            } else {
-                runSave()
+        guard let window = view.window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Save changes to \u{201C}\(tab.displayName)\u{201D}?"
+        alert.addButton(withTitle: "Save")
+        let discard = alert.addButton(withTitle: "Discard")
+        discard.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            switch response {
+            case .alertFirstButtonReturn:
+                // Close only on a confirmed write; a failed save keeps the tab and its buffer.
+                tab.controller.save { ok in if ok { self?.performClose(tab) } }
+            case .alertSecondButtonReturn:
+                self?.performClose(tab)
+            default:
+                break
             }
-        })
-        alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in
-            self?.performClose(tab)
-        })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        present(alert, animated: true)
+        }
     }
 
     private func refreshTabBar() {
@@ -1158,19 +1183,17 @@ final class EditorContainerViewController: UIViewController {
     }
 
     private func addEmptyState() {
-        let title = UILabel()
-        title.text = "No document open"
-        title.font = .systemFont(ofSize: ChalkMetrics.s(18), weight: .semibold)
+        let title = NSTextField(labelWithString: "No document open")
+        title.font = .systemFont(ofSize: 18, weight: .semibold)
         title.textColor = .chalkTextSecondary
 
-        let hint = UILabel()
-        hint.text = "Open a file from the Library, or press \u{2318}N"
-        hint.font = .systemFont(ofSize: ChalkMetrics.s(13))
+        let hint = NSTextField(labelWithString: "Open a file from the Library, or press \u{2318}N")
+        hint.font = .systemFont(ofSize: 13)
         hint.textColor = .chalkTextFaint
 
-        let stack = UIStackView(arrangedSubviews: [title, hint])
-        stack.axis = .vertical
-        stack.alignment = .center
+        let stack = NSStackView(views: [title, hint])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(stack)
@@ -1253,102 +1276,88 @@ extension EditorContainerViewController: DocumentControllerDelegate {
         presentDocumentOpenFailure(for: tab, url: url)
     }
 
-    /// A draft asked to save: write it to a temp file and present the system save panel.
-    /// `completion(false)` on any early-out or cancel, so confirm-close keeps the tab.
+    /// A draft asked to save: propose a name in the draft's own language and present the save
+    /// panel as a sheet. `completion(false)` on any early-out or cancel, so confirm-close keeps
+    /// the tab. Without a window (tests) the proposal is recorded and nothing is presented.
     func documentController(_ controller: DocumentController,
                             needsSaveDestination completion: @escaping (Bool) -> Void) {
         guard let tab = tabs.first(where: { $0.controller === controller }), tab.url == nil else {
             completion(false)
             return
         }
-        // A pending save with nothing presented means the picker vanished without a delegate
-        // callback; clear it or draft saving stays wedged for the session.
-        if let stale = pendingDraftSave, presentedViewController == nil {
+        // A pending save with no panel up means the panel vanished without a callback; clear it
+        // or draft saving stays wedged for the session.
+        if let stale = pendingDraftSave, activeSavePanel == nil {
             pendingDraftSave = nil
-            try? FileManager.default.removeItem(at: stale.tempDir)
             stale.completion(false)
         }
-        // A second Cmd+S while any sheet is up must not present another.
-        guard pendingDraftSave == nil, presentedViewController == nil else {
+        // A second Cmd+S while the panel is up must not present another.
+        guard pendingDraftSave == nil, activeSavePanel == nil else {
             completion(false)
             return
         }
 
         let text = controller.currentText
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         // The draft's own language: the default-file-type preference may have changed since.
-        let tempURL = tempDir.appendingPathComponent(
-            "\(tab.displayName).\(controller.language.fileExtension)")
-        do {
-            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-            try Data(text.utf8).write(to: tempURL)
-        } catch {
-            containerLog.error("draft save: temp write failed: \(error.localizedDescription, privacy: .private)")
-            try? FileManager.default.removeItem(at: tempDir)
-            completion(false)
-            return
-        }
+        let name = "\(tab.displayName).\(controller.language.fileExtension)"
+        let proposed = SampleContent.documentsURL.appendingPathComponent(name)
+        pendingDraftSave = (tab, text, proposed, completion)
+        guard let window = view.window else { return }
 
-        // asCopy: false MOVES the temp file to the destination, so binding needs no second write.
-        let picker = UIDocumentPickerViewController(forExporting: [tempURL], asCopy: false)
-        picker.delegate = self
-        picker.directoryURL = SampleContent.documentsURL // default to the Chalk folder
-        pendingDraftSave = (tab, text, tempDir, completion)
-        present(picker, animated: true)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = name
+        panel.directoryURL = SampleContent.documentsURL // default to the Chalk folder
+        panel.canCreateDirectories = true
+        activeSavePanel = panel
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            self.activeSavePanel = nil
+            guard let pending = self.pendingDraftSave else { return }
+            self.pendingDraftSave = nil
+            guard response == .OK, let url = panel.url else {
+                pending.completion(false) // tab stays a draft, buffer intact
+                return
+            }
+            do {
+                try Data(pending.text.utf8).write(to: url, options: .atomic)
+            } catch {
+                containerLog.error("draft save failed: \(DiagError(error), privacy: .public)")
+                pending.completion(false)
+                return
+            }
+            pending.tab.controller.bindDraft(to: url, writtenText: pending.text)
+            pending.tab.url = url
+            // Commit, or an unedited saved draft would be a preview a sidebar click replaces.
+            pending.tab.isCommitted = true
+            self.refreshTabBar() // chip retitles from "Untitled" to the filename
+            self.onDraftSaved?(url)
+            pending.completion(true)
+        }
     }
 }
 
-extension EditorContainerViewController: UIDocumentPickerDelegate {
-    func documentPicker(_ controller: UIDocumentPickerViewController,
-                        didPickDocumentsAt urls: [URL]) {
-        guard let pending = pendingDraftSave else { return }
-        pendingDraftSave = nil
-        try? FileManager.default.removeItem(at: pending.tempDir) // file already moved by the system
-        guard let url = urls.first else {
-            pending.completion(false)
-            return
-        }
-        pending.tab.controller.bindDraft(to: url, writtenText: pending.text)
-        pending.tab.url = url
-        // Commit, or an unedited saved draft would be a preview a sidebar click replaces.
-        pending.tab.isCommitted = true
-        refreshTabBar() // chip retitles from "Untitled" to the filename
-        onDraftSaved?(url)
-        pending.completion(true)
+/// The outline panel's resize handle: a horizontal-resize cursor and a drag
+/// that reports its x travel.
+final class ColumnResizeGrip: FlippedView {
+    var onDragBegan: (() -> Void)?
+    var onDragged: ((CGFloat) -> Void)?
+    var onDragEnded: (() -> Void)?
+    private var startX: CGFloat = 0
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeLeftRight)
     }
 
-    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        guard let pending = pendingDraftSave else { return }
-        pendingDraftSave = nil
-        try? FileManager.default.removeItem(at: pending.tempDir)
-        pending.completion(false) // tab stays a draft, buffer intact
-    }
-}
-
-/// Gradient under the Mac titlebar tab band, editor background dissolving to clear, so text
-/// fades out before it slides under the chips. Never intercepts events.
-final class ChromeFadeView: UIView {
-    override class var layerClass: AnyClass { CAGradientLayer.self }
-
-    init() {
-        super.init(frame: .zero)
-        isUserInteractionEnabled = false
-        // CAGradientLayer colors don't track dynamic UIColors.
-        registerForTraitChanges(UITraitCollection.chalkColorTraits) { (view: Self, _: UITraitCollection) in
-            view.updateColors()
-        }
-        // Near-solid (≥92%) through the chip rows so no ghost text shows, then a LINEAR ramp to
-        // zero. Keep the ramp linear and long: eased curves compress it into a visible cut.
-        (layer as? CAGradientLayer)?.locations = [0, 0.55, 1]
-        updateColors()
+    override func mouseDown(with event: NSEvent) {
+        startX = event.locationInWindow.x
+        onDragBegan?()
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+    override func mouseDragged(with event: NSEvent) {
+        onDragged?(event.locationInWindow.x - startX)
+    }
 
-    private func updateColors() {
-        let bg = UIColor.chalkEditorBackground.resolvedColor(with: traitCollection)
-        (layer as? CAGradientLayer)?.colors =
-            [1.0, 0.92, 0.0].map { bg.withAlphaComponent($0).cgColor }
+    override func mouseUp(with event: NSEvent) {
+        onDragEnded?()
     }
 }

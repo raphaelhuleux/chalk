@@ -8,11 +8,12 @@ import ChalkKit
 /// so its ink may not be taller than a capital letter in the label font
 /// (with a quarter of slack for SF's rounded caps).
 final class NewTabGlyphSizeTests: XCTestCase {
+    @MainActor
     func testNewTabGlyphInkIsNoTallerThanALabelCapital() throws {
         let strip = HeaderTabStrip(frame: CGRect(x: 0, y: 0, width: 600, height: 44))
         let image = try XCTUnwrap(strip.newTabGlyphImageForTesting)
         let ink = inkBounds(of: image)
-        let cap = UIFont.chalkMono(size: ChalkMetrics.tabFontSize).capHeight
+        let cap = NSFont.chalkMono(size: ChalkMetrics.tabFontSize).capHeight
         XCTAssertLessThanOrEqual(
             ink.height, cap * 1.25,
             "+ ink is \(ink) but the label's capitals are \(cap)pt tall")
@@ -20,24 +21,23 @@ final class NewTabGlyphSizeTests: XCTestCase {
     }
 
     /// The glyph's opaque extent in points, at 4x so sub-point edges count.
-    private func inkBounds(of image: UIImage) -> CGSize {
+    private func inkBounds(of image: NSImage) -> CGSize {
         let scale: CGFloat = 4
-        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let rendered = UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            image.withTintColor(.black).draw(in: CGRect(origin: .zero, size: size))
-        }
-        guard let cg = rendered.cgImage else { return .zero }
-        let w = cg.width, h = cg.height
-        var pixels = [UInt8](repeating: 0, count: w * h)
-        let ctx = CGContext(
-            data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
-            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)!
-        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let w = Int(image.size.width * scale), h = Int(image.size.height * scale)
+        guard w > 0, h > 0,
+              let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h, bitsPerSample: 8,
+                samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        else { return .zero }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
+        NSGraphicsContext.restoreGraphicsState()
         var minX = w, maxX = -1, minY = h, maxY = -1
         for y in 0..<h {
-            for x in 0..<w where pixels[y * w + x] > 76 {
+            for x in 0..<w {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.3 else { continue }
                 minX = min(minX, x); maxX = max(maxX, x)
                 minY = min(minY, y); maxY = max(maxY, y)
             }

@@ -10,30 +10,27 @@ import ChalkKit
 /// and never leaves the column while the column is mid-slide.
 @MainActor
 final class SidebarPanelAlignmentTests: XCTestCase {
-    private var window: UIWindow!
-    private var host: UIViewController!
+    private var window: NSWindow!
+    private var host: NSViewController!
     private var sidebar: SidebarViewController!
 
     override func setUp() {
         super.setUp()
         sidebar = SidebarViewController()
-        host = UIViewController()
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first!
-        window = UIWindow(windowScene: scene)
+        host = NSViewController()
+        host.view = FlippedView()
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
         window.rootViewController = host
         window.isHidden = false
         // Frame-hosted child, so each test can place the column exactly where
-        // the split view would.
+        // the root would.
         host.addChild(sidebar)
         sidebar.view.translatesAutoresizingMaskIntoConstraints = true
         host.view.addSubview(sidebar.view)
-        sidebar.didMove(toParent: host)
     }
 
     override func tearDown() {
-        window.isHidden = true
-        window.rootViewController = nil
+        dismantleHostedSidebar(window)
         window = nil
         host = nil
         sidebar = nil
@@ -43,30 +40,30 @@ final class SidebarPanelAlignmentTests: XCTestCase {
     private func layoutColumn(_ frame: CGRect) {
         sidebar.view.frame = frame
         window.layoutIfNeeded()
-        sidebar.view.layoutIfNeeded()
+        sidebar.view.layoutSubtreeIfNeeded()
     }
 
     private var panelInWindow: CGRect {
-        sidebar.view.convert(sidebar.panelFrameForTesting, to: window)
+        host.view.convert(sidebar.panelFrameForTesting, from: sidebar.view)
     }
 
     func testClassicColumnIsAlreadyFlushAndStaysFlush() {
         // The column fills the window, and the panel simply fills it.
-        layoutColumn(window.bounds)
+        layoutColumn(host.view.bounds)
 
         XCTAssertEqual(panelInWindow.minX, 0, accuracy: 0.5)
         XCTAssertEqual(panelInWindow.minY, 0, accuracy: 0.5,
                        "flush with the window's top")
-        XCTAssertEqual(panelInWindow.maxY, window.bounds.maxY, accuracy: 0.5)
+        XCTAssertEqual(panelInWindow.maxY, host.view.bounds.maxY, accuracy: 0.5)
     }
 
     // MARK: - Mid-transition frames (the "panel is sometimes empty" report)
 
-    /// The column's WINDOW origin is negative while the split view slides the
-    /// column in. Following it would drag the panel out of its own column: the
-    /// Library reads as empty even though the data source is fully populated.
+    /// The column's origin is negative while it slides in. Following it would
+    /// drag the panel out of its own column: the Library reads as empty even
+    /// though the model is fully populated.
     func testColumnSlidingInFromTheLeftKeepsThePanelInItsColumn() {
-        layoutColumn(CGRect(x: -220, y: 0, width: 300, height: window.bounds.height))
+        layoutColumn(CGRect(x: -220, y: 0, width: 300, height: host.view.bounds.height))
 
         let panel = sidebar.panelFrameForTesting
         XCTAssertEqual(panel.minX, 0, accuracy: 0.5,
@@ -76,10 +73,10 @@ final class SidebarPanelAlignmentTests: XCTestCase {
         XCTAssertGreaterThan(panel.width, 0)
     }
 
-    /// Same family, vertical: a column whose origin sits above the window (the
-    /// first pass of a restore) must not push the panel down.
+    /// Same family, vertical: a column whose origin sits above the window
+    /// must not push the panel down.
     func testColumnAboveTheWindowKeepsThePanelAtItsColumnTop() {
-        layoutColumn(CGRect(x: 0, y: -180, width: 300, height: window.bounds.height))
+        layoutColumn(CGRect(x: 0, y: -180, width: 300, height: host.view.bounds.height))
 
         let panel = sidebar.panelFrameForTesting
         XCTAssertLessThanOrEqual(panel.minY, 0.5,
@@ -90,7 +87,7 @@ final class SidebarPanelAlignmentTests: XCTestCase {
     /// A column taller than the window (mid-resize) must not invert the
     /// bottom constraint into a zero/negative-height panel.
     func testOversizedColumnKeepsAPositivePanelHeight() {
-        layoutColumn(CGRect(x: 0, y: 0, width: 300, height: window.bounds.height + 300))
+        layoutColumn(CGRect(x: 0, y: 0, width: 300, height: host.view.bounds.height + 300))
 
         XCTAssertGreaterThan(sidebar.panelFrameForTesting.height, 0)
     }
@@ -99,14 +96,12 @@ final class SidebarPanelAlignmentTests: XCTestCase {
     /// schedules another pass: it has to reach a FIXED POINT, or the app spins
     /// in layout and freezes with the Library open.
     func testRepeatedLayoutPassesSettleInsteadOfChasingTheirOwnConstants() {
-        let floatTop = max(window.safeAreaInsets.top, 32)
-        layoutColumn(CGRect(x: 10, y: floatTop, width: 300,
-                            height: window.bounds.height - floatTop - 10))
+        layoutColumn(CGRect(x: 10, y: 32, width: 300, height: host.view.bounds.height - 42))
         let settled = sidebar.panelFrameForTesting
 
         for pass in 1...5 {
-            sidebar.view.setNeedsLayout()
-            sidebar.view.layoutIfNeeded()
+            sidebar.view.needsLayout = true
+            sidebar.view.layoutSubtreeIfNeeded()
             XCTAssertEqual(sidebar.panelFrameForTesting, settled,
                            "layout pass \(pass) moved the panel again: the layout is chasing itself")
         }

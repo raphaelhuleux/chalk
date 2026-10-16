@@ -4,8 +4,8 @@ import ChalkKit
 
 /// docs/motion.md "Sidebar show/hide", the testable half. The slide itself is
 /// visual; what a test can pin is the t=0 facts (the surface frozen and
-/// purely translated over a snapped display mode), the single covered reflow
-/// at the end, the guaranteed release under a dead snapshotter, that a rapid
+/// purely translated over a snapped placement), the single covered reflow at
+/// the end, the guaranteed release under a dead snapshotter, that a rapid
 /// re-toggle cancels the pending release, and that the settled layout is the
 /// layout a fresh root shows.
 ///
@@ -34,14 +34,23 @@ final class SidebarSlideContractTests: XCTestCase {
     }
 
     private var hiddenState: UIState {
-        UIState(window: .windowed,
-                sidebar: .hidden, mode: .normal, appearance: .light)
+        UIState(window: .windowed, sidebar: .hidden, mode: .normal, appearance: .light)
+    }
+
+    private var shownState: UIState {
+        UIState(window: .windowed, sidebar: .shown, mode: .normal, appearance: .light)
     }
 
     /// A settled root with the Library hidden, on the animated lane.
     private func makeRoot() -> RootSplitViewController {
         let root = host.makeRoot(for: hiddenState)
         host.settleToFixedPoint(root, state: hiddenState)
+        return root
+    }
+
+    private func makeShownRoot() -> RootSplitViewController {
+        let root = host.makeRoot(for: shownState)
+        host.settleToFixedPoint(root, state: shownState)
         return root
     }
 
@@ -75,72 +84,54 @@ final class SidebarSlideContractTests: XCTestCase {
 
     /// The transform that slides the Library must not stand on a view that
     /// also hosts the editor.
-    ///
-    /// Where both columns live inside ONE (the macOS 27 split view)
-    /// `_UISplitViewControllerAdaptiveColumnContainerView` which is the split
-    /// view's direct subview, so a walk that climbs until the parent IS the
-    /// split view's view lands on the shared container. Transforming it drags
-    /// the editor along. The show got away with it — its transform ends at
-    /// `.identity`, so the end state is right — while the hide ends at
-    /// `translate(-sidebarWidth)` and holds the editor a sidebar-width off
-    /// screen for the whole slide. Reveal looked fine, hide did not.
     func testTheSlideTransformDoesNotStandOnTheEditor() throws {
-        let shown = UIState(window: .windowed,
-                            sidebar: .shown, mode: .normal, appearance: .light)
-        let root = host.makeRoot(for: shown)
-        host.settleToFixedPoint(root, state: shown)
-        let editorView = try XCTUnwrap(root.editorForTesting.viewIfLoaded)
-        let column = try XCTUnwrap(root.sidebarColumnContainerForTesting())
-        XCTAssertFalse(editorView.isDescendant(of: column),
+        let root = makeShownRoot()
+        let editorView = root.editorForTesting.view
+        XCTAssertFalse(editorView.isDescendant(of: root.sidebarColumnForTesting),
                        "the slide transforms this view; the editor must not be inside it")
+        XCTAssertTrue(root.sidebarForTesting.view.isDescendant(of: root.sidebarColumnForTesting))
     }
 
-    /// The hide posts the titlebar strip's TARGET inset at slide start and
-    /// snaps the display mode only in its completion, so a layout pass in
-    /// between measures the old, still-tiled divider. Posting that would jump
-    /// the chips back mid-slide.
+    /// The hide posts the chips' TARGET inset at slide start and lands the
+    /// placement only in its completion, so a layout pass in between measures
+    /// the old, still-tiled divider. Posting that would jump the chips back
+    /// mid-slide.
     func testALayoutPassMidHideDoesNotRepostTheDivider() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled,
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled,
                       "Reduce Motion routes to the instant branch")
-        let shown = UIState(window: .windowed,
-                            sidebar: .shown, mode: .normal, appearance: .light)
-        let root = host.makeRoot(for: shown)
-        host.settleToFixedPoint(root, state: shown)
+        let root = makeShownRoot()
         injectFastSettle(on: root)
+        XCTAssertGreaterThan(root.stripLeadingInsetForTesting, 0,
+                             "precondition: the chips sit past the divider")
 
         root.cmdToggleSidebar()
-        let pushes = root.stripLeadingInsetPushCountForTesting
-        root.view.setNeedsLayout()
-        root.view.layoutIfNeeded()
-        XCTAssertEqual(root.stripLeadingInsetPushCountForTesting, pushes,
+        XCTAssertEqual(root.stripLeadingInsetForTesting, 0, accuracy: 0.5,
+                       "the target is posted at slide start")
+        root.view.needsLayout = true
+        root.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(root.stripLeadingInsetForTesting, 0, accuracy: 0.5,
                        "a layout pass the slide owns re-posted the divider")
-        XCTAssertEqual(root.lastStripDividerXForTesting, 0)
 
         pumpUntilSettled(root)
-        XCTAssertGreaterThan(root.stripLeadingInsetPushCountForTesting, pushes,
-                             "the completion pushes once the slide lets go")
-        XCTAssertEqual(root.lastStripDividerXForTesting, 0)
+        XCTAssertEqual(root.stripLeadingInsetForTesting, 0, accuracy: 0.5)
     }
 
     /// The behavioural twin: during an animated hide the editor column must
     /// stay where it is. Only the Library moves.
     func testAnimatedHideDoesNotDragTheEditorColumn() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled,
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled,
                       "Reduce Motion routes to the instant branch")
-        let shown = UIState(window: .windowed,
-                            sidebar: .shown, mode: .normal, appearance: .light)
-        let root = host.makeRoot(for: shown)
-        host.settleToFixedPoint(root, state: shown)
+        let root = makeShownRoot()
         injectFastSettle(on: root)
-        let editorView = try XCTUnwrap(root.editorForTesting.viewIfLoaded)
+        let editorView = root.editorForTesting.view
         let before = root.view.convert(editorView.bounds, from: editorView)
 
         root.cmdToggleSidebar()
-        // Same turn: the animation's model values are already committed, so a
-        // dragged editor shows up here without waiting on the clock.
         let during = root.view.convert(editorView.bounds, from: editorView)
         XCTAssertEqual(during.minX, before.minX, accuracy: 0.5,
                        "the editor column must not be translated by the Library's slide")
+        XCTAssertFalse(CATransform3DIsIdentity(root.sidebarColumnForTesting.layer?.transform ?? CATransform3DIdentity),
+                       "the Library column is what slides")
 
         pumpUntilSettled(root)
     }
@@ -148,43 +139,27 @@ final class SidebarSlideContractTests: XCTestCase {
     // MARK: - the hide lane's end state
 
     /// The ANIMATED hide must land in the same state the instant hide does.
-    ///
-    /// Nothing covered this before: every transition suite (the chrome matrix
-    /// included) sets `motionPolicyForTesting = .instant`, and the instant
-    /// branch calls `setSidebarVisible(false)`. Only the animated branch calls
-    /// `hideSidebarColumn()`. So the animated hide is the one lane no test had
-    /// ever run.
     func testAnimatedHideLeavesTheSameStateTheInstantHideDoes() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled,
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled,
                       "Reduce Motion routes to the instant branch")
-        let shown = UIState(window: .windowed,
-                            sidebar: .shown, mode: .normal, appearance: .light)
-        let root = host.makeRoot(for: shown)
-        host.settleToFixedPoint(root, state: shown)
+        let root = makeShownRoot()
         injectFastSettle(on: root)
-        XCTAssertNotEqual(root.displayMode, .secondaryOnly, "precondition: the Library is showing")
+        XCTAssertTrue(root.isSidebarVisible, "precondition: the Library is showing")
 
         root.cmdToggleSidebar()
         pumpUntilSettled(root)
 
-        XCTAssertEqual(root.displayMode, .secondaryOnly,
-                       "the animated hide must actually hide the Library")
-        XCTAssertEqual(root.preferredDisplayMode, .secondaryOnly,
-                       "and must leave the PREFERENCE agreeing with it: a preference still "
-                       + "saying .oneBesideSecondary is re-resolved by the next layout pass")
+        XCTAssertFalse(root.isSidebarVisible, "the animated hide must actually hide the Library")
+        XCTAssertNil(root.chromeLayout(for: hiddenState).libraryPanel)
+        XCTAssertTrue(CATransform3DIsIdentity(root.sidebarColumnForTesting.layer?.transform ?? CATransform3DIdentity),
+                      "the slide leaves no transform behind")
     }
 
-    /// And the Library must come back afterwards. A hide that leaves the
-    /// preference untouched makes the following show a no-op -- the preference
-    /// is already the value `setSidebarVisible(true)` assigns, so the split
-    /// view never re-lays out.
+    /// And the Library must come back afterwards.
     func testShowAfterAnAnimatedHideBringsTheLibraryBack() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled,
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled,
                       "Reduce Motion routes to the instant branch")
-        let shown = UIState(window: .windowed,
-                            sidebar: .shown, mode: .normal, appearance: .light)
-        let root = host.makeRoot(for: shown)
-        host.settleToFixedPoint(root, state: shown)
+        let root = makeShownRoot()
         injectFastSettle(on: root)
 
         root.cmdToggleSidebar()          // hide
@@ -192,14 +167,14 @@ final class SidebarSlideContractTests: XCTestCase {
         root.cmdToggleSidebar()          // show again
         pumpUntilSettled(root)
 
-        XCTAssertNotEqual(root.displayMode, .secondaryOnly,
-                          "the Library must come back after an animated hide")
+        XCTAssertTrue(root.isSidebarVisible, "the Library must come back after an animated hide")
+        XCTAssertNotNil(root.chromeLayout(for: shownState).libraryPanel)
     }
 
     // MARK: - t=0 facts
 
-    func testSlideStartSnapsTheModeAndFreezesTheTranslatedSurface() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled,
+    func testSlideStartSnapsThePlacementAndFreezesTheTranslatedSurface() throws {
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled,
                       "Reduce Motion routes to the instant branch; the t=0 facts are about the animated lane")
         let root = makeRoot()
         injectFastSettle(on: root)
@@ -207,28 +182,32 @@ final class SidebarSlideContractTests: XCTestCase {
 
         root.applyTransitionForTesting(.sidebar(true))
 
-        // Same turn, nothing settled: the display mode is already snapped,
-        // the surface is width-frozen and purely translated, and its bounds
-        // have not changed — the webview never reflows mid-motion.
-        XCTAssertNotEqual(root.displayMode, .secondaryOnly,
-                          "the display mode snaps at slide START (performWithoutAnimation), not at the end")
+        // Same turn, nothing settled: the placement is already snapped, the
+        // surface is width-frozen and purely translated, and its bounds have
+        // not changed; the webview never reflows mid-motion.
+        XCTAssertTrue(root.isSidebarVisible,
+                      "the placement snaps at slide START, not at the end")
         XCTAssertTrue(root.editorForTesting.isContentWidthFrozenForTesting,
                       "the surface's width must be frozen for the whole slide")
         XCTAssertFalse(root.editorForTesting.contentTransformForTesting.isIdentity,
                        "the visible motion is a pure translation of the frozen surface")
         XCTAssertEqual(root.editorForTesting.contentViewBoundsForTesting.size.width,
                        boundsBefore.size.width, accuracy: 0.5,
-                       "the surface's bounds must not change at slide start — that reflow is the flicker")
+                       "the surface's bounds must not change at slide start; that reflow is the flicker")
+        let postedInset = root.stripLeadingInsetForTesting
+        XCTAssertGreaterThan(postedInset, 0, "the chips' target is posted with the snap")
 
         pumpUntilSettled(root)
         XCTAssertFalse(root.editorForTesting.isContentWidthFrozenForTesting,
                        "the slide must end released")
+        XCTAssertEqual(root.stripLeadingInsetForTesting, postedInset, accuracy: 0.5,
+                       "the settle lands on the inset the snap posted")
     }
 
     // MARK: - One reflow, onto the fresh layout
 
     func testSettleReflowsExactlyOnceOntoTheFreshLayout() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled)
         let shown = hiddenState.applying(.sidebar(true))
         // Fresh oracle FIRST: building it re-points the host window's root.
         let freshRoot = host.makeRoot(for: shown)
@@ -245,13 +224,13 @@ final class SidebarSlideContractTests: XCTestCase {
         host.settleToFixedPoint(root, state: shown)
 
         XCTAssertEqual(root.editorForTesting.reflowCountForTesting, reflowsBefore + 1,
-                       "one transition, one reflow — the settle releases exactly once")
+                       "one transition, one reflow: the settle releases exactly once")
 
         let reached = root.chromeLayout(for: shown)
         func expectClose(_ name: String, _ a: CGRect, _ b: CGRect) {
             XCTAssertTrue(abs(a.minX - b.minX) <= 1 && abs(a.minY - b.minY) <= 1
                             && abs(a.width - b.width) <= 1 && abs(a.height - b.height) <= 1,
-                          "\(name): reached=\(a) fresh=\(b) — the slide must land on the fresh layout")
+                          "\(name): reached=\(a) fresh=\(b); the slide must land on the fresh layout")
         }
         expectClose("editorContent", reached.editorContent, fresh.editorContent)
         expectClose("band", reached.band, fresh.band)
@@ -269,7 +248,7 @@ final class SidebarSlideContractTests: XCTestCase {
     // MARK: - Guaranteed release
 
     func testDeadSnapshotterStillReleasesOnTheBackstop() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled)
         let root = makeRoot()
         // A snapshotter that never answers: the pre-armed release must still
         // unfreeze the width (as a covered reflow) on the backstop clock.
@@ -290,9 +269,9 @@ final class SidebarSlideContractTests: XCTestCase {
     // MARK: - Rapid re-toggle
 
     func testRapidReToggleCancelsThePendingRelease() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled)
         let root = makeRoot()
-        var held: [(UIImage?) -> Void] = []
+        var held: [(NSImage?) -> Void] = []
         root.sidebarSnapshotterForTesting = { done in held.append(done) }
         root.sidebarPaintGateForTesting = { ready in
             DispatchQueue.main.async { ready() }
@@ -313,8 +292,8 @@ final class SidebarSlideContractTests: XCTestCase {
                       "slide 2 freezes the surface for its own motion")
 
         // The hostage answers LATE, while slide 2 is still mid-flight: the
-        // canceled settle must discard it — releasing here would unfreeze
-        // the surface mid-slide, exactly the flicker the freeze prevents.
+        // canceled settle must discard it. Releasing here would unfreeze the
+        // surface mid-slide, exactly the flicker the freeze prevents.
         held[0](nil)
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
         XCTAssertTrue(root.editorForTesting.isContentWidthFrozenForTesting,
@@ -323,9 +302,30 @@ final class SidebarSlideContractTests: XCTestCase {
         pumpUntilSettled(root)
         XCTAssertFalse(root.isSidebarTransitionInFlightForTesting)
         XCTAssertFalse(root.editorForTesting.isContentWidthFrozenForTesting)
+        XCTAssertFalse(root.isSidebarVisible)
         // cancel released slide 1's freeze once, slide 2's settle released
         // its own once; the stale answer released nothing.
         XCTAssertEqual(root.editorForTesting.reflowCountForTesting, reflowsBefore + 2,
                        "the cancel releases slide 1 once; slide 2 settles once; nothing else may release")
+    }
+
+    // MARK: - The divider drag
+
+    /// Dragging the divider resizes the column live and persists the width on
+    /// release, within the resizable range.
+    func testDraggingTheDividerPersistsTheWidth() throws {
+        let root = makeShownRoot()
+        XCTAssertFalse(root.sidebarResizeGripIsHiddenForTesting, "the grip shows with the Library")
+        XCTAssertEqual(root.sidebarResizeGripFrameForTesting.midX, Self.pinnedSidebarWidth, accuracy: 1,
+                       "the grip straddles the divider")
+        root.resizeSidebarForTesting(to: 340)
+        XCTAssertEqual(root.chromeLayout(for: shownState).libraryPanel?.width ?? -1, 340, accuracy: 1)
+        XCTAssertEqual(Preferences.sidebarWidth, 340, accuracy: 1)
+        root.resizeSidebarForTesting(to: 10)
+        XCTAssertEqual(Preferences.sidebarWidth, Preferences.sidebarWidthRange.lowerBound, accuracy: 1,
+                       "the drag clamps to the range")
+        root.applyTransitionForTesting(.sidebar(false))
+        pumpUntilSettled(root)
+        XCTAssertTrue(root.sidebarResizeGripIsHiddenForTesting, "no Library, no grip")
     }
 }

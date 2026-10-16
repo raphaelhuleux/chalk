@@ -24,15 +24,15 @@ final class TabLabelFontTests: XCTestCase {
     private let size = ChalkMetrics.tabFontSize
 
     func testTheObliqueFontKeepsTheSizeItWasAskedFor() {
-        let oblique = UIFont.chalkMono(size: size, weight: .regular, oblique: true)
+        let oblique = NSFont.chalkMono(size: size, weight: .regular, oblique: true)
 
         XCTAssertEqual(oblique.pointSize, size, accuracy: 0.01,
                        "the slant matrix swallowed the point size — labels render invisibly small")
     }
 
     func testTheObliqueFontKeepsTheSizeAtEveryWeightTheStripUses() {
-        for weight in [UIFont.Weight.regular, .medium] {
-            let oblique = UIFont.chalkMono(size: size, weight: weight, oblique: true)
+        for weight in [NSFont.Weight.regular, .medium] {
+            let oblique = NSFont.chalkMono(size: size, weight: weight, oblique: true)
             XCTAssertEqual(oblique.pointSize, size, accuracy: 0.01,
                            "weight \(weight.rawValue): slanted font lost its size")
         }
@@ -43,8 +43,8 @@ final class TabLabelFontTests: XCTestCase {
         // this width, so a font that measures near zero produces a chip with
         // no room for its own label — the 2026-08-18 failure, stated as
         // geometry rather than as a point size.
-        let upright = UIFont.chalkMono(size: size, weight: .regular)
-        let oblique = UIFont.chalkMono(size: size, weight: .regular, oblique: true)
+        let upright = NSFont.chalkMono(size: size, weight: .regular)
+        let oblique = NSFont.chalkMono(size: size, weight: .regular, oblique: true)
         let sample = "0_introduction.tex"
 
         let uprightWidth = (sample as NSString)
@@ -62,8 +62,18 @@ final class TabLabelFontTests: XCTestCase {
     /// PostScript name is `IBMPlexMono-Regular`. Whatever the lookup resolves
     /// to, the result has to be MONOSPACED, or the two-run labels and the
     /// chip-width arithmetic are computed against a proportional face.
+    /// The bundled face, found: `ATSApplicationFontsPath` in the Info.plist
+    /// registers the fonts beside the editor bundle, and a wrong path falls
+    /// back silently to the system mono.
+    func testTheStripFontIsTheBundledPlexMono() {
+        for weight in [NSFont.Weight.regular, .medium, .semibold] {
+            XCTAssertEqual(NSFont.chalkMono(size: size, weight: weight).familyName, "IBM Plex Mono",
+                           "weight \(weight.rawValue) fell back to the system mono")
+        }
+    }
+
     func testTheStripFontIsMonospacedWhateverTheLookupResolvesTo() {
-        let font = UIFont.chalkMono(size: size, weight: .regular)
+        let font = NSFont.chalkMono(size: size, weight: .regular)
         let narrow = ("iiiiiiiiii" as NSString).size(withAttributes: [.font: font]).width
         let wide = ("mmmmmmmmmm" as NSString).size(withAttributes: [.font: font]).width
 
@@ -73,13 +83,13 @@ final class TabLabelFontTests: XCTestCase {
 
     // MARK: - The oblique face is really slanted (no italic file is bundled)
 
-    /// Read through CoreText, NOT `UIFont.fontDescriptor.matrix`: UIFont
+    /// Read through CoreText, NOT `NSFont.fontDescriptor.matrix`: NSFont
     /// rebuilds its descriptor from name+size and reports an identity matrix
     /// even when the glyphs are genuinely sheared. CTFontGetMatrix is the only
     /// accessor that sees the transform.
     func testObliqueMonoIsShearedAtTheSameSizeAsUpright() {
-        let upright = UIFont.chalkMono(size: 13, weight: .medium)
-        let slanted = UIFont.chalkMono(size: 13, weight: .medium, oblique: true)
+        let upright = NSFont.chalkMono(size: 13, weight: .medium)
+        let slanted = NSFont.chalkMono(size: 13, weight: .medium, oblique: true)
         XCTAssertEqual(slanted.pointSize, upright.pointSize, accuracy: 0.01,
                        "size 0 must keep the descriptor's size — passing it alongside a matrix double-applies the scale")
         XCTAssertEqual(CTFontGetMatrix(slanted as CTFont).c, ChalkMetrics.obliqueSlant,

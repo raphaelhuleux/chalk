@@ -1,11 +1,11 @@
-import UIKit
+import AppKit
 import ChalkKit
 
 /// The swap seam between the native shell and the editor engine, so the shell never touches
 /// `WKWebView`. It mirrors `HostPort`: host-to-editor messages are methods, the rest delegate calls.
 protocol EditorSurface: AnyObject {
     /// The view to embed in the editor container.
-    var view: UIView { get }
+    var view: NSView { get }
     var delegate: EditorSurfaceDelegate? { get set }
 
     // Host to editor. `theme-colors` is absent: the native shell themes through `data-theme` and
@@ -27,7 +27,7 @@ protocol EditorSurface: AnyObject {
     func focusEditor()
 
     /// Release the keyboard, including the page's DOM focus: without it WebKit re-asserts first
-    /// responder after `endEditing(true)` and an overlay's text field loses the grab.
+    /// responder after the overlay takes it and the overlay's text field loses the grab.
     func blurEditor()
 
     /// Outline and cursor line, pulled when the palette opens. Not a HostPort message.
@@ -36,6 +36,12 @@ protocol EditorSurface: AnyObject {
 
     /// Move the cursor to a 1-based line, scroll it toward the viewport top, and focus the editor.
     func revealLine(_ line: Int)
+    /// A bitmap of what the surface shows right now, for the tab switch's cross-fade; nil when
+    /// nothing is up. Not a HostPort message.
+    func captureSnapshot(_ completion: @escaping (NSImage?) -> Void)
+    /// Calls back once the page has painted twice (two animation frames): the gate a covered
+    /// transition waits on before lifting its cover. A fixed delay would race the async repaint.
+    func afterNextPaint(_ completion: @escaping () -> Void)
 
     /// Live, debounced outline pushes to `onOutline` for the persistent panel. Off installs no
     /// listener, so keystrokes pay nothing.

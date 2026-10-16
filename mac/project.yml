@@ -3,8 +3,6 @@ name: Chalk
 options:
   bundleIdPrefix: com.huleux
   createIntermediateGroups: true
-  deploymentTarget:
-    iOS: "17.0"
 
 packages:
   ChalkKit:
@@ -29,8 +27,8 @@ settings:
 targets:
   Chalk:
     type: application
-    platform: iOS
-    deploymentTarget: "17.0"
+    platform: macOS
+    deploymentTarget: "14.0"
     sources:
       - path: Chalk
         excludes:
@@ -52,19 +50,6 @@ targets:
     dependencies:
       - package: ChalkKit
         product: ChalkKit
-      # AppKit glue: a macOS bundle the app loads at
-      # runtime to reach NSWindow chrome UIKit doesn't expose (transparent
-      # titlebar). Apple-documented mechanism for Catalyst apps.
-      - target: ChalkAppKitGlue
-        embed: true
-        codeSign: true
-        platformFilter: macOS
-        # Contents/PlugIns, not Resources. Executable code in Resources is not
-        # traversed by `codesign --verify --deep`, so a broken nested signature
-        # goes unnoticed today and fails notarization later. SceneDelegate
-        # already probes builtInPlugInsURL first, so no Swift changes.
-        copy:
-          destination: plugins
     scheme:
       testTargets:
         - ChalkTests
@@ -79,31 +64,15 @@ targets:
         # Only HTTPS/system crypto: exempt, and answering here skips the
         # per-build export-compliance prompt in App Store Connect.
         ITSAppUsesNonExemptEncryption: false
+        NSPrincipalClass: NSApplication
         # The editor face (design spec --font-editor), bundled from
-        # Resources/fonts (XcodeGen flattens them into the bundle root).
-        UIAppFonts:
-          - IBMPlexMono-Regular.ttf
-          - IBMPlexMono-Medium.ttf
-          - IBMPlexMono-SemiBold.ttf
-        UIApplicationSceneManifest:
-          # Multi-window: File > New Window. Each window holds its own tabs and its own folders (WindowLocations).
-          UIApplicationSupportsMultipleScenes: true
-          UISceneConfigurations:
-            UIWindowSceneSessionRoleApplication:
-              - UISceneConfigurationName: Default Configuration
-                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
-        # Scene state restoration (window + tab sets survive relaunch) and the
-        # deliberate "fresh window" marker from File > New Window.
-        NSUserActivityTypes:
-          - com.huleux.chalk.window
-          - com.huleux.chalk.newWindow
-          # Settings is its own resizable window.
-          - com.huleux.chalk.settings
+        # Resources/fonts; XcodeGen flattens them into the bundle's Resources root.
+        ATSApplicationFontsPath: "."
         # Let Finder hand .tex/.md/.qmd files to Chalk. Without
         # these declarations LaunchServices won't route a double-clicked file to
         # us even if the user picks Chalk in "Open With". The exported UTIs below
         # own the extensions (all plain-text); the doc types claim them as an
-        # editor. SceneDelegate consumes the resulting openURLContexts.
+        # editor. AppDelegate consumes the resulting application(_:open:).
         CFBundleDocumentTypes: &chalkDocumentTypes
           - CFBundleTypeName: Markdown Document
             CFBundleTypeRole: Editor
@@ -159,20 +128,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # Mac only, through Catalyst. An iOS target is the only way to build
-        # Catalyst with the iPad idiom (XcodeGen's `supportedDestinations:
-        # [macCatalyst]` generates this same iOS-plus-Catalyst target), so the
-        # other "designed for iPad" destinations are switched off by hand.
-        SUPPORTS_MACCATALYST: true
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
-        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
-        # The iPad idiom is what Catalyst scales to 77%; every ChalkMetrics
-        # token assumes it, so do not switch to "Optimize for Mac".
-        TARGETED_DEVICE_FAMILY: "2"
-        MACOSX_DEPLOYMENT_TARGET: "14.0"
         CODE_SIGN_STYLE: Automatic
         # App Sandbox.
-        CODE_SIGN_ENTITLEMENTS: Chalk/Chalk-macCatalyst.entitlements
+        CODE_SIGN_ENTITLEMENTS: Chalk/Chalk-mac.entitlements
         ENABLE_USER_SCRIPT_SANDBOXING: false # the pre-build phase runs node over web/ and node_modules/
       configs:
         # Debug builds, and so the ChalkTests host, get their own preferences
@@ -181,8 +139,7 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.debug
     preBuildScripts:
-      - &buildWebEditorBundle
-        name: Build web editor bundle
+      - name: Build web editor bundle
         # Keeps the in-app editor current. Cheap when nothing changed:
         # build.mjs bundles in memory and rewrites only files whose bytes
         # differ, so Resources/editor keeps its mtimes and Xcode recopies
@@ -219,74 +176,13 @@ targets:
           fi
         basedOnDependencyAnalysis: false
 
-  # Real AppKit inside the Catalyst app (see the Chalk target's dependency).
-  # Kept tiny: window-chrome styling only.
-  ChalkAppKitGlue:
-    type: bundle
-    platform: macOS
-    deploymentTarget: "14.0"
-    sources:
-      - ChalkAppKitGlue
-      # Compiled IN, not linked: the glue is a plugin bundle loaded inside an
-      # app that already links ChalkKit, and a second copy of the library in
-      # the same process is a hazard this bundle cannot afford (a glue that
-      # fails to load falls back silently to the UIKit strip). Sharing the one
-      # source file gives the strip the same tested arithmetic without the
-      # duplicate-module risk — and is how the next shared policy should come
-      # over too, instead of being hand-mirrored like StripMetrics.
-      - ChalkKit/Sources/ChalkKit/TabStripFit.swift
-      # Same arrangement, taken up on the invitation above: the titlebar
-      # band's paint rect is a decision that has flipped more than once, and
-      # nothing could test it while it lived inside an AppKit draw call.
-      - ChalkKit/Sources/ChalkKit/TitlebarBandGeometry.swift
-      # And again (strip-attach P0, 2026-08-24): the attach-eligibility
-      # predicate, so the window classes it accepts and refuses are pinned by
-      # ChalkKit unit tests instead of living inline in an AppKit loop.
-      - ChalkKit/Sources/ChalkKit/TitlebarAttachPolicy.swift
-      # Once more (the full-screen second tab row, 2026-08-24): chrome
-      # visibility and the chip fade both write the strip's isHidden, and each
-      # direction has produced a bug by writing it alone. They resolve here.
-      - ChalkKit/Sources/ChalkKit/StripPresentationPolicy.swift
-      # The palette wash, shared with the app target so the two toolkits paint
-      # the same colour from one definition rather than a hand-typed mirror.
-      - ChalkKit/Sources/ChalkKit/ChromeScrim.swift
-      # The colour themes, so the titlebar strip paints the app's theme from
-      # the same palette the UIKit chrome and the page are checked against.
-      - ChalkKit/Sources/ChalkKit/ChalkTheme.swift
-      # The bridge's whole vocabulary (2026-09-10): notification names,
-      # userInfo keys, the tab row's anatomy rules, its metrics and its
-      # colours. Each of those used to exist twice — once here as StripPolicy
-      # / StripMetrics / StripColor and once in the app target — and the
-      # metrics half needed a regex script (scripts/check-strip-parity.mjs,
-      # now deleted) to notice when the two drifted. Compiled in, there is
-      # one declaration and nothing to police.
-      - ChalkKit/Sources/ChalkKit/TabStripBridge.swift
-      # Same move for the routing predicates the strip and the glue used to
-      # mirror by hand: which message a strip accepts, when it re-solicits
-      # its own state, and the two zero-width title prefixes.
-      - ChalkKit/Sources/ChalkKit/WindowRouting.swift
-      # The shell-command names (2026-09-10): the glue's ⌘P monitor posts one
-      # of them and RootSplitViewController compares it, so a hand-mirrored
-      # literal here would silently kill ⌘P on Mac the day a raw value is
-      # renamed. Foundation-only by design, so compiling it in costs nothing.
-      - ChalkKit/Sources/ChalkKit/ShellCommand.swift
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.appkitglue
-        GENERATE_INFOPLIST_FILE: true
-        CODE_SIGN_STYLE: Automatic
-        # The glue ships inside Chalk.app and must not be installed beside it.
-        # Its absence is the classic cause of an archive that exports as a
-        # Generic Xcode Archive with no Mac app inside.
-        SKIP_INSTALL: true
-
   # Host-based unit tests for app-target logic that can't live in pure-Foundation
-  # ChalkKit (DocumentController etc. import UIKit). Injects fakes via the
-  # EditorSurface protocol, so no UI automation is needed.
+  # ChalkKit (the shell imports AppKit). Injects fakes via the EditorSurface
+  # protocol, so no UI automation is needed.
   ChalkTests:
     type: bundle.unit-test
-    platform: iOS
-    deploymentTarget: "17.0"
+    platform: macOS
+    deploymentTarget: "14.0"
     sources:
       - ChalkTests
     dependencies:
@@ -294,78 +190,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.unittests
-        SUPPORTS_MACCATALYST: true
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
-        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
-        TARGETED_DEVICE_FAMILY: "2"
-        MACOSX_DEPLOYMENT_TARGET: "14.0" # match the app; else defaults to the SDK's macOS
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Chalk.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Chalk"
-        BUNDLE_LOADER: "$(TEST_HOST)"
-        GENERATE_INFOPLIST_FILE: true
-
-  # --- The AppKit shell (docs/specs/2026-10-15-appkit-shell-rewrite-plan.md) --
-  # Built beside the Catalyst app until parity; shares ChalkKit, the web
-  # bundle, the fonts, the icon and the UTIs. Bundle IDs carry a `.mac` suffix
-  # until cutover so the two apps never share a preferences domain.
-  ChalkMac:
-    type: application
-    platform: macOS
-    deploymentTarget: "14.0"
-    sources:
-      - path: ChalkMac
-      - path: Chalk/Assets.xcassets
-      - path: Chalk/PrivacyInfo.xcprivacy
-      - path: Chalk/Resources/fonts
-      - path: Chalk/Resources/editor
-        type: folder
-        buildPhase: resources
-        optional: true
-      - path: ../THIRD-PARTY-NOTICES
-        buildPhase: resources
-    dependencies:
-      - package: ChalkKit
-        product: ChalkKit
-    scheme:
-      testTargets:
-        - ChalkMacTests
-    info:
-      path: ChalkMac/Info.plist
-      properties:
-        CFBundleDisplayName: Chalk
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        CHALKGitCommit: $(CHALK_GIT_COMMIT)
-        LSApplicationCategoryType: public.app-category.productivity
-        ITSAppUsesNonExemptEncryption: false
-        NSPrincipalClass: NSApplication
-        # XcodeGen flattens Resources/fonts into the bundle's Resources root.
-        ATSApplicationFontsPath: "."
-        CFBundleDocumentTypes: *chalkDocumentTypes
-        UTExportedTypeDeclarations: *chalkExportedTypes
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.mac
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_ENTITLEMENTS: ChalkMac/Chalk-mac.entitlements
-        ENABLE_USER_SCRIPT_SANDBOXING: false
-      configs:
-        Debug:
-          PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.mac.debug
-    preBuildScripts:
-      - *buildWebEditorBundle
-
-  ChalkMacTests:
-    type: bundle.unit-test
-    platform: macOS
-    deploymentTarget: "14.0"
-    sources:
-      - ChalkMacTests
-    dependencies:
-      - target: ChalkMac
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.huleux.chalk.mac.unittests
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ChalkMac.app/Contents/MacOS/ChalkMac"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Chalk.app/Contents/MacOS/Chalk"
         BUNDLE_LOADER: "$(TEST_HOST)"
         GENERATE_INFOPLIST_FILE: true

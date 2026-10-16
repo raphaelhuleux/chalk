@@ -29,22 +29,6 @@ final class SidebarContextMenuTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    /// Depth-first titles, so inline sections flatten the way the menu reads.
-    private func titles(_ menu: UIMenu) -> [String] {
-        menu.children.flatMap { element -> [String] in
-            if let submenu = element as? UIMenu { return titles(submenu) }
-            return [(element as? UIAction)?.title].compactMap { $0 }
-        }
-    }
-
-    private func action(_ menu: UIMenu, titled title: String) -> UIAction? {
-        for element in menu.children {
-            if let action = element as? UIAction, action.title == title { return action }
-            if let submenu = element as? UIMenu, let hit = self.action(submenu, titled: title) { return hit }
-        }
-        return nil
-    }
-
     func testFileRowMenu() throws {
         let node = FileNode(url: root.appendingPathComponent("draft.tex"),
                             name: "draft.tex", isDirectory: false)
@@ -68,11 +52,21 @@ final class SidebarContextMenuTests: XCTestCase {
         ], "a folder is not a document: no Open in New Window")
     }
 
+    /// Separators keep the destructive item apart, as the design draws it.
+    func testGroupsAreSeparated() throws {
+        let node = FileNode(url: root.appendingPathComponent("draft.tex"),
+                            name: "draft.tex", isDirectory: false)
+        let menu = sidebar.rowMenu(for: node)
+        XCTAssertEqual(menu.items.filter(\.isSeparatorItem).count, 3, "four groups, three separators")
+        XCTAssertTrue(menu.items.last?.title == "Move to Trash")
+    }
+
     func testMoveToTrashIsDestructive() throws {
         let node = FileNode(url: root.appendingPathComponent("draft.tex"),
                             name: "draft.tex", isDirectory: false)
         let menu = sidebar.rowMenu(for: node)
-        XCTAssertTrue(try XCTUnwrap(action(menu, titled: "Move to Trash")).attributes.contains(.destructive))
+        XCTAssertEqual(try XCTUnwrap(item(in: menu, titled: "Move to Trash")).tag,
+                       SidebarViewController.destructiveTag)
     }
 
     /// The menu is the only pointer route into rename (round 3, 2026-08-18):
@@ -81,7 +75,7 @@ final class SidebarContextMenuTests: XCTestCase {
         let node = FileNode(url: root.appendingPathComponent("draft.tex"),
                             name: "draft.tex", isDirectory: false)
         let menu = sidebar.rowMenu(for: node)
-        try XCTUnwrap(action(menu, titled: "Rename")).performWithSender(nil, target: nil)
+        perform(try XCTUnwrap(item(in: menu, titled: "Rename")))
         XCTAssertTrue(sidebar.isRenamingForTesting)
     }
 
@@ -89,7 +83,7 @@ final class SidebarContextMenuTests: XCTestCase {
         let node = FileNode(url: root.appendingPathComponent("Papers"),
                             name: "Papers", isDirectory: true)
         let menu = sidebar.rowMenu(for: node)
-        try XCTUnwrap(action(menu, titled: "Rename")).performWithSender(nil, target: nil)
+        perform(try XCTUnwrap(item(in: menu, titled: "Rename")))
         XCTAssertTrue(sidebar.isRenamingForTesting, "folders rename through the menu too")
     }
 
@@ -100,12 +94,23 @@ final class SidebarContextMenuTests: XCTestCase {
         sidebar.onOpenCreatedFile = { created.append($0) }
         let node = FileNode(url: nested, name: "nested.md", isDirectory: false)
         let menu = sidebar.rowMenu(for: node)
-        // New File writes off the main thread (2026-08-24 sidebar freeze), so
-        // `onOpenCreatedFile` reports once the work lands.
-        let newFile = try XCTUnwrap(action(menu, titled: "New File"))
-        awaitFileWork(on: sidebar) { newFile.performWithSender(nil, target: nil) }
+        // New File writes off the main thread, so `onOpenCreatedFile` reports
+        // once the work lands.
+        let newFile = try XCTUnwrap(item(in: menu, titled: "New File"))
+        awaitFileWork(on: sidebar) { perform(newFile) }
         XCTAssertEqual(created.first?.deletingLastPathComponent().standardizedFileURL.path,
                        root.appendingPathComponent("Papers").standardizedFileURL.path,
                        "New File beside a file lands in that file's folder, not the Location root")
+    }
+
+    /// The header's menu: create actions, then the destructive removal; a
+    /// Location that lost access offers the re-grant instead.
+    func testHeaderMenu() throws {
+        let live = sidebar.headerMenu(for: Location(id: "test", name: "Root", url: root))
+        XCTAssertEqual(titles(live), ["New File", "New Folder", "Remove from Window"])
+        let dead = sidebar.headerMenu(for: Location(id: "dead", name: "Gone", url: root, needsReauthorization: true))
+        XCTAssertEqual(titles(dead), ["Grant Access\u{2026}", "Remove from Window"])
+        XCTAssertEqual(try XCTUnwrap(item(in: live, titled: "Remove from Window")).tag,
+                       SidebarViewController.destructiveTag)
     }
 }

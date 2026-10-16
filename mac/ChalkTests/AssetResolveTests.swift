@@ -1,5 +1,5 @@
 import XCTest
-import UIKit
+import AppKit
 import ChalkKit
 @testable import Chalk
 
@@ -35,21 +35,29 @@ final class AssetResolveTests: XCTestCase {
     // MARK: - Fixtures
 
     private func pngBytes(width: Int = 4, height: Int = 4) -> Data {
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height))
-        let image = renderer.image { ctx in
-            UIColor.systemRed.setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        }
-        return image.pngData()!
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.systemRed.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])!
     }
 
     private func pdfBytes(width: CGFloat = 200, height: CGFloat = 100) -> Data {
-        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
-        return UIGraphicsPDFRenderer(bounds: bounds).pdfData { ctx in
-            ctx.beginPage()
-            UIColor.systemBlue.setFill()
-            ctx.fill(bounds)
-        }
+        var bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        let data = NSMutableData()
+        let consumer = CGDataConsumer(data: data as CFMutableData)!
+        let context = CGContext(consumer: consumer, mediaBox: &bounds, nil)!
+        context.beginPDFPage(nil)
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(bounds)
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
     }
 
     @discardableResult
@@ -74,12 +82,12 @@ final class AssetResolveTests: XCTestCase {
         await controller.editor(surface, resolveAsset: src)
     }
 
-    /// Decode `data:image/...;base64,` back to a UIImage.
-    private func decodeImage(_ dataURL: String) -> UIImage? {
+    /// Decode `data:image/...;base64,` back to a bitmap, for its pixel size.
+    private func decodeImage(_ dataURL: String) -> NSBitmapImageRep? {
         guard let comma = dataURL.firstIndex(of: ",") else { return nil }
         guard let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...]))
         else { return nil }
-        return UIImage(data: data)
+        return NSBitmapImageRep(data: data)
     }
 
     // MARK: - Markdown
@@ -143,7 +151,7 @@ final class AssetResolveTests: XCTestCase {
         // Distinguish the rasterized pdf (200x100 fixture, blue) from the raw
         // 4x4 red png: the decoded size must reflect the pdf page's 2:1 ratio.
         let image = try XCTUnwrap(decodeImage(result))
-        XCTAssertEqual(image.size.width / image.size.height, 2.0, accuracy: 0.05)
+        XCTAssertEqual(Double(image.pixelsWide) / Double(image.pixelsHigh), 2.0, accuracy: 0.05)
     }
 
     func testTexHonorsGraphicsPath() async throws {
@@ -250,9 +258,9 @@ final class AssetResolveTests: XCTestCase {
         let result = try XCTUnwrap(maybe)
         XCTAssertTrue(result.hasPrefix("data:image/png;base64,"))
         let image = try XCTUnwrap(decodeImage(result))
-        let longEdge = max(image.size.width * image.scale, image.size.height * image.scale)
+        let longEdge = max(image.pixelsWide, image.pixelsHigh)
         XCTAssertGreaterThan(longEdge, 0)
-        XCTAssertLessThanOrEqual(longEdge, CGFloat(AssetLoader.maxPDFPixelDimension),
+        XCTAssertLessThanOrEqual(longEdge, AssetLoader.maxPDFPixelDimension,
                                  "rasterized pdfs must stay within the pixel bound")
     }
 

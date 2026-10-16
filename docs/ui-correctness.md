@@ -21,7 +21,7 @@ introduced it.
 
 | Command | Covers | Time |
 | --- | --- | --- |
-| `xcodebuild test -project mac/Chalk.xcodeproj -scheme ChalkMac -destination 'platform=macOS' -only-testing:ChalkMacTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 32 cells | seconds after build |
+| `xcodebuild test -project mac/Chalk.xcodeproj -scheme Chalk -destination 'platform=macOS' -only-testing:ChalkTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 32 cells | seconds after build |
 | `node scripts/generate-ui-invariants.mjs --check` | the docs match the catalogue | instant |
 | `./scripts/check.sh` | both of the above, plus everything else | minutes |
 
@@ -149,13 +149,6 @@ That arithmetic is now the one pure `BandLayout.resolve`, applied by `RootSplitV
 
 Be honest about the edges; a system trusted past its limits is worse than none.
 
-- **The Catalyst glue's strip rules.** The four `strip*` rules
-  (`stripLeadingTracksTheDivider`, `stripVisibilityMatchesTheState`,
-  `stripFadeMatchesTheState`, `bandAndStripNeverBothCarryTheTabs`) describe
-  the contract between the Catalyst app and its `ChalkAppKitGlue` bundle. The
-  AppKit shell draws its tab strip in the content view, so the band rules see
-  it directly and `macStrip` is nil; those four rules are never evidence on
-  the AppKit shell and retire with the glue at cutover.
 - **Anything below the chrome.** Math, tables, code blocks and the writing
   surface are covered by the jsdom suite in `packages/editor-core/test` and by
   the browser harnesses, which all live in one tree beside the snapshots:
@@ -182,7 +175,7 @@ Be honest about the edges; a system trusted past its limits is worse than none.
 | `mac/ChalkKit/Sources/ChalkKit/UIState.swift` | the 32-cell matrix and its ids |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeLayout.swift` | the geometry, as a value |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeInvariants.swift` | the rules |
-| `mac/ChalkMacTests/ChromeInvariantMatrixTests.swift` | drives the matrix, asserts the rules |
-| `mac/ChalkMacTests/ChromeMatrixHost.swift` | hosts a root in a window, seeds a Library, settles the layout |
-| `mac/ChalkMac/App/RootSplitViewController.swift` | `chromeLayout(for:)`, in its `#if DEBUG` block |
+| `mac/ChalkTests/ChromeInvariantMatrixTests.swift` | drives the matrix, asserts the rules |
+| `mac/ChalkTests/ChromeMatrixHost.swift` | hosts a root in a window, seeds a Library, settles the layout |
+| `mac/Chalk/App/RootSplitViewController.swift` | `chromeLayout(for:)`, in its `#if DEBUG` block |
 | `scripts/generate-ui-invariants.mjs` | renders the catalogue; `--check` fails on drift |

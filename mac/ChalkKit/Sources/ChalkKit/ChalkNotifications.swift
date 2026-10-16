@@ -21,25 +21,3 @@ public enum ChalkNotificationKey {
     public static let fromURL = "fromURL"
     public static let toURL = "toURL"
 }
-
-/// Activity and restoration type identifiers. The Catalyst shell carries them
-/// on `NSUserActivity`; the AppKit shell's `NSWindowRestoration` state uses the
-/// same `windowType` and `stateKey` so a `WindowSession` reads the same either way.
-public enum ChalkActivity {
-    /// Window-restoration snapshot (a `WindowSession` in userInfo["state"]).
-    public static let windowType = "com.huleux.chalk.window"
-    /// File > New Window: a deliberately fresh window (empty, no Welcome).
-    public static let newWindowType = "com.huleux.chalk.newWindow"
-    public static let stateKey = "state"
-    /// The file a New Window request should open, if any (a file URL). Absent
-    /// for File > New Window, present for the sidebar's "Open in New Window".
-    public static let urlKey = "url"
-    /// A folder the new window opens on (bookmark data, minted while the sender held its scope), for a
-    /// folder handed to the app from outside (`ExternalOpenRouter`).
-    public static let folderBookmarkKey = "folderBookmark"
-    /// Marks the Settings scene on Mac, where Settings is a real resizable
-    /// window rather than a sheet. Deliberately absent from
-    /// `stateRestorationActivity`: a Settings window must not come back on
-    /// relaunch.
-    public static let settingsType = "com.huleux.chalk.settings"
-}

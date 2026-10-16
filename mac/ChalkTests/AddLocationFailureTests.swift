@@ -6,7 +6,7 @@ import ChalkKit
 /// silently: the picker closed and nothing appeared. The user is told.
 @MainActor
 final class AddLocationFailureTests: XCTestCase {
-    private var window: UIWindow?
+    private var window: NSWindow?
     private var folder: URL!
 
     override func setUpWithError() throws {
@@ -17,8 +17,9 @@ final class AddLocationFailureTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        window?.rootViewController?.presentedViewController?.dismiss(animated: false)
+        if let window, let sheet = window.attachedSheet { window.endSheet(sheet) }
         window?.isHidden = true
+        window?.rootViewController = nil
         window = nil
         try? FileManager.default.removeItem(at: folder)
         try super.tearDownWithError()
@@ -33,16 +34,17 @@ final class AddLocationFailureTests: XCTestCase {
         let root = RootSplitViewController(
             locationStore: LocationStore(bookmarks: bookmarks), initialContent: .openEmpty)
         root.motionPolicyForTesting = .instant
-        let window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1180, height: 820))
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1180, height: 820))
         window.rootViewController = root
         window.isHidden = false
         self.window = window
         root.applyTransitionForTesting(.sidebar(true))
-        root.view.layoutIfNeeded()
+        root.view.layoutSubtreeIfNeeded()
 
         root.sidebarForTesting.onAddLocation?(folder)
 
-        let alert = try XCTUnwrap(root.sidebarForTesting.presentedViewController as? UIAlertController)
-        XCTAssertTrue(alert.message?.contains(folder.lastPathComponent) == true)
+        let message = try XCTUnwrap(root.sidebarForTesting.lastNoticeMessageForTesting)
+        XCTAssertTrue(message.contains(folder.lastPathComponent))
+        XCTAssertNotNil(window.attachedSheet, "the notice is a sheet on the window")
     }
 }

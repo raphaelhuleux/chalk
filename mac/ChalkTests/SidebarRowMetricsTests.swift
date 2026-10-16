@@ -3,29 +3,21 @@ import ChalkKit
 @testable import Chalk
 
 /// Rigid sidebar scrolling (owner report 2026-08-18: "items stretch around,
-/// with a weird animation I didn't ask for"). Nothing observes the scroll —
-/// the motion came from UIKit defaults leaking through the row builder:
+/// with a weird animation I didn't ask for"). On Catalyst the motion came from
+/// list defaults leaking through the row builder: estimated row heights that
+/// corrected on screen, cell content filled in a later pass, and a fresh
+/// chevron view per update that read as an accessory swap.
 ///
-/// - the list layout sizes items `.estimated(44)` while real rows are ~33pt,
-///   so every row entering the viewport corrected its own height and the
-///   scroll offset was compensated under it;
-/// - the whole cell body lived in `configurationUpdateHandler`, which UIKit
-///   runs a layout pass LATE, so the first measurement happened on an empty
-///   cell and the correction landed on a row already on screen;
-/// - a fresh `UIImageView` chevron per update reads to UIKit as
-///   remove-old + insert-new, so even repainting the same folder row animated
-///   its accessory.
-///
-/// These four pin the invariants that keep the list rigid. Nothing else in the
-/// suite asserts row height, first-layout content, or accessory stability.
+/// These pin the invariants that keep the list rigid: every row is the token
+/// height, a cell is complete when it leaves the delegate, the rename row fits
+/// the same height, and a repaint reuses its chevron view.
 @MainActor
 final class SidebarRowMetricsTests: XCTestCase {
-    private var window: UIWindow!
-    private var host: UIViewController!
+    private var window: NSWindow!
     private var sidebar: SidebarViewController!
     private var root: URL!
 
-    private var collectionView: UICollectionView { sidebar.collectionViewForTesting }
+    private var outlineView: LibraryOutlineView { sidebar.outlineViewForTesting }
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -41,29 +33,12 @@ final class SidebarRowMetricsTests: XCTestCase {
         try "x".write(to: root.appendingPathComponent("index.md"), atomically: true, encoding: .utf8)
         try "x".write(to: root.appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
 
-        sidebar = SidebarViewController()
-        sidebar.locationsProvider = { [Location(id: "main", name: "Root", url: self.root)] }
-        host = UIViewController()
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first!
-        window = UIWindow(windowScene: scene)
-        window.rootViewController = host
-        window.isHidden = false
-        host.addChild(sidebar)
-        sidebar.view.translatesAutoresizingMaskIntoConstraints = true
-        sidebar.view.frame = CGRect(x: 0, y: 0, width: 320, height: 600)
-        host.view.addSubview(sidebar.view)
-        sidebar.didMove(toParent: host)
-        sidebar.reload()
-        window.layoutIfNeeded()
-        collectionView.layoutIfNeeded()
+        (sidebar, window) = makeHostedSidebar(locations: [Location(id: "main", name: "Root", url: root)])
     }
 
     override func tearDownWithError() throws {
-        window.isHidden = true
-        window.rootViewController = nil
+        dismantleHostedSidebar(window)
         window = nil
-        host = nil
         sidebar = nil
         try? FileManager.default.removeItem(at: root)
         try super.tearDownWithError()
@@ -80,74 +55,86 @@ final class SidebarRowMetricsTests: XCTestCase {
     // MARK: Height
 
     /// Rows must NOT self-size. Every one is the design token, so a row's
-    /// height never changes after it is laid out and the scroll offset is
-    /// never compensated mid-drag.
+    /// height never changes after it is laid out.
     func testEveryRowIsTheTokenHeight() throws {
-        let cells = collectionView.visibleCells
-        XCTAssertFalse(cells.isEmpty, "the fixture should render rows")
-        for cell in cells {
+        XCTAssertGreaterThan(outlineView.numberOfRows, 1, "the fixture should render rows")
+        for row in 0..<outlineView.numberOfRows where outlineView.item(atRow: row) is LibraryRowItem {
             XCTAssertEqual(
-                cell.bounds.height, ChalkMetrics.sidebarRowHeight, accuracy: 0.5,
-                "row heights must be pinned to the token, not self-sized from the 44pt estimate")
+                outlineView.rect(ofRow: row).height, ChalkMetrics.sidebarRowHeight, accuracy: 0.5,
+                "row \(row) must be pinned to the token, not self-sized")
         }
     }
 
-    /// The clamp must not be tighter than the inline-rename row, which swaps a
-    /// text field into the same cell.
+    /// The first header sits on the chrome floor with 8pt of air; the ones
+    /// between areas carry the 22pt block.
+    func testHeadersCarryTheirMargins() throws {
+        let first = try XCTUnwrap(sidebar.headerRectForTesting(section: 0))
+        XCTAssertEqual(first.height, LibraryHeaderCellView.height(isFirst: true, needsReauthorization: false))
+        XCTAssertLessThan(LibraryHeaderCellView.height(isFirst: true, needsReauthorization: false),
+                          LibraryHeaderCellView.height(isFirst: false, needsReauthorization: false))
+        XCTAssertGreaterThan(LibraryHeaderCellView.height(isFirst: false, needsReauthorization: true),
+                             LibraryHeaderCellView.height(isFirst: false, needsReauthorization: false),
+                             "the no-access line adds a second line")
+    }
+
+    /// The clamp must not be tighter than the inline-rename row, which turns
+    /// the same label into a field.
     func testRenameRowFitsTheFixedHeight() throws {
         let file = try fileNode()
-        let content = SidebarRenameConfiguration(
-            node: file, symbol: "doc.text", onCommit: { _ in }, onCancel: {})
-        let view = content.makeContentView()
-        view.frame = CGRect(x: 0, y: 0, width: 320, height: ChalkMetrics.sidebarRowHeight)
-        let fitted = view.systemLayoutSizeFitting(
-            CGSize(width: 320, height: UIView.layoutFittingCompressedSize.height),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel)
+        let cell = try XCTUnwrap(sidebar.dequeuedCellForTesting(file))
+        cell.beginEditing(name: file.name, onCommit: { _ in true }, onCancel: {})
         XCTAssertLessThanOrEqual(
-            fitted.height, ChalkMetrics.sidebarRowHeight + 0.5,
+            cell.fittingSize.height, ChalkMetrics.sidebarRowHeight + 0.5,
             "the rename row must fit the pinned height or its constraints break")
     }
 
     // MARK: First layout
 
-    /// A cell arrives from the data source fully configured. When the content
-    /// was built only in `configurationUpdateHandler`, this cell came back with
-    /// an empty default configuration and filled in a layout pass later — the
-    /// deferred measurement that made rows resize on screen.
+    /// A cell leaves the delegate fully configured: name and glyph set, so the
+    /// first measurement is the real row.
     func testRowContentIsPopulatedOnDequeue() throws {
-        let indexPath = IndexPath(item: 0, section: 0)
-        let node = try XCTUnwrap(sidebar.nodeForTesting(at: indexPath))
-        let cell = try XCTUnwrap(sidebar.dequeuedCellForTesting(at: indexPath))
-        let content = try XCTUnwrap(
-            cell.contentConfiguration as? UIListContentConfiguration,
-            "the cell should carry a populated list content configuration straight out of the data source")
-        XCTAssertEqual(content.text, node.name)
-        XCTAssertNotNil(content.image, "the row glyph is part of the first measurement")
+        let node = try XCTUnwrap(sidebar.nodeForTesting(at: IndexPath(item: 0, section: 0)))
+        let cell = try XCTUnwrap(sidebar.dequeuedCellForTesting(node))
+        XCTAssertEqual(cell.label.stringValue, node.name)
+        XCTAssertNotNil(cell.icon.image, "the row glyph is part of the first measurement")
     }
 
     // MARK: Accessory stability
 
-    /// Repainting a folder row must reuse its chevron view. A new `UIImageView`
-    /// each time reads as an accessory removal plus insertion, which UIKit
-    /// animates on a visible cell.
+    /// Repainting a folder row must reuse its chevron view.
     func testRepaintingAFolderRowKeepsTheSameChevronView() throws {
         let folder = try folderNode()
-        let indexPath = try XCTUnwrap(sidebar.indexPathForTesting(folder))
-        let cell = try XCTUnwrap(
-            collectionView.cellForItem(at: indexPath) as? UICollectionViewListCell)
-
-        func chevron() throws -> UIView {
-            let accessory = try XCTUnwrap(cell.accessories.first, "a folder row carries a chevron")
-            var custom: UIView?
-            if case .customView(let view) = accessory.accessoryType { custom = view }
-            return try XCTUnwrap(custom, "the chevron should be a custom view accessory")
-        }
-
-        let first = try chevron()
+        let first = try XCTUnwrap(sidebar.chevronViewForTesting(folder), "a folder row carries a chevron")
+        XCTAssertFalse(first.isHidden)
         sidebar.repaintRows(for: [folder])
-        collectionView.layoutIfNeeded()
-        let second = try chevron()
+        outlineView.layoutSubtreeIfNeeded()
+        let second = try XCTUnwrap(sidebar.chevronViewForTesting(folder))
         XCTAssertTrue(first === second, "the chevron view must be reused across repaints")
+        let file = try fileNode()
+        XCTAssertTrue(try XCTUnwrap(sidebar.chevronViewForTesting(file)).isHidden, "files have no chevron")
+    }
+
+    /// Files indent past the folder rows' chevron slot, so their glyphs line
+    /// up; nested rows step in by one unit per level.
+    func testRowsIndentByKindAndLevel() throws {
+        let folder = try folderNode()
+        let file = try fileNode()
+        let folderCell = try XCTUnwrap(sidebar.cellForTesting(folder))
+        let fileCell = try XCTUnwrap(sidebar.cellForTesting(file))
+        outlineView.layoutSubtreeIfNeeded()
+        XCTAssertEqual(folderCell.frame.minX, 0, accuracy: 0.5, "the cell spans the row; it indents itself")
+        XCTAssertEqual(folderCell.frame.width, outlineView.bounds.width, accuracy: 0.5)
+        XCTAssertEqual(folderCell.chevron.frame.minX, LibraryCellView.folderLeading, accuracy: 0.5)
+        XCTAssertEqual(fileCell.icon.frame.minX, LibraryCellView.fileLeading, accuracy: 0.5)
+        XCTAssertEqual(folderCell.icon.frame.minX, fileCell.icon.frame.minX, accuracy: 0.5,
+                       "a folder's glyph lines up with a file's")
+
+        sidebar.activate(folder)
+        settleSidebar(sidebar, window)
+        let nested = try XCTUnwrap(sidebar.rowsForTesting(inSection: 0).first { $0.name == "draft.tex" })
+        let nestedCell = try XCTUnwrap(sidebar.cellForTesting(nested))
+        outlineView.layoutSubtreeIfNeeded()
+        XCTAssertEqual(nestedCell.icon.frame.minX, LibraryCellView.fileLeading + LibraryCellView.indentUnit,
+                       accuracy: 0.5, "one level in, one unit over")
     }
 }

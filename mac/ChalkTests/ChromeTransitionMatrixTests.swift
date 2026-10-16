@@ -6,7 +6,7 @@ import ChalkKit
 /// states: after any sequence of user-level toggles, the settled layout must
 /// be field-for-field the layout a FRESH root shows for that state. The
 /// invariant matrix proves each state is right in isolation; this suite
-/// proves no path BETWEEN states leaves hysteresis behind — a stale inset, a
+/// proves no path BETWEEN states leaves hysteresis behind: a stale inset, a
 /// parked column, a chrome element that only some history restores.
 ///
 /// Every step runs through the REAL entry points (`applyTransitionForTesting`
@@ -37,9 +37,9 @@ final class ChromeTransitionMatrixTests: XCTestCase {
 
     // MARK: - Fresh-state oracle
 
-    /// One fresh, settled layout per state, computed once per run.
-    /// Keyed by state id; safe to cache across tests because the sidebar
-    /// width is pinned to the same value in every setUp.
+    /// One fresh, settled layout per state, computed once per run. Keyed by
+    /// state id; safe to cache across tests because the sidebar width is
+    /// pinned to the same value in every setUp.
     private static var freshLayouts: [String: ChromeLayout] = [:]
 
     private func freshLayout(for state: UIState) -> ChromeLayout {
@@ -49,11 +49,9 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         // The oracle gets the SAME settle as the paths it will be compared
         // against, and a stricter one than the resting-state suites need: this
         // layout is cached for the whole run, so a cell captured one turn early
-        // is not an intermittent, it is every later comparison against that
-        // cell. On Mac the full-screen chip raise is exactly that late turn —
-        // the oracle held the chip at y=67 while every path reached y=7.
+        // is every later comparison against that cell.
         host.settleToFixedPoint(root, state: state, budget: 2.0, stableTurns: 3) { root in
-            (root.displayMode != .secondaryOnly) == (state.sidebar == .shown)
+            root.isSidebarVisible == (state.sidebar == .shown)
                 && root.isOutlinePanelVisibleForTesting == (state.outline == .shown)
         }
         let layout = root.chromeLayout(for: state)
@@ -62,10 +60,8 @@ final class ChromeTransitionMatrixTests: XCTestCase {
     }
 
     /// Fill the whole cache BEFORE hosting a root under test: building a
-    /// fresh layout re-points `window.rootViewController`, which would evict
-    /// the root a path is being driven on and collapse its safe areas — every
-    /// later comparison would then measure an unhosted controller, not a
-    /// transition.
+    /// fresh layout re-points the window's content, which would evict the
+    /// root a path is being driven on.
     private func warmFreshLayouts() {
         for state in startStates { _ = freshLayout(for: state) }
     }
@@ -135,16 +131,6 @@ final class ChromeTransitionMatrixTests: XCTestCase {
             out.append("outlinePanelIsOverlay: reached=\(reached.outlinePanelIsOverlay) "
                        + "fresh=\(fresh.outlinePanelIsOverlay)")
         }
-        switch (reached.macStrip, fresh.macStrip) {
-        case (nil, nil): break
-        case let (a?, b?):
-            if abs(a.dividerX - b.dividerX) > t || a.visible != b.visible || a.faded != b.faded {
-                out.append("macStrip: reached=\(a) fresh=\(b)")
-            }
-        default:
-            out.append("macStrip: reached=\(String(describing: reached.macStrip)) "
-                       + "fresh=\(String(describing: fresh.macStrip))")
-        }
         return out
     }
 
@@ -152,7 +138,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
 
     /// Apply one toggle through the real entry points, settle, and return
     /// every complaint: configuration faults, invariant violations, and
-    /// fresh-layout mismatches — tagged with the path so the failure names
+    /// fresh-layout mismatches, tagged with the path so the failure names
     /// the history that produced it.
     private func applyAndAudit(
         _ step: TransitionStep, on root: RootSplitViewController,
@@ -160,24 +146,16 @@ final class ChromeTransitionMatrixTests: XCTestCase {
     ) -> [String] {
         let expected = state.applying(step)
         if case .window = step {
-            // A window-mode change is a window-size change (plus, on Mac,
-            // the full-screen chrome flag the glue would flip).
+            // A window-mode change is a window-size change plus the
+            // full-screen chrome flag the window would flip.
             host.window.frame = CGRect(origin: .zero, size: ChromeMatrixHost.size(for: expected))
         }
         root.applyTransitionForTesting(step)
         state = expected
         // Settle to the fixed point OF THE EXPECTED STATE, not merely to a
-        // still layout. The Library's hide is a `UISplitViewController`
-        // display-mode change that lands in a completion, and the reported
-        // layout is briefly unchanged while it is in flight — a bare
-        // stability test returns during that window and the audit below reads
-        // a half-applied step as a product fault (`displayMode says sidebar
-        // shown, expected nosidebar`, docs/known-failing-tests.md,
-        // 2026-08-24). The budget is generous because it only costs time when
-        // the step really has not landed; a settled step still returns on the
-        // first turn.
+        // still layout; the budget only costs time when a step has not landed.
         host.settle(root, state: state, budget: 2.0, stableTurns: 3) { root in
-            (root.displayMode != .secondaryOnly) == (expected.sidebar == .shown)
+            root.isSidebarVisible == (expected.sidebar == .shown)
                 && root.isOutlinePanelVisibleForTesting == (expected.outline == .shown)
         }
 
@@ -186,15 +164,8 @@ final class ChromeTransitionMatrixTests: XCTestCase {
 
         // Configuration first: a step that did not take makes every further
         // assertion about the wrong state.
-        let sidebarShown = root.displayMode != .secondaryOnly
-        if sidebarShown != (expected.sidebar == .shown) {
-            // Say WHICH mode disagrees: the preference is the app's decision,
-            // the effective mode is UIKit's answer to it. A correct preference
-            // with a lagging effective mode is a settle problem; a wrong
-            // preference is a product one.
-            complaints.append("\(path): preferred=\(root.preferredDisplayMode.rawValue) "
-                              + "effective=\(root.displayMode.rawValue) — ")
-            complaints.append("\(path): displayMode says sidebar \(sidebarShown ? "shown" : "hidden"), "
+        if root.isSidebarVisible != (expected.sidebar == .shown) {
+            complaints.append("\(path): the Library is \(root.isSidebarVisible ? "shown" : "hidden"), "
                               + "expected \(expected.sidebar.rawValue)")
         }
 
@@ -211,7 +182,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         }
 
         for mismatch in mismatches(layout, freshLayout(for: expected)) {
-            complaints.append("\(path): differs from the fresh \(expected.id) layout — \(mismatch)")
+            complaints.append("\(path): differs from the fresh \(expected.id) layout: \(mismatch)")
         }
         return complaints
     }
@@ -227,16 +198,11 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         }
     }
 
-    /// The light cells: appearance is a color dimension and
-    /// transitions do not touch it.
-    ///
-    /// Zen cells are NORMALIZED to sidebar-hidden and deduplicated: the
-    /// matrix's `zen + sidebar-shown` id is a CONFIGURATION (open the
-    /// Library, then enter zen), but the state it produces holds the Library
-    /// closed — that is `UIState.applying`'s zen rule. Tracking the raw id
-    /// made the oracle expect `zen(false)` to reopen a Library the product
-    /// deliberately leaves closed, which failed 20 steps against correct
-    /// behavior on the suite's first run.
+    /// The light cells: appearance is a colour dimension and transitions do
+    /// not touch it. Zen cells are NORMALIZED to sidebar-hidden and
+    /// deduplicated: the matrix's `zen + sidebar-shown` id is a CONFIGURATION
+    /// (open the Library, then enter zen), but the state it produces holds
+    /// the Library closed, which is `UIState.applying`'s zen rule.
     private var startStates: [UIState] {
         var seen = Set<String>()
         return UIState.matrix
@@ -339,8 +305,8 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         var complaints = applyAndAudit(.window(.fullscreen), on: root, state: &state,
                                        path: "\(start.id) -> window(fullscreen)")
         // The library fields are excluded from the fresh comparison here by
-        // construction (the fresh root has the owner's real Library, this one
-        // has the seeded one), so drop those complaints and assert the round
+        // construction (the fresh root has no Library content, this one has
+        // the seeded one), so drop those complaints and assert the round
         // trip directly instead.
         complaints = complaints.filter { !$0.contains("libraryFirstRowTop") && !$0.contains("libraryScrollOffset") && !$0.contains("activeChip") }
 

@@ -11,14 +11,13 @@ import ChalkKit
 /// resolve in a window.
 @MainActor
 final class FooterPillPlacementTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var root: RootSplitViewController!
 
     override func setUp() {
         super.setUp()
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first!
-        window = UIWindow(windowScene: scene)
+        
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
         root = RootSplitViewController()
         window.rootViewController = root
         window.isHidden = false

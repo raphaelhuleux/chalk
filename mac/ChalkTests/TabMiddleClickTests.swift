@@ -10,14 +10,14 @@ import ChalkKit
 /// AppKit half can only be checked in the running Mac app; this half is plain
 /// hit-testing.
 final class TabMiddleClickTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var strip: HeaderTabStrip!
     private var closed: [UUID] = []
     private var selected: [UUID] = []
 
     override func setUp() {
         super.setUp()
-        window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 800, height: 46))
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 800, height: 46))
         strip = HeaderTabStrip(frame: CGRect(x: 0, y: 0, width: 800, height: 46))
         strip.onClose = { [weak self] id in self?.closed.append(id) }
         strip.onSelect = { [weak self] id in self?.selected.append(id) }

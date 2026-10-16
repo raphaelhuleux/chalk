@@ -5,9 +5,10 @@ import ChalkKit
 /// The panel restores per window, like the Library.
 @MainActor
 final class OutlinePanelRestorationTests: XCTestCase {
-    private static let widthKey = "chalk.outlinePanelWidth"
+    private static let widthKey = "chalk.outlinePanelWidth.appkit"
     private var savedWidth: Any?
     private var scratch: URL?
+    private var windows: [NSWindow] = []
 
     override func setUp() {
         super.setUp()
@@ -26,20 +27,22 @@ final class OutlinePanelRestorationTests: XCTestCase {
         }
         if let scratch { try? FileManager.default.removeItem(at: scratch) }
         scratch = nil
+        for window in windows { dismantleHostedSidebar(window) }
+        windows = []
         super.tearDown()
     }
 
     /// 1180pt wide: the editor column can spare the panel's width, so a
     /// restored-open panel must land in PUSH mode. That makes the trailing-pin
-    /// assertion falsifiable — an unlaid-out or parked panel reports "edge".
-    private func hosted(_ root: RootSplitViewController) -> UIWindow {
-        let window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1180, height: 820))
-        root.stripBridgeDetachedForTesting = true
+    /// assertion falsifiable: an unlaid-out or parked panel reports "edge".
+    private func hosted(_ root: RootSplitViewController) -> NSWindow {
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1180, height: 820))
         root.motionPolicyForTesting = .instant
         window.rootViewController = root
-        window.makeKeyAndVisible()
+        window.isHidden = false
         root.loadViewIfNeeded()
-        root.view.layoutIfNeeded()
+        root.view.layoutSubtreeIfNeeded()
+        windows.append(window)
         return window
     }
 
@@ -50,7 +53,7 @@ final class OutlinePanelRestorationTests: XCTestCase {
         _ root: RootSplitViewController, file: StaticString = #filePath, line: UInt = #line
     ) throws {
         let editor = root.editorForTesting
-        editor.view.layoutIfNeeded()
+        editor.view.layoutSubtreeIfNeeded()
         let panel = try XCTUnwrap(editor.outlinePanelFrame,
                                   "restored panel has no frame", file: file, line: line)
         XCTAssertFalse(editor.outlinePanel.view.isHidden,
@@ -64,27 +67,26 @@ final class OutlinePanelRestorationTests: XCTestCase {
 
     func testCaptureRecordsTheOpenPanel() throws {
         let root = RootSplitViewController(initialContent: .openEmpty)
-        let window = hosted(root)
-        _ = window
+        _ = hosted(root)
         root.cmdToggleOutlinePanel()
-        let activity = try XCTUnwrap(root.captureRestorationActivity())
-        let data = try XCTUnwrap(activity.userInfo?[ChalkActivity.stateKey] as? Data)
-        let session = try XCTUnwrap(WindowSession(data: data))
+        let session = root.captureSession()
         XCTAssertTrue(session.isOutlineVisible)
+        // The session round-trips as data, which is what restoration reads.
+        let data = try XCTUnwrap(try? JSONEncoder().encode(session))
+        XCTAssertEqual(WindowSession(data: data)?.isOutlineVisible, true)
     }
 
     func testRestoreReopensThePanel() throws {
         let session = WindowSession(tabs: [], activeIndex: nil, isSidebarVisible: false, isOutlineVisible: true)
         let root = RootSplitViewController(initialContent: .restoreSession(session))
-        let window = hosted(root)
-        _ = window
+        _ = hosted(root)
         XCTAssertTrue(root.isOutlinePanelVisibleForTesting)
         try assertPanelIsRealized(root)
     }
 
     /// Order independence: with tabs, `applyRestoredSession` opens documents
     /// (which loads the container's view, and with it the panel) BEFORE it
-    /// restores the panel — the reverse of the empty-session order, where the
+    /// restores the panel; the reverse of the empty-session order, where the
     /// panel call is itself what loads the view.
     func testRestoreWithTabsReopensThePanel() throws {
         let url = FileManager.default.temporaryDirectory
@@ -95,8 +97,7 @@ final class OutlinePanelRestorationTests: XCTestCase {
         let session = WindowSession(tabs: [record], activeIndex: 0,
                                     isSidebarVisible: false, isOutlineVisible: true)
         let root = RootSplitViewController(initialContent: .restoreSession(session))
-        let window = hosted(root)
-        _ = window
+        _ = hosted(root)
         XCTAssertTrue(root.isOutlinePanelVisibleForTesting)
         try assertPanelIsRealized(root)
     }
@@ -104,8 +105,7 @@ final class OutlinePanelRestorationTests: XCTestCase {
     func testRestoreWithoutTheFieldLeavesThePanelClosed() {
         let session = WindowSession(tabs: [], activeIndex: nil, isSidebarVisible: false)
         let root = RootSplitViewController(initialContent: .restoreSession(session))
-        let window = hosted(root)
-        _ = window
+        _ = hosted(root)
         XCTAssertFalse(root.isOutlinePanelVisibleForTesting)
         XCTAssertNil(root.editorForTesting.outlinePanelFrame)
         XCTAssertEqual(root.editorForTesting.activeContentTrailingPinForTesting, "edge")

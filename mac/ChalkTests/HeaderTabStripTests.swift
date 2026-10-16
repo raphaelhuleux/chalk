@@ -8,14 +8,14 @@ import ChalkKit
 /// by the completion — closed tab resurrected, freshly opened tab hidden
 /// until the next unrelated update.
 final class HeaderTabStripTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var strip: HeaderTabStrip!
 
     override func setUp() {
         super.setUp()
         // The animated close path is gated on `window != nil`, so the strip
         // must live in a real (hosted-test) window.
-        window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 600, height: 44))
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 600, height: 44))
         strip = HeaderTabStrip(frame: CGRect(x: 0, y: 0, width: 600, height: 44))
         window.addSubview(strip)
         window.isHidden = false

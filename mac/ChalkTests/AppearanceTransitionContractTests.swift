@@ -18,7 +18,7 @@ import ChalkKit
 /// correctness, not motion).
 @MainActor
 final class AppearanceTransitionContractTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var root: RootSplitViewController!
     private var incomingTheme: ThemePreference!
     private var incomingColorTheme: ChalkTheme!
@@ -33,16 +33,10 @@ final class AppearanceTransitionContractTests: XCTestCase {
         // override would already sit at the target — every later flip in the
         // test would then be a no-op. (tearDown restores the real value.)
         Preferences.themePreference = .auto
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first else {
-            preconditionFailure("no scene to host in")
-        }
-        window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 900, height: 700)
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 900, height: 700))
         window.isHidden = false
         root = RootSplitViewController()
-        root.stripBridgeDetachedForTesting = true
-        window.rootViewController = root
+                window.rootViewController = root
         root.loadViewIfNeeded()
         window.layoutIfNeeded()
         // The split view attaches its column views over a runloop turn, and
@@ -98,7 +92,7 @@ final class AppearanceTransitionContractTests: XCTestCase {
     func testTheCoverDoesNotSwallowTapsWhileItIsUp() {
         // The cover is an opaque view over the editor's whole rect, and it
         // stays up until the page reports a paint or `paintBackstop` (0.6s)
-        // expires. A plain UIView takes touches, so for that whole window a
+        // expires. A plain NSView takes touches, so for that whole window a
         // tap into the editor would land on the shield and do nothing --
         // costing no CPU at all and reading exactly like a sluggish app.
         // The cover masks PIXELS; it was never meant to gate input.
@@ -113,11 +107,11 @@ final class AppearanceTransitionContractTests: XCTestCase {
         XCTAssertTrue(root.isAppearanceCoverActiveForTesting,
                       "precondition: the cover is up for this assertion to mean anything")
         let mid = CGPoint(x: editorView.bounds.midX, y: editorView.bounds.midY)
-        let hit = editorView.hitTest(mid, with: nil)
-        let covers = editorView.subviews.filter { $0.frame.contains(mid) }
-        XCTAssertFalse(covers.isEmpty, "precondition: something must cover the tap point")
+        let hit = editorView.hitTest(editorView.superview!.convert(mid, from: editorView))
+        let covers = editorView.subviews.filter { $0 is PassthroughView && $0.frame.contains(mid) }
+        XCTAssertFalse(covers.isEmpty, "precondition: a cover must sit over the tap point")
         XCTAssertFalse(
-            covers.contains(where: { $0 === hit || $0.subviews.contains(where: { $0 === hit }) }),
+            covers.contains(where: { cover in hit.map { $0 === cover || $0.isDescendant(of: cover) } ?? false }),
             "a tap mid-transition must reach the editor, not the transition cover")
     }
 
@@ -140,7 +134,7 @@ final class AppearanceTransitionContractTests: XCTestCase {
         // lands in the same turn as the flip, and the pump above could only
         // observe them together.
         XCTAssertEqual(push, flip + 1, "the data-theme push rides the same turn as the flip; trail=\(trail)")
-        XCTAssertEqual(root.overrideUserInterfaceStyle, .dark)
+        XCTAssertEqual(root.view.appearance?.name, .darkAqua)
         XCTAssertTrue(root.isAppearanceCoverActiveForTesting,
                       "the cover outlives the flip until the page has painted")
 
@@ -178,7 +172,7 @@ final class AppearanceTransitionContractTests: XCTestCase {
 
         pump(upTo: 2.0) { root.appearanceTransitionTrailForTesting.contains("appearance-pushed") }
         let trail = root.appearanceTransitionTrailForTesting
-        XCTAssertEqual(root.traitCollection.chalkTheme, .catppuccin)
+        XCTAssertEqual(ChalkAppearance.theme, .catppuccin)
         guard let cover = trail.firstIndex(of: "cover-installed"),
               let push = trail.firstIndex(of: "appearance-pushed") else {
             return XCTFail("a theme change must cover and push; trail=\(trail)")
@@ -198,9 +192,9 @@ final class AppearanceTransitionContractTests: XCTestCase {
         // Stand-in for the OS flipping the system appearance: the hosting
         // window's override changes the root's trait without the root's own
         // override moving — exactly the Auto lane's shape.
-        let flipped: UIUserInterfaceStyle =
-            root.traitCollection.userInterfaceStyle == .dark ? .light : .dark
-        window.overrideUserInterfaceStyle = flipped
+        let flipped: NSAppearance.Name =
+            root.view.effectiveAppearance.isChalkDark ? .aqua : .darkAqua
+        window.appearance = NSAppearance(named: flipped)
         window.layoutIfNeeded()
 
         pump(upTo: 2.0) { root.appearanceTransitionTrailForTesting.contains("appearance-pushed") }
@@ -214,8 +208,7 @@ final class AppearanceTransitionContractTests: XCTestCase {
         XCTAssertLessThan(cover, push, "the page flips only under the cover; trail=\(trail)")
         pump(upTo: 2.0) { !root.isAppearanceCoverActiveForTesting }
         XCTAssertFalse(root.isAppearanceCoverActiveForTesting)
-        XCTAssertEqual(root.overrideUserInterfaceStyle, .unspecified,
-                       "Auto keeps following the system")
+        XCTAssertNil(root.view.appearance, "Auto keeps following the system")
     }
 
     // MARK: - Reduce Motion (via the same instant branch)
@@ -266,7 +259,7 @@ final class AppearanceTransitionContractTests: XCTestCase {
         pump(upTo: 2.0) {
             root.appearanceTransitionTrailForTesting.filter { $0 == "style-applied" }.count == 2
         }
-        XCTAssertEqual(root.overrideUserInterfaceStyle, .light)
+        XCTAssertEqual(root.view.appearance?.name, .aqua)
         XCTAssertEqual(heldGateAnswers.count, 2, "each transition asks its own gate")
         heldGateAnswers.first?() // the FIRST gate answering late must do nothing
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))

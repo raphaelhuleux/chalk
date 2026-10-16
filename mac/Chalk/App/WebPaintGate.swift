@@ -1,4 +1,4 @@
-import UIKit
+import AppKit
 import ChalkKit
 
 /// The covered-reflow settle of docs/motion.md, shared by the transitions that
@@ -19,7 +19,7 @@ final class WebPaintGate {
     /// Asks for a bitmap of the CURRENT (pre-reflow) pixels. Answering with
     /// nil, answering late, or never answering are all survivable; a late
     /// answer is discarded.
-    typealias Snapshotter = (@escaping (UIImage?) -> Void) -> Void
+    typealias Snapshotter = (@escaping (NSImage?) -> Void) -> Void
     /// Runs the completion once the page has committed a paint of the
     /// post-reflow layout (two in-page rAFs). Never running it is survivable.
     typealias PaintGate = (@escaping () -> Void) -> Void
@@ -38,12 +38,12 @@ final class WebPaintGate {
     /// Builds AND installs the cover for the given bitmap (nil: plain
     /// opaque), returning it so this gate can fade and remove it. Runs
     /// exactly once, before the reflow, so it sees pre-reflow geometry.
-    private let makeCover: (UIImage?) -> UIView?
+    private let makeCover: (NSImage?) -> NSView?
     /// The one real reflow. Runs exactly once, right after the cover is up.
     private let reflow: () -> Void
     private let timing: Timing
 
-    private var cover: UIView?
+    private var cover: NSView?
     private var finished = false
     private var dismissed = false
     private var snapshotBackstopWork: DispatchWorkItem?
@@ -55,7 +55,7 @@ final class WebPaintGate {
 
     init(snapshotter: @escaping Snapshotter,
          paintGate: @escaping PaintGate,
-         makeCover: @escaping (UIImage?) -> UIView?,
+         makeCover: @escaping (NSImage?) -> NSView?,
          reflow: @escaping () -> Void,
          timing: Timing = Timing()) {
         self.snapshotter = snapshotter
@@ -66,6 +66,7 @@ final class WebPaintGate {
     }
 
     func begin() {
+        DebugTrace.log("paint-gate begin")
         isActive = true
         // The release is armed BEFORE the async snapshot ask (the contract's
         // guaranteed-release clause): a snapshotter that never answers costs
@@ -79,7 +80,7 @@ final class WebPaintGate {
     }
 
     /// A canceled settle (rapid re-toggle) releases everything NOW and turns
-    /// every pending callback into a no-op — a stale snapshot or backstop
+    /// every pending callback into a no-op: a stale snapshot or backstop
     /// must never install a cover into the next slide.
     func cancel() {
         finished = true
@@ -91,36 +92,45 @@ final class WebPaintGate {
         isActive = false
     }
 
-    /// Cover up, reflow once, then wait for the paint — from the snapshot or
+    /// Cover up, reflow once, then wait for the paint, from the snapshot or
     /// from its backstop, whichever lands first; the loser is discarded.
-    private func finish(bitmap: UIImage?) {
+    private func finish(bitmap: NSImage?) {
         guard !finished else { return }
         finished = true
         snapshotBackstopWork?.cancel()
         cover = makeCover(bitmap)
+        DebugTrace.log("paint-gate cover bitmap=\(bitmap != nil) cover=\(cover != nil)")
         reflow()
-        let backstop = DispatchWorkItem { [weak self] in self?.dismiss() }
+        let backstop = DispatchWorkItem { [weak self] in
+            DebugTrace.log("paint-gate backstop")
+            self?.dismiss()
+        }
         paintBackstopWork = backstop
         DispatchQueue.main.asyncAfter(deadline: .now() + timing.paintBackstop,
                                       execute: backstop)
-        paintGate { [weak self] in self?.dismiss() }
+        paintGate { [weak self] in
+            DebugTrace.log("paint-gate page painted")
+            self?.dismiss()
+        }
     }
 
     private func dismiss() {
         guard !dismissed else { return }
         dismissed = true
+        DebugTrace.log("paint-gate dismiss")
         paintBackstopWork?.cancel()
         guard let cover else {
             isActive = false
             return
         }
-        UIView.animate(withDuration: timing.fade) {
-            cover.alpha = 0
-        } completion: { [weak self] _ in
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = timing.fade
+            cover.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
             cover.removeFromSuperview()
             guard let self else { return }
             if self.cover === cover { self.cover = nil }
             self.isActive = false
-        }
+        })
     }
 }

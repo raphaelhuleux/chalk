@@ -1,123 +1,104 @@
+import AppKit
 import ChalkKit
-import UIKit
 
-/// Spacing/size tokens for the native chrome (the Paper direction), as UIKit
-/// points for this shell.
-///
-/// The spec values are `ChromeMetrics` in ChalkKit (Mac points). Catalyst runs
-/// the iPad idiom, where UIKit points render at 77% on the Mac, so every token
-/// here is the spec value × `displayScale` (1/0.77).
+/// Spacing/size tokens for the native chrome (the Paper direction), in Mac
+/// points: the spec values of `ChromeMetrics` and `TabStripMetrics`, unscaled.
+/// The names match the Catalyst shell's `ChalkMetrics` so the ported tests
+/// read the same tokens; the numbers are the spec's.
 enum ChalkMetrics {
-    /// iPad-idiom Catalyst draws UIKit content at 77%; inverse-scale the spec.
-    static let displayScale: CGFloat = 1 / 0.77
-    /// Spec value (Mac points) → UIKit points.
-    static func s(_ value: CGFloat) -> CGFloat { value * displayScale }
+    /// AppKit draws at native resolution: no idiom scale. Kept so ported
+    /// assertions that widen a tolerance on a scaled shell read 1 here.
+    static let displayScale: CGFloat = 1
 
-    /// Not s()-scaled: it crosses into the page as CSS px via
-    /// --chalk-chrome-top, and the webview is already scaled with the rest of
-    /// the UI on Catalyst.
+    /// CSS px, crossing into the page as --chalk-chrome-top.
     static let editorRestingPad: CGFloat = CGFloat(ChromeMetrics.editorRestingPad)
 
-    static let headerHeight: CGFloat = s(ChromeMetrics.headerHeight)
+    /// The tab band's floor: the name row's own height. The live band is the
+    /// titlebar's height when that is taller (`BandLayout.resolve`).
+    static let headerHeight: CGFloat = CGFloat(ChromeMetrics.headerHeight)
 
-    static let sidebarWidth: CGFloat = s(ChromeMetrics.sidebarWidth)
-    static let headerIconPointSize: CGFloat = s(ChromeMetrics.headerIconPointSize)
-    static let sidebarRowFontSize: CGFloat = s(ChromeMetrics.sidebarRowFontSize)
-    static let sectionHeaderFontSize: CGFloat = s(ChromeMetrics.sectionHeaderFontSize)
-    static let sidebarCountFontSize: CGFloat = s(ChromeMetrics.sidebarCountFontSize)
-    static let sidebarRowHeight: CGFloat = s(ChromeMetrics.sidebarRowHeight)
-    static let tabFontSize: CGFloat = s(TabStripMetrics.fontSize)  // mono name row
-    /// Trailing edge of the macOS traffic-light cluster, in MAC points
-    /// (AX frames are AppKit coordinates).
+    static let sidebarWidth: CGFloat = CGFloat(ChromeMetrics.sidebarWidth)
+    static let headerIconPointSize: CGFloat = CGFloat(ChromeMetrics.headerIconPointSize)
+    static let sidebarRowFontSize: CGFloat = CGFloat(ChromeMetrics.sidebarRowFontSize)
+    static let sectionHeaderFontSize: CGFloat = CGFloat(ChromeMetrics.sectionHeaderFontSize)
+    static let sidebarCountFontSize: CGFloat = CGFloat(ChromeMetrics.sidebarCountFontSize)
+    static let sidebarRowHeight: CGFloat = CGFloat(ChromeMetrics.sidebarRowHeight)
+    static let tabFontSize: CGFloat = TabStripMetrics.fontSize
+    /// Trailing edge of the macOS traffic-light cluster (AX-measured).
     static let trafficLightsTrailingEdge: CGFloat = CGFloat(ChromeMetrics.trafficLightsTrailingEdge)
-    /// The UIKit row's leading edge, used only in full screen (windowed tabs
-    /// live in the NSToolbar): the AppKit strip's traffic-light gap past
-    /// where the lights end.
-    static let tabStripLeading: CGFloat = s(trafficLightsTrailingEdge + TabStripMetrics.trafficLightGap)
+    /// Where the name row starts: past the lights, plus the gap. The same
+    /// edge in full screen, where the lights are gone, so the row never jumps.
+    static let tabStripLeading: CGFloat = trafficLightsTrailingEdge + TabStripMetrics.trafficLightGap
 
-    /// Synthetic-oblique slant for the active preview tab: tan(12°). IBM Plex
-    /// Mono ships no italic face here, so the upright one is sheared
-    /// (UIFont.chalkMono `oblique:`, and the AppKit strip via `.obliqueness`).
-    /// A ratio, never scaled.
+    /// Synthetic-oblique slant for the active preview tab: tan(12°). A ratio.
     static let obliqueSlant: CGFloat = TabStripMetrics.obliqueSlant
 
-    // Tab name row (Paper): a quiet mono text row on the editor surface. Active
-    // is weight plus a short accent underline, inactive is muted.
-    //
-    // The numbers live in ChalkKit's TabStripMetrics, which the AppKit strip
-    // reads raw (the titlebar is exempt from the 0.77× scale). Here each goes
-    // through `s()` to land at the same physical size.
-    static let headerPadding: CGFloat = s(TabStripMetrics.trailingMargin) // toolbar side padding
-    static let tabGap: CGFloat = s(TabStripMetrics.gap)
-    static let tabLabelPadding: CGFloat = s(TabStripMetrics.labelPadding)
-    static let tabInnerGap: CGFloat = s(TabStripMetrics.innerGap)
-    static let tabMaxWidth: CGFloat = s(TabStripMetrics.maxTabWidth)
-    static let tabUnderlineHeight: CGFloat = s(TabStripMetrics.underlineHeight)
-    static let tabUnderlineGap: CGFloat = s(TabStripMetrics.underlineGap)
-    static let tabSlotWidth: CGFloat = s(TabStripMetrics.slotWidth)
-    static let newTabButtonSize = CGSize(width: s(TabStripMetrics.newTabSize.width),
-                                        height: s(TabStripMetrics.newTabSize.height))
-    static let newTabGlyphSize: CGFloat = s(TabStripMetrics.newTabGlyph)
-    static let tabStripHeight: CGFloat = s(TabStripMetrics.stripHeight)
-    static let tabRowDividerGap: CGFloat = s(TabStripMetrics.dividerGap)
+    // Tab name row (Paper).
+    static let headerPadding: CGFloat = TabStripMetrics.trailingMargin
+    static let tabGap: CGFloat = TabStripMetrics.gap
+    static let tabLabelPadding: CGFloat = TabStripMetrics.labelPadding
+    static let tabInnerGap: CGFloat = TabStripMetrics.innerGap
+    static let tabMaxWidth: CGFloat = TabStripMetrics.maxTabWidth
+    static let tabUnderlineHeight: CGFloat = TabStripMetrics.underlineHeight
+    static let tabUnderlineGap: CGFloat = TabStripMetrics.underlineGap
+    static let tabSlotWidth: CGFloat = TabStripMetrics.slotWidth
+    static let newTabButtonSize = TabStripMetrics.newTabSize
+    static let newTabGlyphSize: CGFloat = TabStripMetrics.newTabGlyph
+    static let tabStripHeight: CGFloat = TabStripMetrics.stripHeight
+    static let tabRowDividerGap: CGFloat = TabStripMetrics.dividerGap
+    static let dirtyDotSize: CGFloat = TabStripMetrics.dotSize
 
-    // Library (Paper): a flat tone-on-tone list, flush with its column.
-    static let sidebarListInset: CGFloat = s(ChromeMetrics.sidebarListInset)
-    static let sidebarSectionTopMargin: CGFloat = s(ChromeMetrics.sidebarSectionTopMargin)
-    static let sidebarSectionBottomMargin: CGFloat = s(ChromeMetrics.sidebarSectionBottomMargin)
-    static let rowCornerRadius: CGFloat = s(ChromeMetrics.rowCornerRadius)
-    static let footerButtonSize = CGSize(width: s(ChromeMetrics.footerButtonWidth),
-                                         height: s(ChromeMetrics.footerButtonHeight))
+    // Library (Paper).
+    static let sidebarListInset: CGFloat = CGFloat(ChromeMetrics.sidebarListInset)
+    static let sidebarSectionTopMargin: CGFloat = CGFloat(ChromeMetrics.sidebarSectionTopMargin)
+    static let sidebarSectionBottomMargin: CGFloat = CGFloat(ChromeMetrics.sidebarSectionBottomMargin)
+    static let rowCornerRadius: CGFloat = CGFloat(ChromeMetrics.rowCornerRadius)
+    static let footerButtonSize = CGSize(width: ChromeMetrics.footerButtonWidth,
+                                         height: ChromeMetrics.footerButtonHeight)
 
-    // Utility pill: the one place the chrome buttons live, a floating glass
-    // capsule in the window's bottom-leading corner.
-    static let utilityStripRadius: CGFloat = s(ChromeMetrics.utilityStripRadius)
-    static let utilityStripPadding: CGFloat = s(ChromeMetrics.utilityStripPadding)
-    static let footerPillMargin: CGFloat = s(ChromeMetrics.footerPillMargin)
+    // Utility pill.
+    static let utilityStripRadius: CGFloat = CGFloat(ChromeMetrics.utilityStripRadius)
+    static let utilityStripPadding: CGFloat = CGFloat(ChromeMetrics.utilityStripPadding)
+    static let footerPillMargin: CGFloat = CGFloat(ChromeMetrics.footerPillMargin)
     static var footerPillHeight: CGFloat { footerButtonSize.height + utilityStripPadding * 2 }
 
-    // Quick Open palette
-    static let paletteWidth: CGFloat = s(ChromeMetrics.paletteWidth)
-    static let paletteRadius: CGFloat = s(ChromeMetrics.paletteRadius)
-    static let paletteRowRadius: CGFloat = s(ChromeMetrics.paletteRowRadius)
-    static let paletteResultFontSize: CGFloat = s(ChromeMetrics.paletteResultFontSize)
-    static let paletteResultPathFontSize: CGFloat = s(ChromeMetrics.paletteResultPathFontSize)
-    static let paletteHintFontSize: CGFloat = s(ChromeMetrics.paletteHintFontSize)
-    static let paletteSearchFontSize: CGFloat = s(ChromeMetrics.paletteSearchFontSize)
+    // Palettes.
+    static let paletteWidth: CGFloat = CGFloat(ChromeMetrics.paletteWidth)
+    static let paletteRadius: CGFloat = CGFloat(ChromeMetrics.paletteRadius)
+    static let paletteRowRadius: CGFloat = CGFloat(ChromeMetrics.paletteRowRadius)
+    static let paletteResultFontSize: CGFloat = CGFloat(ChromeMetrics.paletteResultFontSize)
+    static let paletteResultPathFontSize: CGFloat = CGFloat(ChromeMetrics.paletteResultPathFontSize)
+    static let paletteHintFontSize: CGFloat = CGFloat(ChromeMetrics.paletteHintFontSize)
+    static let paletteSearchFontSize: CGFloat = CGFloat(ChromeMetrics.paletteSearchFontSize)
+    static let outlineRowHeight: CGFloat = CGFloat(ChromeMetrics.outlineRowHeight)
+    static let outlineIndentUnit: CGFloat = CGFloat(ChromeMetrics.outlineIndentUnit)
+    static let outlineRowFontSize: CGFloat = CGFloat(ChromeMetrics.outlineRowFontSize)
+    static let outlineBadgeFontSize: CGFloat = CGFloat(ChromeMetrics.outlineBadgeFontSize)
+    static let outlineEmptyHeight: CGFloat = CGFloat(ChromeMetrics.outlineEmptyHeight)
 
-    // Outline palette
-    static let outlineRowHeight: CGFloat = s(ChromeMetrics.outlineRowHeight)
-    static let outlineIndentUnit: CGFloat = s(ChromeMetrics.outlineIndentUnit)
-    static let outlineRowFontSize: CGFloat = s(ChromeMetrics.outlineRowFontSize)
-    static let outlineBadgeFontSize: CGFloat = s(ChromeMetrics.outlineBadgeFontSize)
-    static let outlineEmptyHeight: CGFloat = s(ChromeMetrics.outlineEmptyHeight)
-
-    static let dirtyDotSize: CGFloat = s(TabStripMetrics.dotSize)
+    // Motion (docs/motion.md).
     static let motionTab: TimeInterval = ChromeMetrics.motionTab
-    static let motionFast: TimeInterval = ChromeMotion.fast // tab close, cover fades, tab-switch cross-fade, underline slide
+    static let motionFast: TimeInterval = ChromeMotion.fast
     static let motionStandard: TimeInterval = ChromeMetrics.motionStandard
-    /// The one sidebar clock (docs/motion.md): the Library column, the editor
-    /// content translation and the AppKit strip's chip inset all ride this
-    /// duration, ease-out. The strip receives it in the payload and never picks
-    /// its own.
     static let motionSidebar: TimeInterval = ChromeMetrics.motionSidebar
 
-    static let outlinePanelPushMinimumEditorWidth: CGFloat = s(ChromeMetrics.outlinePanelPushMinimumEditorWidth)
+    static let outlinePanelPushMinimumEditorWidth: CGFloat =
+        CGFloat(ChromeMetrics.outlinePanelPushMinimumEditorWidth)
 
-    /// Catalyst minimum window size (UIKit points): keeps the toolbar coherent
-    /// (lights + a few tab names) and a usable editor column beside the Library.
-    /// Shell-specific: not a spec token.
-    static let minWindowSize = CGSize(width: 880, height: 560)
+    /// Minimum window size: keeps a few tab names beside the lights and a
+    /// usable editor column beside the Library. Shell-specific, Mac points.
+    static let minWindowSize = CGSize(width: 680, height: 430)
 
-    static let settingsMinWindowSize = CGSize(width: s(ChromeMetrics.settingsMinWindowWidth),
-                                              height: s(ChromeMetrics.settingsMinWindowHeight))
-    static let settingsDefaultSize = CGSize(width: s(ChromeMetrics.settingsDefaultWidth),
-                                            height: s(ChromeMetrics.settingsDefaultHeight))
+    static let settingsMinWindowSize = CGSize(width: ChromeMetrics.settingsMinWindowWidth,
+                                              height: ChromeMetrics.settingsMinWindowHeight)
+    static let settingsDefaultSize = CGSize(width: ChromeMetrics.settingsDefaultWidth,
+                                            height: ChromeMetrics.settingsDefaultHeight)
 
-    /// Settings rail row height, derived from the row font so the labels never
-    /// clip. The max keeps it at s(30).
+    /// Settings rail row height, derived from the row font so the labels never clip.
     static var settingsRailRowHeight: CGFloat {
-        max(s(ChromeMetrics.settingsRailRowHeight),
-            UIFont.systemFont(ofSize: sidebarRowFontSize).lineHeight + s(ChromeMetrics.settingsRailRowFontPadding))
+        max(CGFloat(ChromeMetrics.settingsRailRowHeight),
+            NSFont.systemFont(ofSize: sidebarRowFontSize).ascender
+                - NSFont.systemFont(ofSize: sidebarRowFontSize).descender
+                + CGFloat(ChromeMetrics.settingsRailRowFontPadding))
     }
 }

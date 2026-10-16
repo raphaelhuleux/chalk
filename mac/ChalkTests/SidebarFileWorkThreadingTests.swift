@@ -4,18 +4,15 @@ import ChalkKit
 
 /// The 2026-08-24 report: "renaming a file in the sidebar and pressing enter
 /// crashes the app", and the same for dragging a file into a folder. It was not
-/// a crash — no process on the machine died by signal all day — it was the main
-/// thread blocked. Every sidebar file operation ran on it, and the owner's
-/// Library lives under an iCloud-synced folder, where a coordinated write waits
-/// for the CloudDocs daemon and for the app's own open `UIDocument` to
-/// relinquish, `copyItem` on a dataless file materializes it first, and every
-/// name probe is a question asked through the sync layer.
+/// a crash, it was the main thread blocked: every sidebar file operation ran on
+/// it, and the owner's Library lives under an iCloud-synced folder, where a
+/// coordinated write waits for the CloudDocs daemon, `copyItem` on a dataless
+/// file materializes it first, and every name probe crosses the sync layer.
 ///
-/// So this suite asserts the one thing no sidebar test asserted before: WHICH
-/// THREAD the work runs on. Two oracles, because the paths differ —
-/// `runFileWork`'s probe for the `FileManager` operations, and for the move the
-/// observable consequence of being asynchronous (the disk has not changed yet
-/// when the call returns), which is what fails against the pre-fix code.
+/// So this suite asserts WHICH THREAD the work runs on. Two oracles, because
+/// the paths differ: `runFileWork`'s probe for the `FileManager` operations,
+/// and for the move the observable consequence of being asynchronous (the disk
+/// has not changed yet when the call returns).
 ///
 /// `CoordinatedFileMoveTests` (ChalkKit) covers the move's own contract.
 @MainActor
@@ -72,7 +69,7 @@ final class SidebarFileWorkThreadingTests: XCTestCase {
     }
 
     func testMoveToTrashRunsOffTheMainThread() throws {
-        try XCTSkipUnless(canTrash(), "this sandbox refuses trashItem")
+        try XCTSkipUnless(canTrash(in: root), "this sandbox refuses trashItem")
         awaitFileWork(on: sidebar) { sidebar.moveToTrash(node("draft.tex")) }
         assertRanOffTheMainThread("Move to Trash")
         XCTAssertFalse(exists("draft.tex"), "and it still trashes")
@@ -89,8 +86,7 @@ final class SidebarFileWorkThreadingTests: XCTestCase {
         XCTAssertTrue(exists("Untitled Folder"), "and it still creates the folder")
     }
 
-    /// Expanding a folder reads one directory per revealed subfolder. It is not
-    /// one of the two reported gestures, but it is the same defect: on an
+    /// Expanding a folder reads one directory per revealed subfolder. On an
     /// iCloud Library, opening a folder blocked the main thread too.
     func testExpandingAFolderReadsOffTheMainThread() throws {
         let folder = root.appendingPathComponent("Papers")
@@ -109,10 +105,8 @@ final class SidebarFileWorkThreadingTests: XCTestCase {
 
     // MARK: - The move (rename and drag-move share it)
 
-    /// The move is asynchronous now, and this is the observable proof: the file
-    /// is still where it was when the call returns. Before the fix the
-    /// coordinated write had already finished on the main thread — which is
-    /// precisely the beachball.
+    /// The move is asynchronous, and this is the observable proof: the file is
+    /// still where it was when the call returns.
     func testRenameDoesNotTouchTheDiskBeforeItReturns() {
         awaitFileWork(on: sidebar) {
             sidebar.beginRename(node("draft.tex"))
@@ -152,7 +146,7 @@ final class SidebarFileWorkThreadingTests: XCTestCase {
             atPath: folder.appendingPathComponent("draft.tex").path))
     }
 
-    /// A collision is still refused synchronously — the callers read that
+    /// A collision is still refused synchronously: the callers read that
     /// verdict to shake the field or to raise "Couldn't move … there", and
     /// nothing asynchronous may happen in that case.
     func testACollisionIsRefusedWithoutStartingAnyWork() throws {
@@ -175,61 +169,5 @@ final class SidebarFileWorkThreadingTests: XCTestCase {
             try String(contentsOf: root.appendingPathComponent("taken.tex"), encoding: .utf8),
             "other", "and the existing file is untouched")
         sidebar.onFileWorkFinishedForTesting = nil
-    }
-
-    private func canTrash() -> Bool {
-        let probe = root.appendingPathComponent("trash-probe")
-        guard (try? Data().write(to: probe)) != nil else { return false }
-        var resulting: NSURL?
-        let ok = (try? FileManager.default.trashItem(at: probe, resultingItemURL: &resulting)) != nil
-        if let resulting = resulting as URL? { try? FileManager.default.removeItem(at: resulting) }
-        try? FileManager.default.removeItem(at: probe)
-        return ok
-    }
-}
-
-// MARK: - Awaiting sidebar file work
-
-extension XCTestCase {
-    /// Drive a sidebar file operation and wait for it to finish.
-    ///
-    /// Every sidebar mutation left the main thread on 2026-08-24, so a test
-    /// that asserts on-disk state right after calling one would be racing work
-    /// still in flight — and a `tearDown` that deletes the fixture under a live
-    /// operation is worse than a wrong assertion. `body` runs inside the wait,
-    /// so a test can also assert what is true WHILE the work is in flight.
-    // Deliberately NOT @MainActor: the suites that drive these paths differ
-    // (SidebarReloadRaceTests is a plain XCTestCase), and XCTest runs test
-    // methods on the main thread regardless.
-    func awaitFileWork(
-        on sidebar: SidebarViewController,
-        timeout: TimeInterval = 5,
-        _ body: () -> Void
-    ) {
-        let done = expectation(description: "sidebar file work finished")
-        // An operation reports once, but an undo registered by one operation
-        // can report again while this expectation is still current.
-        done.assertForOverFulfill = false
-        sidebar.onFileWorkFinishedForTesting = { done.fulfill() }
-        body()
-        wait(for: [done], timeout: timeout)
-        sidebar.onFileWorkFinishedForTesting = nil
-    }
-
-    /// The same, for the grandchild reads a folder expansion kicks off. The
-    /// expansion itself stays synchronous — the build appends one level ahead
-    /// of every collapsed folder — so this waits only for the chevrons on the
-    /// subfolders it revealed.
-    func awaitExpansionWork(
-        on sidebar: SidebarViewController,
-        timeout: TimeInterval = 5,
-        _ body: () -> Void
-    ) {
-        let done = expectation(description: "sidebar expansion work finished")
-        done.assertForOverFulfill = false
-        sidebar.onExpansionWorkFinishedForTesting = { done.fulfill() }
-        body()
-        wait(for: [done], timeout: timeout)
-        sidebar.onExpansionWorkFinishedForTesting = nil
     }
 }

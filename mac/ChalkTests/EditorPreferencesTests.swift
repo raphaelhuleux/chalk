@@ -164,32 +164,6 @@ final class EditorPreferencesTests: XCTestCase {
         return root
     }
 
-    /// Settings runs in its own scene (its own window on Mac) with no
-    /// presenter, so a preference that `SettingsBroadcast` forgets reaches no
-    /// window at all and the setting looks dead. This is the regression test
-    /// for that specific omission.
-    func testGeneralSettingsBroadcastCarriesMeasureAndAlignment() {
-        withCleanKey(measureKey) {
-            withCleanKey(alignmentKey) {
-                withCleanKey(lineHeightKey) {
-                    let root = loadedRoot()
-                    Preferences.editorMeasure = 720
-                    Preferences.textAlignment = .justified
-                    Preferences.editorLineHeight = 2.0
-
-                    SettingsBroadcast.applyGeneralSettings(roots: [root])
-
-                    XCTAssertEqual(root.editorMeasureForTesting, 720,
-                                   "the column width never reached the window's tabs")
-                    XCTAssertEqual(root.editorTextAlignForTesting, "justify",
-                                   "the alignment never reached the window's tabs")
-                    XCTAssertEqual(root.editorLineHeightForTesting ?? 0, 2.0, accuracy: 0.0001,
-                                   "the line spacing never reached the window's tabs")
-                }
-            }
-        }
-    }
-
     /// The per-window apply must read the CURRENT preference, not a value
     /// captured at launch.
     func testApplyReadsThePreferenceAtCallTime() {

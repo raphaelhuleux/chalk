@@ -239,9 +239,9 @@ Phases 1 to 6 are sequential; the test port in each phase is part of the phase, 
 
 ### Phase 0: preparation
 
-Done 2026-10-15 on branch `appkit-shell`: `ChalkMac` and `ChalkMacTests` targets, the shared code in ChalkKit (`Preferences`, `ChromeMetrics`, `BuildInfo`, `AlphaSession`, `Diagnostics`, `SnippetLibrary`, `LocationStore`, `RecoveryLocation`, `SampleContent`, the notification names), the reference in `Tests/chrome-reference/`, and the `build-mac-appkit` step. Catalyst: 502 tests green after the move.
+Done 2026-10-15 on branch `appkit-shell`: `ChalkMac` and `ChalkTests` targets, the shared code in ChalkKit (`Preferences`, `ChromeMetrics`, `BuildInfo`, `AlphaSession`, `Diagnostics`, `SnippetLibrary`, `LocationStore`, `RecoveryLocation`, `SampleContent`, the notification names), the reference in `Tests/chrome-reference/`, and the `build-mac-appkit` step. Catalyst: 502 tests green after the move.
 
-- Add the `ChalkMac` target and a `ChalkMacTests` bundle to `project.yml`; bundle IDs `com.huleux.chalk.mac` and `.mac.debug` until cutover; entitlements file `Chalk-mac.entitlements` with the same three keys; Info.plist keys for `NSPrincipalClass`, the document types and UTIs copied.
+- Add the `ChalkMac` target and a `ChalkTests` bundle to `project.yml`; bundle IDs `com.huleux.chalk.mac` and `.mac.debug` until cutover; entitlements file `Chalk-mac.entitlements` with the same three keys; Info.plist keys for `NSPrincipalClass`, the document types and UTIs copied.
 - Move everything UIKit-free out of `mac/Chalk` into ChalkKit so both shells share it and `swift test` covers it: `ChalkMetrics` as numbers, `Preferences` minus `interfaceStyle`, `SampleContent`, `BuildInfo`, `AlphaSession`, `RecoveryLocation`, `Diagnostics`, `Tab`, `TabItem`, `SnippetLibrary`, `LocationStore`, `SidebarFileOperations` minus the alerts.
   This lands on the Catalyst app first and ships, which de-risks the move.
 - Freeze the reference per the parity method.
@@ -259,7 +259,7 @@ Exit: Catalyst app unchanged in behaviour, ChalkKit tests cover the moved code, 
 
 Exit: every `DocumentController*`, `WebEditorSurface*`, `ChalkDocumentLoadTests` and `DraftSaveFileTypeTests` green.
 
-Done 2026-10-15. 95 tests green on `ChalkMacTests` (one skipped: the known reopen wedge, carried over as is). What the port taught:
+Done 2026-10-15. 95 tests green on `ChalkTests` (one skipped: the known reopen wedge, carried over as is). What the port taught:
 
 - `@main` on the `NSApplicationDelegate` class never attached the delegate: the app sat in its run loop with no window and no breadcrumbs. The entry point is an explicit `main.swift` that creates the delegate and calls `NSApplicationMain`.
 - Setting `contentViewController` resizes the window to the view's frame, so the opening size is set after it.
@@ -279,7 +279,7 @@ Done 2026-10-15. 95 tests green on `ChalkMacTests` (one skipped: the known reope
 
 Exit: tab, chrome, auto-hide, editing mode and transition contract tests green, except the Library and outline cells.
 
-Done 2026-10-15. 213 tests green on `ChalkMacTests`. What the port taught:
+Done 2026-10-15. 213 tests green on `ChalkTests`. What the port taught:
 
 - The window carries an empty unified `NSToolbar` with no items: that is what gives the transparent titlebar its tall form with the traffic lights centred, while the band in the content view under it takes the clicks. `BandLayout.resolve` runs in its overlay branch (`glueAvailable: true`) with the titlebar height read live from `contentLayoutRect`; the band owns the tab row in both window modes, so `TabChromeOwnership` reduces to "zen stands down".
 - A theme is not an `NSAppearance`, so `viewDidChangeEffectiveAppearance` never fires for it. `ChalkAppearance.theme` posts `themeDidChange` and every view that caches a resolved `CGColor` re-resolves on it; the tab names rebuild their attributed titles.
@@ -298,7 +298,7 @@ Done 2026-10-15. 213 tests green on `ChalkMacTests`. What the port taught:
 
 Exit: every `Sidebar*`, `Library*`, `LocationStore*`, `AddLocation*`, `CaseOnlyRename*` test green.
 
-Done 2026-10-15. 357 tests green on `ChalkMacTests` (one skipped: the reopen wedge), including the ported invariant and transition matrices; Catalyst and ChalkKit untouched in count. What the port taught:
+Done 2026-10-15. 357 tests green on `ChalkTests` (one skipped: the reopen wedge), including the ported invariant and transition matrices; Catalyst and ChalkKit untouched in count. What the port taught:
 
 - The tree is an `NSOutlineView` over class-backed row items (`LibraryRowItem`, `LibraryLocationItem`): the table keys expansion and reloads on item identity, so a reload reconciles rows in place by `FileNode` and keeps the objects that survive. The model's `isExpanded` is the truth, mirrored from the table's expand and collapse notifications and re-applied when a collapsed parent opens again.
 - AppKit refuses to collapse an item whose outline cell is hidden through `shouldShowOutlineCell`: `collapseItem` returns before asking the delegate. The disclosure triangle is removed by giving it a zero frame (`frameOfOutlineCell`) and the cell draws its own chevron.
@@ -316,7 +316,7 @@ Done 2026-10-15. 357 tests green on `ChalkMacTests` (one skipped: the reopen wed
 
 Exit: `QuickOpen*`, `Outline*`, `Palette*`, `AssetPreview*` tests green.
 
-Done 2026-10-15. 433 tests green on `ChalkMacTests` (one skipped). What the port taught:
+Done 2026-10-15. 433 tests green on `ChalkTests` (one skipped). What the port taught:
 
 - The palettes' keys are the main menu's key equivalents (⌘O, ⌘P, ⌘K), which AppKit routes to the root from any first responder, the search fields included; the Catalyst scene-level key commands and their shadowing hazard are gone, and `ShellKeyEquivalentTests` pins that no palette claims them.
 - ⌘↩ never reaches the field editor's command path: it is a key equivalent, caught on the card's content view (`PaletteContentView`). Up, Down, Escape and Return arrive through `control(_:textView:doCommandBy:)` on one shared table (`PaletteFrame.command(for:)`).
@@ -331,7 +331,7 @@ Done 2026-10-15. 433 tests green on `ChalkMacTests` (one skipped). What the port
 
 Exit: `Settings*`, `Shortcut*`, `About*`, `ReportProblem*`, `HelpMenu*`, `HelpScreen*`, `NoticeBanner*`, `AlphaSession*` tests green.
 
-Done 2026-10-15. 496 tests green on `ChalkMacTests` (one skipped). What the port taught:
+Done 2026-10-15. 496 tests green on `ChalkTests` (one skipped). What the port taught:
 
 - Settings is an `NSWindowController` the app delegate keeps, one per app: ⌘, focuses it, its frame is autosaved, and its window and any sheet on it carry `ThemePreference.appearance`, which the broadcast re-pins. Done, Esc and ⌘, from inside the window all close it; the container answers `cmdSettings` because the responder chain from the Settings window never reaches an editor root.
 - The General pane is cards of `SettingsRowView` (title, detail, trailing control) rather than a table: the row layout tests assert on the same real frames, and an `NSSlider` needs an explicit width the way a `UISlider` did.
@@ -348,7 +348,7 @@ Done 2026-10-15. 496 tests green on `ChalkMacTests` (one skipped). What the port
 
 Exit: `CrossWindow*`, `WindowRouting*`, the restoration tests, `ShellShortcutTable*`, `SceneStateLineRedaction*` green; the manual multi-window script passes.
 
-Done 2026-10-15. 526 tests green on `ChalkMacTests` (one skipped), ChalkKit 528. What the port taught:
+Done 2026-10-15. 526 tests green on `ChalkTests` (one skipped), ChalkKit 528. What the port taught:
 
 - Restoration is the app's own `WindowSessionJournal` (ChalkKit), not `NSWindowRestoration`: AppKit's restoration only runs when "Close windows when quitting an application" is off in System Settings, which it is not by default, while the Catalyst shell brought every window back on relaunch. The journal carries each window's id, tabs, active tab, sidebar, outline panel and frame. It is written on resign-active, on a window close and at quit, and read once in `applicationDidFinishLaunching`. A closed window leaves it and `WindowLocations.discard` drops the window's folders; a quit keeps every window.
 - `EditorWindowController.windowID` is the one key for the journal and for `WindowLocations`; a restored window passes `isRestoredWindow: true`, so a window from before per-window lists still inherits the legacy list.
@@ -374,7 +374,7 @@ Exit: `./scripts/check.sh` green with the AppKit target in every Xcode step.
 Done 2026-10-15. `./scripts/check.sh`: every Xcode step green on the AppKit shell (`build-mac`, `build-catalyst`, `pref-guard`, `ui-invariants`, `mac-tests`, 530 tests), plus `build-web`, `invariants-doc`, `caret-fixtures`, `browser-tests`, `geometric-matrix` and `bench`. The `typecheck`, `engine-tests` and `chalkkit-tests` steps could not run through `pnpm` in the session shell (not on its PATH) and were run by hand with the same commands, all green (tsc clean, 1488 + 155 vitest tests, 528 ChalkKit tests). `snapshots` fails all 16 cases on `main` as well, byte for byte the same output: the recorded baselines render KaTeX in a fallback font and this machine renders the real KaTeX fonts, a baseline-versus-environment drift that predates the port and is recorded in `docs/known-failing-tests.md`. What the port taught:
 
 - `ChromeMatrixHost` now seeds one Library folder per host: without a measured header, `libraryListStartsAtTheChromeFloor` was never evidence on AppKit (a detached root's Library is empty), and the matrix passed at 14 rules where it now asserts 15. The coverage table in `ChromeInvariants.swift` was re-read from the seeded run: windowed and full screen coincide on the AppKit shell (one band), and the four `strip*` rules are never evidence there because they describe the Catalyst glue contract (`macStrip` is nil); they retire at cutover.
-- `scripts/check.sh` runs `pref-guard`, `ui-invariants` and `mac-tests` on `ChalkMacTests` and builds the AppKit shell as `build-mac`; `build-catalyst` builds the Catalyst target into its own derived data so it stays intact until cutover. The failure extractor is unchanged.
+- `scripts/check.sh` runs `pref-guard`, `ui-invariants` and `mac-tests` on `ChalkTests` and builds the AppKit shell as `build-mac`; `build-catalyst` builds the Catalyst target into its own derived data so it stays intact until cutover. The failure extractor is unchanged.
 - `install-mac.sh --appkit` and `release-mac.sh --appkit` build, audit, sign and install or archive the AppKit product (`ChalkMac.app`, bundle ID `com.huleux.chalk.mac`); the default stays Catalyst until cutover flips it, because the AppKit bundle ID does not share the installed app's settings yet. The glue checks are skipped for the AppKit shell, which has no glue; the three signing rules (no `--deep`, no entitlements, no `ditto` over a live bundle) hold as written, and the entitlements rule applies to the AppKit bundle for the same reason (its entitlements file carries the sandbox).
 - The last `ChalkTests` files, accounted for: `BuildInfoTests` and `PreferencePollutionGuardTests` copied (the guard names the AppKit Debug domain and its own list of shared-domain suites); `RootInitOrderTests` replaced by `RootViewWiringTests`, because the AppKit root loads its view in init on purpose and has no viewDidLoad-mid-init hazard; `ChalkDocumentLoadTests` covered by `ChalkDocumentTests` (the AppKit document has no `load(fromContents:)`); `EditorSafeAreaTests`, `SidebarSafeAreaGeometryTests` and `SidebarTitlebarBandTests` are UIKit safe-area and glue-click mechanics, covered by `EditorColumnLayoutTests`, `SidebarTreeTopTests` and `SidebarTitlebarClickTests`; `MacStripBridgeTests`, `SceneRoutingTests`, `ShellOutlineKeyCommandTests`, `ShellOutlinePanelKeyCommandTests`, `ShellShortcutTableTests`, `WindowRoutingTests`, `TestWindow` and `NativeSelectionHighlightTests` pin Catalyst-only machinery (the bridge, scene roles, `pressesBegan`, the UIKit selection overlay, which AppKit WebKit does not paint). The Catalyst files stay in `mac/ChalkTests` until cutover deletes the target.
 - Docs: `CLAUDE.md`, `docs/ui-correctness.md` (the 77% paragraph is gone, the relationships rule stays), `docs/ui-invariants.md` regenerated, `docs/release-steps.md`, `docs/known-failing-tests.md` (the AppKit suite has no accepted failures).
@@ -387,6 +387,8 @@ Done 2026-10-15. `./scripts/check.sh`: every Xcode step green on the AppKit shel
   Delete ChalkKit code that only served the bridge: `TabStripBridge` notification names and keys, `TitlebarAttachPolicy`, `WindowRouting` bind-token lanes, `SceneLaunchPolicy`.
   Keep `TabStripMetrics`, `TabStripFit`, `TitlebarBandGeometry`, `StripPresentationPolicy`.
 - README screenshots retaken.
+
+Done 2026-10-16, on the owner's call, without the daily-use period. The AppKit shell took the `Chalk` name, directory, scheme and bundle IDs (`com.huleux.chalk`, `.debug`); the Catalyst target, `ChalkAppKitGlue`, its tests and its entitlements file are deleted, with the shared icon, privacy manifest and fonts moved under `mac/Chalk/`. ChalkKit lost the bridge (`TabStripBridge`, now `TabStrip.swift` with the policy, motion and metrics), `TitlebarAttachPolicy`, `TitlebarBandGeometry`, `StripPresentationPolicy`, `WindowRouting`, `ChalkActivity`, the `MacStripExpectation` oracle, the four `strip*` invariants and `ChromeLayoutReference` with its frozen Catalyst reference. One migration: the first launch over a Catalyst install seeds the first window's Library from the union of the Catalyst scene-keyed lists (`WindowLocations.records(ofWindowsNotPrefixed:)`), since those scene ids can never be restored. The `.appkit` suffixes on the sidebar and outline widths and the journal key stay: the Catalyst values are in a different unit. The README screenshots are not yet retaken.
 
 ## Test strategy
 
@@ -409,7 +411,7 @@ New tests the port adds: `ChromeReferenceParityTests`, a clipboard round-trip th
 ## Build and release
 
 - `project.yml`: `ChalkMac` target `platform: macOS`, `deploymentTarget: "14.0"`, same pre-build script, `ENABLE_USER_SCRIPT_SANDBOXING: false`, Automatic signing with no team, `CODE_SIGN_ENTITLEMENTS` pointing at the Mac entitlements. No `SUPPORTS_MACCATALYST`, no `TARGETED_DEVICE_FAMILY`.
-- `ChalkMacTests` as `bundle.unit-test`, `platform: macOS`, depending on `ChalkMac`.
+- `ChalkTests` as `bundle.unit-test`, `platform: macOS`, depending on `ChalkMac`.
 - The `Chalk` scheme stays the only scheme at cutover and points at the new targets.
 - `release-mac.sh` loses the Catalyst destination; notarization is otherwise identical.
 

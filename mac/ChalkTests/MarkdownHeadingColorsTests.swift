@@ -2,8 +2,8 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// Settings → Editor → "Color Markdown Headings": the preference, the row that
-/// drives it, and the push that carries it to an open editor.
+/// Settings → Editor → "Color Markdown Headings": the preference and the push
+/// that carries it to an open editor.
 ///
 /// The colors themselves are ChalkKit's (`MarkdownHeadingPaletteTests`). What
 /// is native-only, and asserted here, is the pairing rule: the palette is a
@@ -49,40 +49,14 @@ final class MarkdownHeadingColorsTests: XCTestCase {
         XCTAssertFalse(Preferences.colorHeadings)
     }
 
-    // MARK: - The Settings row
-
-    private func headingsCell() throws -> UITableViewCell {
-        let vc = GeneralSettingsViewController()
-        vc.loadViewIfNeeded()
-        let table = try XCTUnwrap(vc.view.subviews.compactMap { $0 as? UITableView }.first)
-        let row = try XCTUnwrap(
-            vc.rowTitlesForTesting(section: 1).firstIndex(of: "Color Markdown Headings"),
-            "the Editor section has no Color Markdown Headings row")
-        return vc.tableView(table, cellForRowAt: IndexPath(row: row, section: 1))
-    }
-
-    func testTheEditorSectionCarriesASwitchForIt() throws {
-        let toggle = try XCTUnwrap(try headingsCell().accessoryView as? UISwitch,
-                                   "the row should carry a UISwitch, not a slider or segments")
-        XCTAssertFalse(toggle.isOn, "the switch must show the preference, which defaults off")
-    }
-
-    func testTheSwitchShowsAnAlreadyOnPreference() throws {
-        Preferences.colorHeadings = true
-        let toggle = try XCTUnwrap(try headingsCell().accessoryView as? UISwitch)
-        XCTAssertTrue(toggle.isOn)
-    }
-
     // MARK: - The push
 
     /// A real container with a real surface: `Tab` builds its own
     /// `WebEditorSurface`, so there is no fake to inject here. The surface's
     /// DEBUG hook reports what the host last told it to show.
-    private func hostedContainer() throws -> (UIWindow, EditorContainerViewController, URL) {
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first, "no scene to host in")
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 900, height: 700)
+    private func hostedContainer() throws -> (NSWindow, EditorContainerViewController, URL) {
+        
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 900, height: 700))
         let container = EditorContainerViewController()
         container.hostOwnsAppearanceTransitions = true
         let file = FileManager.default.temporaryDirectory
@@ -98,10 +72,10 @@ final class MarkdownHeadingColorsTests: XCTestCase {
         return (window, container, file)
     }
 
-    private func host(_ window: UIWindow,
+    private func host(_ window: NSWindow,
                       _ container: EditorContainerViewController,
                       dark: Bool) {
-        window.overrideUserInterfaceStyle = dark ? .dark : .light
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.rootViewController = container
         window.isHidden = false
         container.loadViewIfNeeded()

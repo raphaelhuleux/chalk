@@ -51,7 +51,7 @@ final class ChromeLayoutReportingTests: XCTestCase {
 
     func testLibraryPanelIsNilWhenTheSidebarIsHidden() {
         let root = loadedRoot()
-        root.preferredDisplayMode = .secondaryOnly
+        root.setSidebarVisible(false)
         root.view.layoutIfNeeded()
         XCTAssertNil(root.chromeLayout(for: anyState).libraryPanel)
     }

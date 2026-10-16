@@ -52,8 +52,7 @@ if [ "$LIST_ONLY" = "1" ]; then
 build-web        esbuild bundle the editor ships
 typecheck        tsc across editor-core, vscode, web
 xcodegen         regenerate mac/Chalk.xcodeproj from mac/project.yml
-build-mac        xcodebuild build-for-testing, the AppKit shell (ChalkMac), warnings as errors
-build-catalyst   xcodebuild build, the Mac Catalyst target, kept intact until cutover
+build-mac        xcodebuild build-for-testing, warnings as errors
 invariants-doc   docs/ui-invariants.md matches the Swift catalogue
 engine-tests     vitest, the editor engine in jsdom
 chalkkit-tests   swift test, the Foundation-only module
@@ -63,14 +62,13 @@ geometric-matrix Tests/matrix/run-geometric.mjs, the caret/reveal discovery matr
 snapshots        Tests/__Snapshots__, the 16-case layout matrix
 pref-guard       no earlier run left a test preference in the Debug domain
 ui-invariants    chrome geometry asserted across the 32-state matrix
-mac-tests        the rest of ChalkMacTests on the AppKit shell
+mac-tests        the rest of ChalkTests
 bench            scripts/bench.sh against thresholds.json
 STEPS
   exit 0
 fi
 
 MAC='platform=macOS'
-CATALYST='platform=macOS,variant=Mac Catalyst'
 DD="$ROOT/mac/build/dd"          # gitignored; keeps xcodebuild incremental
 WARN_FLAGS="SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES"
 
@@ -102,7 +100,7 @@ xcode_test() {
   # shellcheck disable=SC2086
   xcodebuild test \
     -project mac/Chalk.xcodeproj \
-    -scheme ChalkMac \
+    -scheme Chalk \
     -destination "$MAC" \
     -derivedDataPath "$DD" \
     $WARN_FLAGS \
@@ -114,25 +112,9 @@ xcode_build() {
   # shellcheck disable=SC2086
   xcodebuild build-for-testing \
     -project mac/Chalk.xcodeproj \
-    -scheme ChalkMac \
+    -scheme Chalk \
     -destination "$MAC" \
     -derivedDataPath "$DD" \
-    $WARN_FLAGS \
-    CODE_SIGNING_ALLOWED=NO \
-    "$@"
-}
-
-# The Mac Catalyst shell, which the AppKit shell replaces at cutover
-# (docs/specs/2026-10-15-appkit-shell-rewrite-plan.md). Built in every run so
-# it stays intact until then; its own derived data, so the two shells never
-# share a build directory.
-xcode_build_catalyst() {
-  # shellcheck disable=SC2086
-  xcodebuild build \
-    -project mac/Chalk.xcodeproj \
-    -scheme Chalk \
-    -destination "$CATALYST" \
-    -derivedDataPath "$DD-cat" \
     $WARN_FLAGS \
     CODE_SIGNING_ALLOWED=NO \
     "$@"
@@ -148,11 +130,9 @@ run_step typecheck pnpm typecheck
 # The Xcode project is generated and gitignored, so it must exist before any
 # xcodebuild step. Cheap and idempotent.
 run_step xcodegen sh -c 'cd mac && xcodegen generate'
-# build-for-testing compiles the app and the ChalkMacTests bundle, so a
-# test-only compile error (warnings as errors included) fails here even under
-# --fast.
+# build-for-testing compiles the app and the ChalkTests bundle, so a test-only
+# compile error (warnings as errors included) fails here even under --fast.
 run_step build-mac xcode_build
-run_step build-catalyst xcode_build_catalyst
 
 # --- engine and headless logic ----------------------------------------------
 # Cheap and test-run-free, so it runs even under --fast: the generated
@@ -166,19 +146,19 @@ run_step browser-tests node Tests/browser/run.mjs --no-build
 run_step geometric-matrix node Tests/matrix/run-geometric.mjs --no-build
 run_step snapshots node Tests/runner/snapshots.mjs --no-build
 
-# --- Xcode test suites (the AppKit shell) -----------------------------------
+# --- Xcode test suites ------------------------------------------------------
 if [ "$RUN_XCTEST" = "1" ]; then
   # pref-guard runs BEFORE the matrix suite: a killed run can leave a test
-  # preference in the Debug domain (com.huleux.chalk.mac.debug), and the guard
+  # preference in the Debug domain (com.huleux.chalk.debug), and the guard
   # should name it before more suites fail because of it.
-  run_step pref-guard xcode_test -only-testing:ChalkMacTests/PreferencePollutionGuardTests
-  run_step ui-invariants xcode_test -only-testing:ChalkMacTests/ChromeInvariantMatrixTests
+  run_step pref-guard xcode_test -only-testing:ChalkTests/PreferencePollutionGuardTests
+  run_step ui-invariants xcode_test -only-testing:ChalkTests/ChromeInvariantMatrixTests
   # The whole bundle minus the two classes the steps above already ran:
   # running them again doubles the matrix's cost and reports any failure of
   # theirs twice.
   run_step mac-tests xcode_test \
-    -skip-testing:ChalkMacTests/PreferencePollutionGuardTests \
-    -skip-testing:ChalkMacTests/ChromeInvariantMatrixTests
+    -skip-testing:ChalkTests/PreferencePollutionGuardTests \
+    -skip-testing:ChalkTests/ChromeInvariantMatrixTests
 else
   echo "  (skipping pref-guard, ui-invariants, mac-tests: --fast)"
 fi
@@ -302,7 +282,7 @@ extract_for_step() {
     browser-tests) extract_browser "$2" ;;
     engine-tests) extract_vitest "$2" ;;
     chalkkit-tests) extract_swift "$2" ;;
-    mac-tests|pref-guard|ui-invariants|build-mac|build-catalyst) extract_xcode "$2" ;;
+    mac-tests|pref-guard|ui-invariants|build-mac) extract_xcode "$2" ;;
     geometric-matrix) extract_geometric "$2" ;;
     snapshots) extract_snapshots "$2" ;;
     bench) extract_bench "$2" ;;

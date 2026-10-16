@@ -4,8 +4,9 @@ import ChalkKit
 
 /// The banner asks the tester for something. Everything about it is shaped by
 /// one risk: an ask that is easy to ignore, hard to refuse, or in the way of
-/// typing trains the tester to dismiss it reflexively, and then the real report
-/// never arrives.
+/// typing trains the tester to dismiss it reflexively, and then the real
+/// report never arrives.
+@MainActor
 final class NoticeBannerTests: XCTestCase {
     private func banner(onPrimary: @escaping () -> Void = {},
                         onDecline: @escaping () -> Void = {}) -> NoticeBannerView {
@@ -22,38 +23,36 @@ final class NoticeBannerTests: XCTestCase {
     /// it is asking about.
     func testTheBannerNeverTakesFirstResponder() {
         let view = banner()
-        XCTAssertFalse(view.canBecomeFirstResponder)
-        XCTAssertFalse(view.becomeFirstResponder())
+        XCTAssertFalse(view.acceptsFirstResponder)
         for control in view.buttonsForTesting {
-            XCTAssertFalse(control.canBecomeFirstResponder,
-                           "'\(control.title(for: .normal) ?? "")' can take focus")
+            XCTAssertTrue(control.refusesFirstResponder, "'\(control.title)' can take focus")
         }
     }
 
-    /// Only the banner's own controls swallow touches. Anywhere else, the tap
+    /// Only the banner's own controls swallow clicks. Anywhere else, the click
     /// reaches the editor underneath.
-    func testTapsOutsideTheControlsFallThroughToTheEditor() {
+    func testClicksOutsideTheControlsFallThroughToTheEditor() {
         let view = banner()
         view.frame = CGRect(x: 0, y: 0, width: 400, height: 60)
-        view.layoutIfNeeded()
-        XCTAssertNil(view.hitTest(CGPoint(x: 5, y: 30), with: nil),
-                     "the banner's empty space must not absorb a tap")
+        view.layoutSubtreeIfNeeded()
+        XCTAssertNil(view.hitTest(CGPoint(x: 5, y: 30)),
+                     "the banner's empty space must not absorb a click")
     }
 
     /// Equal visual weight, so refusing is as easy as accepting. A greyed-out
-    /// "No thanks" beside a filled "Send a report" is a dark pattern, and a
-    /// tester who feels handled stops helping.
+    /// "No thanks" beside a filled "Send a report" is a dark pattern.
     func testAcceptingAndRefusingLookTheSame() {
-        let buttons = banner().buttonsForTesting.filter { $0.title(for: .normal) != nil }
+        let buttons = banner().buttonsForTesting.filter { !$0.title.isEmpty }
         XCTAssertEqual(buttons.count, 2)
-        XCTAssertEqual(buttons[0].titleLabel?.font, buttons[1].titleLabel?.font)
+        XCTAssertEqual(buttons[0].font, buttons[1].font)
         XCTAssertEqual(buttons[0].isEnabled, buttons[1].isEnabled)
+        XCTAssertEqual(buttons[0].isBordered, buttons[1].isBordered)
     }
 
     /// No "Not now". A third option that defers is how a prompt becomes
     /// permanent: it never counts as a refusal, so it can be asked forever.
     func testThereIsNoDeferOption() {
-        let titles = banner().buttonsForTesting.compactMap { $0.title(for: .normal) }
+        let titles = banner().buttonsForTesting.map(\.title).filter { !$0.isEmpty }
         XCTAssertEqual(Set(titles), ["Send a report", "No thanks"])
         for title in titles {
             XCTAssertFalse(title.lowercased().contains("later"))
@@ -75,8 +74,8 @@ final class NoticeBannerTests: XCTestCase {
         XCTAssertEqual(declined, 1)
     }
 
-    /// Walking away is an answer. If a banner that times out costs nothing, the
-    /// app can ask forever by making the ask easy to ignore.
+    /// Walking away is an answer. If a banner that times out costs nothing,
+    /// the app can ask forever by making the ask easy to ignore.
     func testTimingOutCountsAsARefusal() {
         var declined = 0
         let view = banner(onDecline: { declined += 1 })
@@ -84,9 +83,9 @@ final class NoticeBannerTests: XCTestCase {
         XCTAssertEqual(declined, 1)
     }
 
-    /// Whichever way it goes away, it goes away once. A banner that reports two
-    /// refusals for one dismissal burns through the three-strike budget in a
-    /// single crash.
+    /// Whichever way it goes away, it goes away once. A banner that reports
+    /// two refusals for one dismissal burns through the three-strike budget
+    /// in a single crash.
     func testAnAnsweredBannerCannotAnswerAgain() {
         var declined = 0
         var sent = 0
@@ -112,10 +111,6 @@ final class NoticeBannerTests: XCTestCase {
         return AlphaSession(build: build, defaults: defaults)
     }
 
-    private func presentedBanner(in root: RootSplitViewController) -> NoticeBannerView? {
-        root.view.subviews.compactMap { $0 as? NoticeBannerView }.first
-    }
-
     /// An app that shut down badly should say so and offer to report it.
     func testACrashedLaunchShowsTheCrashPrompt() {
         let alpha = crashedSession()
@@ -127,7 +122,25 @@ final class NoticeBannerTests: XCTestCase {
         root.loadViewIfNeeded()
         root.presentAlphaNoticeIfNeeded()
 
-        XCTAssertNotNil(presentedBanner(in: root),
+        XCTAssertNotNil(root.noticeBannerForTesting,
                         "reporting a bad shutdown is an ordinary feature")
+        XCTAssertTrue(root.view.subviews.contains { $0 is NoticeBannerView })
+        // Declining records the refusal and takes the banner down.
+        root.noticeBannerForTesting?.pressDeclineForTesting()
+        XCTAssertFalse(root.view.subviews.contains { $0 is NoticeBannerView })
+        XCTAssertFalse(alpha.claimCrashPrompt(), "answered once; nothing left to claim")
+    }
+
+    func testACleanLaunchShowsNothing() {
+        let defaults = UserDefaults(suiteName: "chalk-notice-tests-\(UUID().uuidString)")!
+        let build = BuildInfo(infoDictionary: ["CFBundleVersion": "42"])
+        let first = AlphaSession(build: build, defaults: defaults)
+        first.markForeground()
+        first.markClean()
+        let root = RootSplitViewController(initialContent: .openEmpty)
+        root.alphaSessionForTesting = AlphaSession(build: build, defaults: defaults)
+        root.loadViewIfNeeded()
+        root.presentAlphaNoticeIfNeeded()
+        XCTAssertNil(root.noticeBannerForTesting)
     }
 }

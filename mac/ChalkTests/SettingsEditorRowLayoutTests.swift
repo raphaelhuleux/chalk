@@ -2,84 +2,84 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// The Editor rows put controls in `accessoryView`, where a UISlider is a trap:
-/// it has no intrinsic content size, so without an explicit frame it lays out
-/// at zero width and the row renders as a label with nothing next to it. These
-/// assert on real laid-out frames (the SettingsRailGeometryTests approach) —
-/// a title-only check passes happily while the control is invisible.
+/// The Editor rows put controls at the trailing edge, where an NSSlider is a
+/// trap: it has no intrinsic width, so without an explicit one it lays out
+/// at zero width and the row renders as a label with nothing next to it.
+/// These assert on real laid-out frames; a title-only check passes happily
+/// while the control is invisible.
 @MainActor
 final class SettingsEditorRowLayoutTests: XCTestCase {
-    /// A realistic settings-sheet row width.
+    /// A realistic settings-window row width.
     private let rowWidth: CGFloat = 520
 
-    private func laidOutCell(row: Int) -> UITableViewCell {
+    private func laidOutRow(_ row: Int) -> SettingsRowView {
         let vc = GeneralSettingsViewController()
         vc.loadViewIfNeeded()
-        let table = vc.view.subviews.compactMap { $0 as? UITableView }.first!
-        let cell = vc.tableView(table, cellForRowAt: IndexPath(row: row, section: 1))
-        cell.frame = CGRect(x: 0, y: 0, width: rowWidth, height: 44)
-        cell.layoutIfNeeded()
-        return cell
+        let view = vc.editorRowForTesting(row)
+        view.frame = CGRect(x: 0, y: 0, width: rowWidth, height: SettingsRowView.height)
+        view.layoutSubtreeIfNeeded()
+        return view
     }
 
-    func testSliderRowsGiveTheirControlRealWidth() {
+    func testSliderRowsGiveTheirControlRealWidth() throws {
         for row in [0, 1, 2] {
-            let cell = laidOutCell(row: row)
-            let accessory = try! XCTUnwrap(cell.accessoryView)
-            XCTAssertTrue(accessory is UISlider, "row \(row) should carry a slider")
-            XCTAssertGreaterThan(accessory.frame.width, 100,
-                                 "a slider with no explicit frame collapses to zero width")
-            XCTAssertGreaterThan(accessory.frame.height, 0)
+            let view = laidOutRow(row)
+            let control = try XCTUnwrap(view.control)
+            XCTAssertTrue(control is NSSlider, "row \(row) should carry a slider")
+            XCTAssertGreaterThan(control.frame.width, 100,
+                                 "a slider with no explicit width collapses to zero")
+            XCTAssertGreaterThan(control.frame.height, 0)
         }
     }
 
-    func testSegmentedRowsCarryEverySegment() {
-        let alignment = try! XCTUnwrap(laidOutCell(row: 3).accessoryView as? UISegmentedControl)
-        XCTAssertEqual(alignment.numberOfSegments, EditorTextAlignment.allCases.count)
-        XCTAssertEqual(alignment.titleForSegment(at: 0), "Left")
-        XCTAssertEqual(alignment.titleForSegment(at: 1), "Justified")
+    func testSegmentedRowsCarryEverySegment() throws {
+        let alignment = try XCTUnwrap(laidOutRow(3).control as? NSSegmentedControl)
+        XCTAssertEqual(alignment.segmentCount, EditorTextAlignment.allCases.count)
+        XCTAssertEqual(alignment.label(forSegment: 0), "Left")
+        XCTAssertEqual(alignment.label(forSegment: 1), "Justified")
 
-        let fileType = try! XCTUnwrap(laidOutCell(row: 5).accessoryView as? UISegmentedControl)
-        XCTAssertEqual(fileType.numberOfSegments, DefaultFileType.allCases.count)
-        XCTAssertEqual(fileType.titleForSegment(at: 0), "Markdown")
-        XCTAssertEqual(fileType.titleForSegment(at: 1), "LaTeX")
+        let fileType = try XCTUnwrap(laidOutRow(5).control as? NSSegmentedControl)
+        XCTAssertEqual(fileType.segmentCount, DefaultFileType.allCases.count)
+        XCTAssertEqual(fileType.label(forSegment: 0), "Markdown")
+        XCTAssertEqual(fileType.label(forSegment: 1), "LaTeX")
 
-        let viewMode = try! XCTUnwrap(laidOutCell(row: 6).accessoryView as? UISegmentedControl)
-        XCTAssertEqual(viewMode.numberOfSegments, ViewMode.allCases.count)
-        XCTAssertEqual(viewMode.titleForSegment(at: 0), "Preview")
-        XCTAssertEqual(viewMode.titleForSegment(at: 1), "Mixed")
-        XCTAssertEqual(viewMode.titleForSegment(at: 2), "Source")
+        let viewMode = try XCTUnwrap(laidOutRow(6).control as? NSSegmentedControl)
+        XCTAssertEqual(viewMode.segmentCount, ViewMode.allCases.count)
+        XCTAssertEqual(viewMode.label(forSegment: 0), "Preview")
+        XCTAssertEqual(viewMode.label(forSegment: 1), "Mixed")
+        XCTAssertEqual(viewMode.label(forSegment: 2), "Source")
     }
 
     /// Label, readout and control must all fit side by side without the
-    /// accessory running off the row or sitting on top of the title.
-    func testControlsFitBesideTheirLabels() {
-        for row in 0..<6 {
-            let cell = laidOutCell(row: row)
-            let accessory = try! XCTUnwrap(cell.accessoryView)
-            let title = try! XCTUnwrap(cell.textLabel)
-            XCTAssertLessThanOrEqual(accessory.frame.maxX, rowWidth,
+    /// control running off the row or sitting on top of the title.
+    func testControlsFitBesideTheirLabels() throws {
+        for row in 0..<7 {
+            let view = laidOutRow(row)
+            let control = try XCTUnwrap(view.control)
+            XCTAssertLessThanOrEqual(control.frame.maxX, rowWidth,
                                      "row \(row): control runs past the row's edge")
-            XCTAssertGreaterThanOrEqual(accessory.frame.minX, title.frame.maxX,
+            XCTAssertGreaterThanOrEqual(control.frame.minX, view.titleLabel.frame.maxX,
                                         "row \(row): control overlaps its own label")
+            XCTAssertLessThanOrEqual(view.detailLabel.frame.maxX, control.frame.minX + 0.5,
+                                     "row \(row): readout overlaps the control")
         }
     }
 
     /// The switch row sits between the segmented rows, so the sliders-are-0-1-2
-    /// and segments-are-3-and-5 layout above only holds if it really is a
-    /// UISwitch at 4.
+    /// and segments-are-3-5-6 layout above only holds if it really is a
+    /// switch at 4.
     func testTheHeadingColorRowCarriesASwitch() {
-        XCTAssertNotNil(laidOutCell(row: 4).accessoryView as? UISwitch)
+        XCTAssertNotNil(laidOutRow(4).control as? NSSwitch)
     }
 
     /// The readout is what makes a slider legible; an empty one is a bug the
     /// title-inventory test cannot see.
     func testSliderRowsShowAReadout() {
-        XCTAssertEqual(laidOutCell(row: 0).detailTextLabel?.text,
+        XCTAssertEqual(laidOutRow(0).detailLabel.stringValue,
                        "\(Int((Preferences.editorFontScale * 100).rounded()))%")
-        XCTAssertEqual(laidOutCell(row: 1).detailTextLabel?.text,
+        XCTAssertEqual(laidOutRow(1).detailLabel.stringValue,
                        "\(Int(Preferences.editorMeasure.rounded())) px")
-        XCTAssertEqual(laidOutCell(row: 2).detailTextLabel?.text,
+        XCTAssertEqual(laidOutRow(2).detailLabel.stringValue,
                        String(format: "%.2fx", Preferences.editorLineHeight))
     }
 }

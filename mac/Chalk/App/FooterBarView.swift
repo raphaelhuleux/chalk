@@ -1,15 +1,15 @@
-import UIKit
+import AppKit
 import ChalkKit
 
 /// The utility pill (VisualGlass .utility-strip): a floating glass capsule in
 /// the window's bottom-leading corner holding the chrome actions (toggle
 /// Sidebar, Settings, Quick Open, Outline, editing mode).
 ///
-/// The only home those actions have, and it stands in every
-/// state rather than handing its buttons back and forth. Glass because it
-/// floats over live text. New File is absent: the tab row's + covers it. The
-/// host owns only its corner placement; this view is self-sizing.
-final class FooterBarView: UIView {
+/// The only home those actions have, and it stands in every state rather
+/// than handing its buttons back and forth. Glass because it floats over live
+/// text. New File is absent: the tab row's + covers it. The host owns only
+/// its corner placement; this view is self-sizing.
+final class FooterBarView: NSView {
     var onToggleSidebar: (() -> Void)?
     var onQuickOpen: (() -> Void)?
     var onOutline: (() -> Void)?
@@ -19,24 +19,23 @@ final class FooterBarView: UIView {
     var onSelectEditingMode: ((EditingMode) -> Void)?
     var currentEditingMode: (() -> EditingMode)?
 
-    private var modeButton: UIButton?
+    private var modeButton: ChromeIconButton?
 
     private let glass = ChalkGlassView(
-        style: .glass, cornerRadius: ChalkMetrics.utilityStripRadius,
-        interactive: true) // control cluster → pressable Liquid Glass on 26
-    private let icons: UIStackView
+        style: .glass, cornerRadius: ChalkMetrics.utilityStripRadius, interactive: true)
+    private let icons = NSStackView()
 
-    /// Width that snugly fits the icon row + its padding — the host pins the
+    /// Width that snugly fits the icon row + its padding; the host pins the
     /// pill to this so it always hugs the icons.
     var pillWidth: CGFloat {
-        let fitting = icons.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
-        return ChalkMetrics.utilityStripPadding * 2 + fitting
+        let buttons = CGFloat(icons.arrangedSubviews.count) * ChalkMetrics.footerButtonSize.width
+        let gaps = CGFloat(max(0, icons.arrangedSubviews.count - 1)) * icons.spacing
+        return ChalkMetrics.utilityStripPadding * 2 + buttons + gaps
     }
 
-    override init(frame: CGRect) {
-        // Reading order, left to right: toggle, settings, search, outline, mode.
-        icons = UIStackView()
+    override init(frame: NSRect) {
         super.init(frame: frame)
+        // Reading order, left to right: toggle, settings, search, outline, mode.
         let buttons = [
             ChromeIconButton.make("sidebar.left", label: "Toggle Sidebar") { [weak self] in
                 self?.onToggleSidebar?()
@@ -63,9 +62,9 @@ final class FooterBarView: UIView {
         ]
         modeButton = buttons[4]
         buttons.forEach { icons.addArrangedSubview($0) }
-        icons.axis = .horizontal
-        icons.spacing = ChalkMetrics.s(4)
-        icons.alignment = .center
+        icons.orientation = .horizontal
+        icons.spacing = 4
+        icons.alignment = .centerY
         icons.translatesAutoresizingMaskIntoConstraints = false
 
         glass.translatesAutoresizingMaskIntoConstraints = false
@@ -90,7 +89,6 @@ final class FooterBarView: UIView {
 
     /// Reflect the current mode on the mode button (icon + accessibility).
     func setEditingMode(_ mode: EditingMode) {
-        modeButton?.configuration?.image = ChromeIconButton.glyph(mode.symbol)
-        modeButton?.accessibilityLabel = "Editing Mode: \(mode.title)"
+        modeButton?.setSymbol(mode.symbol, label: "Editing Mode: \(mode.title)")
     }
 }

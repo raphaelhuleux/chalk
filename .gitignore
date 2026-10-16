@@ -35,4 +35,3 @@ xcuserdata/
 # scripts/check.sh step logs
 .harness/
 
-mac/ChalkMac/Info.plist

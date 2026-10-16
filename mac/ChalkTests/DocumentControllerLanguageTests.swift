@@ -107,7 +107,7 @@ final class DocumentControllerLanguageTests: XCTestCase {
         return url
     }
 
-    /// `open`/`reopen` read the file through `UIDocument` asynchronously and then
+    /// `open`/`reopen` read the file through `ChalkDocument` asynchronously and then
     /// fire `didChangeDirty` on the delegate; wait on that so assertions see the
     /// completed seed.
     private func openAndWait(_ url: URL) {

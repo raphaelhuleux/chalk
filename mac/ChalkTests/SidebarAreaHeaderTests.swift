@@ -6,7 +6,7 @@ import ChalkKit
 /// that marks where you are.
 @MainActor
 final class SidebarAreaHeaderTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var sidebar: SidebarViewController!
     private var root: URL!
 
@@ -23,34 +23,25 @@ final class SidebarAreaHeaderTests: XCTestCase {
         try? Data("# deep\n".utf8).write(
             to: root.appendingPathComponent("nested/deep.md"))
 
-        sidebar = SidebarViewController()
-        sidebar.locationsProvider = { [Location(id: "test", name: "Test", url: self.root)] }
-        window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 320, height: 700))
-        window.rootViewController = sidebar
-        window.isHidden = false
-        sidebar.loadViewIfNeeded()
-        sidebar.reload()
-        settle()
+        (sidebar, window) = makeHostedSidebar(
+            locations: [Location(id: "test", name: "Test", url: root)],
+            size: CGSize(width: 320, height: 700))
     }
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: root)
-        window.isHidden = true
-        window.rootViewController = nil
+        dismantleHostedSidebar(window)
         window = nil
         sidebar = nil
         root = nil
         super.tearDown()
     }
 
-    private func settle() {
-        window.layoutIfNeeded()
-        sidebar.collectionViewForTesting.layoutIfNeeded()
-    }
+    private func settle() { settleSidebar(sidebar, window) }
 
-    /// A fold schedules its rebuild off the main thread (the tree walk is what
-    /// used to freeze the app), and the header refresh follows the apply — so
-    /// the slot swap lands over several runloop turns. Spin until it does.
+    /// A fold schedules its rebuild off the main thread, and the header
+    /// refresh follows the apply, so the slot swap lands over several runloop
+    /// turns. Spin until it does.
     private func settleUntil(
         _ predicate: () -> Bool, _ message: String,
         file: StaticString = #filePath, line: UInt = #line
@@ -65,8 +56,7 @@ final class SidebarAreaHeaderTests: XCTestCase {
     }
 
     private func node(named name: String) throws -> FileNode {
-        let all = (0..<sidebar.collectionViewForTesting.numberOfItems(inSection: 0))
-            .compactMap { sidebar.nodeForTesting(at: IndexPath(item: $0, section: 0)) }
+        let all = sidebar.rowsForTesting(inSection: 0)
         return try XCTUnwrap(all.first { $0.name == name },
                              "the Library should list \(name); it has \(all.map(\.name))")
     }
@@ -74,7 +64,7 @@ final class SidebarAreaHeaderTests: XCTestCase {
     // MARK: - Area headers carry a count
 
     /// The artboard's header is a name and a number. The number is the area's
-    /// TOP-LEVEL entries — what the list shows when you open it, not a
+    /// TOP-LEVEL entries, what the list shows when you open it, not a
     /// recursive file count, which would say a different thing every time a
     /// subfolder changed.
     func testTheAreaHeaderCountsItsTopLevelEntries() throws {
@@ -88,21 +78,19 @@ final class SidebarAreaHeaderTests: XCTestCase {
     /// One slot, never both: folding replaces the count with the chevron, in a
     /// fixed frame, so the header's text never shifts.
     func testFoldingSwapsTheCountForTheChevron() throws {
-        let header = try XCTUnwrap(
-            sidebar.collectionViewForTesting.supplementaryView(
-                forElementKind: UICollectionView.elementKindSectionHeader,
-                at: IndexPath(item: 0, section: 0)))
-        sidebar.toggleFoldForTesting(onHeader: header)
+        sidebar.toggleFoldForTesting(locationID: "test")
         settleUntil({ self.sidebar.headerSlotForTesting(section: 0)?.showsChevron == true },
                     "a folded area says so")
         XCTAssertTrue(sidebar.isLocationCollapsedForTesting("test"), "precondition: it folded")
         XCTAssertEqual(sidebar.headerSlotForTesting(section: 0)?.count, "",
                        "and the count it hides goes with the rows")
+        XCTAssertEqual(sidebar.numberOfItemsForTesting(inSection: 0), 0, "a folded area shows no rows")
 
-        sidebar.toggleFoldForTesting(onHeader: header)
+        sidebar.toggleFoldForTesting(locationID: "test")
         settleUntil({ self.sidebar.headerSlotForTesting(section: 0)?.showsChevron == false },
                     "unfolding brings the count back")
         XCTAssertEqual(sidebar.headerSlotForTesting(section: 0)?.count, "4")
+        XCTAssertEqual(sidebar.numberOfItemsForTesting(inSection: 0), 4)
     }
 
     // MARK: - The Library marks the open document (audit PA-9)
@@ -133,8 +121,7 @@ final class SidebarAreaHeaderTests: XCTestCase {
 
     /// The host pushes the open document from `handleTabsChanged`, which runs
     /// on the restore path before this view controller has ever been asked for
-    /// its view. That crashed on an implicitly-unwrapped data
-    /// source; it must be a no-op instead.
+    /// its view. It must be a no-op, not a crash.
     func testMarkingBeforeTheViewLoadsIsANoOpNotACrash() {
         let fresh = SidebarViewController()
         fresh.setOpenDocument(URL(fileURLWithPath: "/tmp/whatever.md"))

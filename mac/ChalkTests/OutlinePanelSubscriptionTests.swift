@@ -7,9 +7,12 @@ import ChalkKit
 @MainActor
 final class OutlinePanelSubscriptionTests: XCTestCase {
     private var files: [URL] = []
+    private var windows: [NSWindow] = []
 
     override func tearDown() {
         for url in files { try? FileManager.default.removeItem(at: url) }
+        for window in windows { dismantleHostedSidebar(window) }
+        windows = []
         super.tearDown()
     }
 
@@ -21,12 +24,13 @@ final class OutlinePanelSubscriptionTests: XCTestCase {
         return url
     }
 
-    private func hosted() -> (UIWindow, EditorContainerViewController) {
-        let window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
+    private func hosted() -> (NSWindow, EditorContainerViewController) {
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
         let container = EditorContainerViewController()
         window.rootViewController = container
-        window.makeKeyAndVisible()
-        container.view.layoutIfNeeded()
+        window.isHidden = false
+        container.view.layoutSubtreeIfNeeded()
+        windows.append(window)
         return (window, container)
     }
 

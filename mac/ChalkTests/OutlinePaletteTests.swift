@@ -2,10 +2,9 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// Behavior of the outline palette VC with a canned snapshot — list contents,
+/// Behavior of the outline palette VC with a canned snapshot: list contents,
 /// preselection, activation, empty state, and the height report. All through
-/// the VC's public API plus DEBUG `…ForTesting` accessors (the
-/// EditorSurfaceInstallTests pattern); no webview involved.
+/// the VC's public API plus DEBUG `…ForTesting` accessors; no webview involved.
 @MainActor
 final class OutlinePaletteTests: XCTestCase {
     private func makeVC() -> OutlinePaletteViewController {
@@ -33,7 +32,7 @@ final class OutlinePaletteTests: XCTestCase {
         let vc = makeVC()
         vc.setSnapshot(sampleSnapshot)
         XCTAssertEqual(vc.visibleItemsForTesting.map(\.line), [1, 4, 9, 12])
-        // Cursor on line 10 sits in "Results" (line 9) — index 2.
+        // Cursor on line 10 sits in "Results" (line 9): index 2.
         XCTAssertEqual(vc.selectedIndexForTesting, 2)
     }
 
@@ -95,9 +94,33 @@ final class OutlinePaletteTests: XCTestCase {
         XCTAssertTrue(vc.isEmptyStateVisibleForTesting)
     }
 
-    /// With no window, becomeFirstResponder always fails, so didReveal keeps
-    /// the spaced retry chain alive — the precondition the cancellation test
-    /// below relies on (guards it against passing vacuously).
+    /// The field's commands: arrows move the row, Escape cancels, Return
+    /// jumps, through the same path the field editor takes.
+    func testFieldCommandsDriveTheSelection() {
+        let vc = makeVC()
+        var jumped: [Int] = []
+        var closed = 0
+        vc.onJump = { jumped.append($0) }
+        vc.onClose = { then in closed += 1; then?() }
+        vc.setSnapshot(sampleSnapshot)
+        let field = vc.searchFieldForTesting
+        let editor = NSTextView()
+        XCTAssertTrue(vc.control(field, textView: editor, doCommandBy: #selector(NSResponder.moveDown(_:))))
+        XCTAssertEqual(vc.selectedIndexForTesting, 3)
+        XCTAssertTrue(vc.control(field, textView: editor, doCommandBy: #selector(NSResponder.moveUp(_:))))
+        XCTAssertTrue(vc.control(field, textView: editor, doCommandBy: #selector(NSResponder.moveUp(_:))))
+        XCTAssertEqual(vc.selectedIndexForTesting, 1)
+        XCTAssertTrue(vc.control(field, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        XCTAssertEqual(jumped, [4])
+        XCTAssertTrue(vc.control(field, textView: editor, doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        XCTAssertEqual(closed, 2)
+        XCTAssertFalse(vc.control(field, textView: editor, doCommandBy: #selector(NSResponder.moveLeft(_:))),
+                       "anything else is the field's own")
+    }
+
+    /// With no window the focus grab always fails, so didReveal keeps the
+    /// spaced retry chain alive, the precondition the cancellation test below
+    /// relies on (guards it against passing vacuously).
     func testFocusRetriesContinueWhileRevealed() {
         let vc = makeVC()
         vc.didReveal()
@@ -108,8 +131,8 @@ final class OutlinePaletteTests: XCTestCase {
     }
 
     /// willHide (called by the host on every dismiss path) must cancel retries
-    /// still pending in asyncAfter, or a late retry hands first responder to
-    /// the hidden search field and steals the keyboard from the editor.
+    /// still pending, or a late retry hands the keyboard to the hidden search
+    /// field and steals it from the editor.
     func testWillHideCancelsPendingFocusRetries() {
         let vc = makeVC()
         vc.didReveal()

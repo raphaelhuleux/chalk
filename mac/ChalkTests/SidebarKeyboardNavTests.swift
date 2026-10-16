@@ -2,28 +2,25 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// Keyboard navigation for the Library tree (bug 2026-08-02): arrow keys move
-/// UIKit focus but the row painter only styled `isSelected`, so keyboard users
-/// got the system focus halo instead of the design's Ink pill.
+/// Keyboard navigation for the Library tree.
 ///
 /// Contract under test:
 /// - Return / keypad-Enter are deliberately UNCLAIMED (decision 2026-08-15:
-///   the sidebar must never eat the editor's Return on Catalyst); keyboard
-///   activation is the focus system's Space, through the shared activate()
-///   path (folders toggle, files open, the "Empty" sentinel is inert).
-/// - Left/Right fold/unfold a focused folder, Finder-style; F2 renames.
-/// - Up/Down stay with the focus system (no UIKeyCommand claims them).
-/// - Focused rows paint the selection pill; the system halo is suppressed.
-/// - The "Empty" sentinel row can't take focus at all.
+///   the sidebar must never eat the editor's Return); keyboard activation is
+///   Space, through the shared activate() path (folders toggle, files open,
+///   the "Empty" sentinel is inert).
+/// - Left/Right fold/unfold a selected folder, Finder-style; F2 renames.
+/// - Up/Down stay with the table (nothing claims them).
+/// - Selected rows paint the selection pill; the system highlight is off.
+/// - The "Empty" sentinel row can't be selected at all.
 @MainActor
 final class SidebarKeyboardNavTests: XCTestCase {
-    private var window: UIWindow!
-    private var host: UIViewController!
+    private var window: NSWindow!
     private var sidebar: SidebarViewController!
     private var root: URL!
     private var emptyRoot: URL!
 
-    private var collectionView: UICollectionView { sidebar.collectionViewForTesting }
+    private var outlineView: LibraryOutlineView { sidebar.outlineViewForTesting }
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -41,32 +38,15 @@ final class SidebarKeyboardNavTests: XCTestCase {
             .appendingPathComponent("chalk-keynav-empty-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: emptyRoot, withIntermediateDirectories: true)
 
-        sidebar = SidebarViewController()
-        sidebar.locationsProvider = { [
-            Location(id: "main", name: "Root", url: self.root),
-            Location(id: "empty", name: "Empty", url: self.emptyRoot),
-        ] }
-        host = UIViewController()
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first!
-        window = UIWindow(windowScene: scene)
-        window.rootViewController = host
-        window.isHidden = false
-        host.addChild(sidebar)
-        sidebar.view.translatesAutoresizingMaskIntoConstraints = true
-        sidebar.view.frame = CGRect(x: 0, y: 0, width: 320, height: 600)
-        host.view.addSubview(sidebar.view)
-        sidebar.didMove(toParent: host)
-        sidebar.reload()
-        window.layoutIfNeeded()
-        collectionView.layoutIfNeeded()
+        (sidebar, window) = makeHostedSidebar(locations: [
+            Location(id: "main", name: "Root", url: root),
+            Location(id: "empty", name: "Empty", url: emptyRoot),
+        ])
     }
 
     override func tearDownWithError() throws {
-        window.isHidden = true
-        window.rootViewController = nil
+        dismantleHostedSidebar(window)
         window = nil
-        host = nil
         sidebar = nil
         try? FileManager.default.removeItem(at: root)
         try? FileManager.default.removeItem(at: emptyRoot)
@@ -81,41 +61,44 @@ final class SidebarKeyboardNavTests: XCTestCase {
         try XCTUnwrap(FileTree.children(of: root).first { !$0.isDirectory })
     }
 
-    // MARK: Key commands
+    private func keyEvent(_ characters: String, keyCode: UInt16 = 0) -> NSEvent? {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                         windowNumber: 0, context: nil, characters: characters,
+                         charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode)
+    }
 
-    func testKeyCommandsClaimFoldArrowsAndRenameButNeverReturn() throws {
-        // The static table, not `sidebar.keyCommands`: the property vends nil
-        // unless a Library row really holds focus, which a unit test can't
-        // arrange.
-        let commands = SidebarViewController.treeKeyCommandsForTesting
-        let claimed = [UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow, UIKeyCommand.f2]
-        for input in claimed {
-            let command = try XCTUnwrap(
-                commands.first { $0.input == input && $0.modifierFlags.isEmpty },
-                "sidebar should claim \(input) with no modifiers")
-            // Left/Right would otherwise be swallowed by the focus system's
-            // lateral-move handling; priority is uniform.
-            XCTAssertTrue(command.wantsPriorityOverSystemBehavior)
+    // MARK: Key claims
+
+    func testKeyClaimsCoverFoldArrowsRenameAndSpaceButNeverReturn() throws {
+        let inputs = SidebarViewController.treeKeyClaimsForTesting.map(\.input)
+        for claimed in [String(UnicodeScalar(NSLeftArrowFunctionKey)!),
+                        String(UnicodeScalar(NSRightArrowFunctionKey)!),
+                        String(UnicodeScalar(NSF2FunctionKey)!), " "] {
+            XCTAssertTrue(inputs.contains(claimed), "the tree should claim \(claimed.unicodeScalars.first!.value)")
         }
-        let inputs = commands.compactMap(\.input)
         // Decision 2026-08-15 (Return-swallowing investigation): the sidebar
-        // must never eat the editor's Return, so Return / keypad-Enter stay
-        // unclaimed — the focus system's Space is the keyboard activation.
-        XCTAssertFalse(inputs.contains("\r"), "Return must fall through to the editor")
-        XCTAssertFalse(inputs.contains("\u{3}"), "keypad Enter must fall through to the editor")
-        // Up/Down belong to the focus system — claiming them would kill the
-        // built-in row-to-row focus walk.
-        XCTAssertFalse(inputs.contains(UIKeyCommand.inputUpArrow))
-        XCTAssertFalse(inputs.contains(UIKeyCommand.inputDownArrow))
+        // must never eat the editor's Return.
+        XCTAssertFalse(inputs.contains("\r"), "Return must fall through")
+        XCTAssertFalse(inputs.contains("\u{3}"), "keypad Enter must fall through")
+        // Up/Down belong to the table: claiming them would kill the built-in walk.
+        XCTAssertFalse(inputs.contains(String(UnicodeScalar(NSUpArrowFunctionKey)!)))
+        XCTAssertFalse(inputs.contains(String(UnicodeScalar(NSDownArrowFunctionKey)!)))
+
+        // The same table, read through the event classifier the view uses.
+        XCTAssertEqual(LibraryOutlineView.claim(for: try XCTUnwrap(keyEvent(String(UnicodeScalar(NSF2FunctionKey)!), keyCode: 120))), .rename)
+        XCTAssertEqual(LibraryOutlineView.claim(for: try XCTUnwrap(keyEvent(" ", keyCode: 49))), .activate)
+        XCTAssertNil(LibraryOutlineView.claim(for: try XCTUnwrap(keyEvent("\r", keyCode: 36))))
     }
 
-    func testCollectionViewOptsIntoKeyboardFocus() {
-        XCTAssertTrue(collectionView.allowsFocus, "arrow keys need focus")
-        XCTAssertTrue(collectionView.remembersLastFocusedIndexPath, "focus should return to the last row, not jump to the top")
-        XCTAssertFalse(collectionView.selectionFollowsFocus, "arrowing must not open files / toggle folders")
+    func testTheTableTakesTheKeyboardWithoutSystemHighlight() {
+        XCTAssertTrue(outlineView.acceptsFirstResponder, "arrow keys need the keyboard")
+        XCTAssertEqual(outlineView.selectionHighlightStyle, .none, "the Ink pill replaces the system highlight")
+        XCTAssertEqual(outlineView.focusRingType, .none)
+        XCTAssertTrue(outlineView.allowsEmptySelection)
+        XCTAssertFalse(outlineView.allowsMultipleSelection)
     }
 
-    // MARK: Row activation (clicks and the focus system's Space share activate())
+    // MARK: Row activation (clicks and Space share activate())
 
     func testActivatingFolderTogglesExpansion() throws {
         let folder = try folderNode()
@@ -136,13 +119,24 @@ final class SidebarKeyboardNavTests: XCTestCase {
 
     func testActivatingPlaceholderIsANoOp() throws {
         // The empty Location's single row is the sentinel.
-        let placeholderPath = IndexPath(item: 0, section: 1)
-        let placeholder = try XCTUnwrap(sidebar.nodeForTesting(at: placeholderPath))
+        let placeholder = try XCTUnwrap(sidebar.nodeForTesting(at: IndexPath(item: 0, section: 1)))
+        XCTAssertEqual(placeholder.name, "Empty")
         var opened: [URL] = []
         sidebar.onOpenFile = { opened.append($0) }
         sidebar.activate(placeholder)
         XCTAssertTrue(opened.isEmpty, "the Empty sentinel is not a real file")
         XCTAssertFalse(sidebar.isExpandedForTesting(placeholder))
+    }
+
+    /// Space on the selected row runs the same activation a click does.
+    func testSpaceActivatesTheSelectedRow() throws {
+        let file = try fileNode()
+        var opened: [URL] = []
+        sidebar.onOpenFile = { opened.append($0) }
+        let row = try XCTUnwrap(sidebar.rowForTesting(file))
+        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        outlineView.keyDown(with: try XCTUnwrap(keyEvent(" ", keyCode: 49)))
+        XCTAssertEqual(opened, [file.url])
     }
 
     // MARK: Left/Right fold keys
@@ -168,36 +162,45 @@ final class SidebarKeyboardNavTests: XCTestCase {
         XCTAssertTrue(opened.isEmpty)
     }
 
-    // MARK: Focus visuals
+    // MARK: Selection visuals
 
-    func testPlaceholderRowIsNotFocusable() {
-        XCTAssertFalse(sidebar.collectionView(collectionView, canFocusItemAt: IndexPath(item: 0, section: 1)))
-        XCTAssertTrue(sidebar.collectionView(collectionView, canFocusItemAt: IndexPath(item: 0, section: 0)))
+    func testPlaceholderRowIsNotSelectable() throws {
+        let placeholder = try XCTUnwrap(sidebar.nodeForTesting(at: IndexPath(item: 0, section: 1)))
+        let placeholderItem = try XCTUnwrap(sidebar.item(for: placeholder))
+        let first = try XCTUnwrap(sidebar.item(for: try XCTUnwrap(sidebar.nodeForTesting(at: IndexPath(item: 0, section: 0)))))
+        XCTAssertFalse(sidebar.outlineView(outlineView, shouldSelectItem: placeholderItem))
+        XCTAssertTrue(sidebar.outlineView(outlineView, shouldSelectItem: first))
+        XCTAssertFalse(sidebar.outlineView(outlineView, shouldSelectItem: try XCTUnwrap(sidebar.sections.first)),
+                       "headers fold, they never select")
     }
 
-    func testFocusedRowPaintsSelectionPill() {
-        let focused = SidebarViewController.rowBackground(
+    func testSelectedRowPaintsSelectionPill() {
+        let selected = SidebarViewController.rowBackground(
             isDropTarget: false, isSelected: false, isFocused: true, isHoveredOrHighlighted: false)
-        XCTAssertEqual(focused.backgroundColor, .chalkRowSelection)
-        XCTAssertEqual(focused.cornerRadius, ChalkMetrics.rowCornerRadius)
+        XCTAssertEqual(selected.backgroundColor, .chalkRowSelection)
+        XCTAssertEqual(selected.cornerRadius, ChalkMetrics.rowCornerRadius)
 
         let idle = SidebarViewController.rowBackground(
             isDropTarget: false, isSelected: false, isFocused: false, isHoveredOrHighlighted: false)
-        XCTAssertEqual(idle.backgroundColor, .clear, "idle rows paint no pill")
+        XCTAssertNil(idle.backgroundColor, "idle rows paint no pill")
 
         let hovered = SidebarViewController.rowBackground(
             isDropTarget: false, isSelected: false, isFocused: false, isHoveredOrHighlighted: true)
         XCTAssertEqual(hovered.backgroundColor, .chalkRowHoverBackground)
 
-        // Drop target outranks everything — the landing-zone pill must not
-        // flicker away because the row happens to be focused.
+        // Drop target outranks everything: the landing-zone pill must not
+        // flicker away because the row happens to be selected.
         let drop = SidebarViewController.rowBackground(
             isDropTarget: true, isSelected: true, isFocused: true, isHoveredOrHighlighted: true)
         XCTAssertEqual(drop.backgroundColor, .chalkRowSelection)
     }
 
-    func testCellsSuppressSystemFocusHalo() throws {
-        let cell = try XCTUnwrap(collectionView.cellForItem(at: IndexPath(item: 0, section: 0)))
-        XCTAssertNil(cell.focusEffect, "the Ink pill replaces the system halo")
+    /// A selected row carries the pill, read off the live row view.
+    func testSelectingARowMarksIt() throws {
+        let file = try fileNode()
+        let row = try XCTUnwrap(sidebar.rowForTesting(file))
+        XCTAssertFalse(sidebar.rowIsMarkedForTesting(file))
+        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        XCTAssertTrue(sidebar.rowIsMarkedForTesting(file))
     }
 }

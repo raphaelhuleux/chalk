@@ -38,14 +38,11 @@ A fork that ships its own build must change it.
    ./scripts/release-mac.sh
    ```
 
-   `--appkit` archives the AppKit shell (`ChalkMac`) instead of the Catalyst one.
-   Until the cutover in `docs/specs/2026-10-15-appkit-shell-rewrite-plan.md` it ships under its own bundle ID, `com.huleux.chalk.mac`, so it does not share settings with an installed Catalyst build.
-
 The script archives, exports, audits the export, notarises, staples the ticket and zips the stapled app.
 Everything lands in `dist/<version>-<build>/`.
 Keep `Chalk.xcarchive`: its dSYMs are the only way to symbolicate a crash report from that build.
 
-The notarised path turns on the hardened runtime. Under the hardened runtime the app only loads code signed by the same team, which for the Catalyst shell includes the `ChalkAppKitGlue` bundle. This path has not been exercised end to end yet, so check the glue loads (the audit and `scripts/install-mac.sh` both describe how). The AppKit shell has no glue bundle.
+The notarised path turns on the hardened runtime. This path has not been exercised end to end yet.
 
 ### Verify
 
@@ -78,5 +75,5 @@ macOS will warn that it cannot verify the app; the user opens it once with Syste
 ## Mac App Store (optional, blocked)
 
 The Mac App Store requires the App Sandbox, and the sandbox breaks the editor today (see the issue note above).
-`mac/Chalk/Chalk-macCatalyst.entitlements` and `mac/ChalkMac/Chalk-mac.entitlements` already hold the sandbox entitlements, and `mac/Chalk/PrivacyInfo.xcprivacy` declares no tracking and no data collection.
+`mac/Chalk/Chalk-mac.entitlements` already holds the sandbox entitlements, and `mac/Chalk/PrivacyInfo.xcprivacy` declares no tracking and no data collection.
 Until the sandbox problem is solved, do not start an App Store submission.

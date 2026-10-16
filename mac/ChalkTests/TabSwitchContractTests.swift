@@ -9,20 +9,15 @@ import ChalkKit
 /// visible (before install).
 @MainActor
 final class TabSwitchContractTests: XCTestCase {
-    private var window: UIWindow!
+    private var window: NSWindow!
     private var editor: EditorContainerViewController!
     private var tempDir: URL!
 
     override func setUp() {
         super.setUp()
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first else {
-            preconditionFailure("no scene to host in")
-        }
         // Window-hosted: the cross-fade's animated lane only runs for views
         // that can appear on screen; unhosted it takes the instant branch.
-        window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
         window.isHidden = false
         editor = EditorContainerViewController()
         window.rootViewController = editor
@@ -54,12 +49,14 @@ final class TabSwitchContractTests: XCTestCase {
     }
 
     func testSwitchKeepsBothSurfacesHostedThenExactlyOne() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled,
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled,
                       "Reduce Motion takes the instant swap; the fade contract is about the animated lane")
+        // The surfaces' hosted views (the seam's `view`), not the web views
+        // inside them: hosting and the cross-fade act on the host.
         let a = try open("a.md")
-        let first = try XCTUnwrap(editor.activeSurfaceWebView)
+        let first = try XCTUnwrap(editor.tabSurfaceForTesting(at: 0)?.view)
         _ = try open("b.md")
-        let second = try XCTUnwrap(editor.activeSurfaceWebView)
+        let second = try XCTUnwrap(editor.tabSurfaceForTesting(at: 1)?.view)
         XCTAssertNotEqual(first, second, "two tabs, two surfaces")
 
         // Mid-fade (b just activated): both hosted, incoming on top.
@@ -74,7 +71,7 @@ final class TabSwitchContractTests: XCTestCase {
         // Switch back: same contract in the other direction.
         editor.open(url: a)
         XCTAssertNotNil(first.superview ?? second.superview)
-        XCTAssertNotNil(editor.activeSurfaceWebView?.superview)
+        XCTAssertNotNil(editor.tabSurfaceForTesting(at: 0)?.view.superview)
         XCTAssertNotNil(second.superview, "outgoing (b) stays through the fade")
         pump(ChalkMetrics.motionFast + 0.2)
         XCTAssertNil(second.superview, "exactly one surface hosted at rest")
@@ -105,9 +102,9 @@ final class TabSwitchContractTests: XCTestCase {
     }
 
     func testRapidSwitchNeverRemovesTheActiveSurface() throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled)
         let a = try open("a.md")
-        let first = try XCTUnwrap(editor.activeSurfaceWebView)
+        let first = try XCTUnwrap(editor.tabSurfaceForTesting(at: 0)?.view)
         _ = try open("b.md")
         // Mid-fade, come straight back to a: the completion of the a->b fade
         // must not remove a's view — it is the active surface again.
@@ -116,6 +113,6 @@ final class TabSwitchContractTests: XCTestCase {
         XCTAssertNotNil(first.superview,
                         "a surface re-activated mid-fade must survive the stale fade's completion")
         XCTAssertEqual(first.alpha, 1, accuracy: 0.01)
-        XCTAssertEqual(editor.activeSurfaceWebView, first)
+        XCTAssertEqual(editor.tabSurfaceForTesting(at: 0)?.view, first)
     }
 }

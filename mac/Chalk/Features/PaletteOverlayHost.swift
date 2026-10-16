@@ -1,42 +1,78 @@
-import UIKit
+import AppKit
 import ChalkKit
 
-/// One palette overlay: dim backdrop, glass card, tap-to-dismiss, and the reveal/hide animation.
-/// Quick Open (⌘O) and the outline palette (⌘P) each own one. In-window overlays, not sheets: on
-/// Mac Catalyst a `.formSheet` animates even with `animated: false`. Nothing palette-specific
-/// lives here; exclusion, focus return and the rest stay in `RootSplitViewController`.
-final class PaletteOverlayHost: NSObject, UIGestureRecognizerDelegate {
-    /// The full-window scrim, and the tap-to-dismiss target.
-    let backdrop = UIView()
-    /// The glass card inside `backdrop`, animated independently of the scrim.
-    private(set) var card: UIView?
-    private(set) var isVisible = false
-    /// The palette's view, held for the tap-outside rule and to resign the search field.
-    private weak var content: UIView?
-    private var cardHeight: NSLayoutConstraint?
-    private var onBackdropTap: (() -> Void)?
+/// The full-window scrim behind a palette. A click on the dim area (outside
+/// the card's content) dismisses; clicks on the card reach its field and rows.
+final class PaletteBackdropView: FlippedView {
+    var onTapOutside: (() -> Void)?
+    weak var content: NSView?
 
-    /// Add the overlay to `root`, hidden. View controller containment stays with the caller.
-    func mount(in root: UIView, content: UIView, onBackdropTap: @escaping () -> Void) {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        refreshColor()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    @objc private func themeDidChange() { refreshColor() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshColor()
+    }
+
+    private func refreshColor() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.chalkScrim.cgColor
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let content else { return }
+        let point = content.convert(event.locationInWindow, from: nil)
+        if content.bounds.contains(point) { return }
+        onTapOutside?()
+    }
+}
+
+/// One palette overlay: dim backdrop, glass card, click-to-dismiss, and the
+/// reveal/hide animation. Quick Open (⌘O) and the outline palette (⌘P) each
+/// own one. In-window overlays, not sheets, so opening is a view toggle with
+/// no window animation. Nothing palette-specific lives here; exclusion, focus
+/// return and the rest stay in `RootSplitViewController`.
+final class PaletteOverlayHost {
+    /// The full-window scrim, and the click-to-dismiss target.
+    let backdrop = PaletteBackdropView()
+    /// The glass card inside `backdrop`, animated independently of the scrim.
+    private(set) var card: ChalkGlassView?
+    private(set) var isVisible = false
+    private weak var content: NSView?
+    private var cardHeight: NSLayoutConstraint?
+
+    /// Add the overlay to `root`, hidden, above everything the root holds at
+    /// that moment. View controller containment stays with the caller.
+    func mount(in root: NSView, content: NSView, onBackdropTap: @escaping () -> Void) {
         self.content = content
-        self.onBackdropTap = onBackdropTap
+        backdrop.content = content
+        backdrop.onTapOutside = onBackdropTap
         backdrop.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.backgroundColor = .chalkScrim
         backdrop.isHidden = true
-        root.addSubview(backdrop)
+        root.addSubview(backdrop, positioned: .above, relativeTo: nil)
         NSLayoutConstraint.activate([
             backdrop.topAnchor.constraint(equalTo: root.topAnchor),
             backdrop.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             backdrop.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             backdrop.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
-        let tap = UITapGestureRecognizer(target: self, action: #selector(backdropTapped))
-        tap.delegate = self
-        backdrop.addGestureRecognizer(tap)
 
         content.translatesAutoresizingMaskIntoConstraints = false
         let cardWrap = ChalkGlassView(style: .palette, cornerRadius: ChalkMetrics.paletteRadius)
         cardWrap.translatesAutoresizingMaskIntoConstraints = false
+        cardWrap.wantsLayer = true
         card = cardWrap
         backdrop.addSubview(cardWrap)
         cardWrap.contentView.addSubview(content)
@@ -53,102 +89,112 @@ final class PaletteOverlayHost: NSObject, UIGestureRecognizerDelegate {
         let height = cardWrap.heightAnchor.constraint(equalToConstant: 420)
         height.priority = .defaultHigh
         cardHeight = height
-        let area = paletteArea()
         NSLayoutConstraint.activate([
-            cardWrap.centerXAnchor.constraint(equalTo: area.centerXAnchor),
-            cardWrap.centerYAnchor.constraint(equalTo: area.centerYAnchor),
+            // Centered on both axes in the window (the iA Writer Quick Search placement).
+            cardWrap.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
+            cardWrap.centerYAnchor.constraint(equalTo: backdrop.centerYAnchor),
             width,
-            cardWrap.widthAnchor.constraint(lessThanOrEqualTo: area.widthAnchor, constant: -80),
+            cardWrap.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor, constant: -80),
             height,
-            // The height (defaultHigh) gives when the area is too short.
-            cardWrap.topAnchor.constraint(greaterThanOrEqualTo: area.topAnchor, constant: 40),
-            cardWrap.bottomAnchor.constraint(lessThanOrEqualTo: area.bottomAnchor, constant: -40),
+            // The height (defaultHigh) gives when the window is too short.
+            cardWrap.topAnchor.constraint(greaterThanOrEqualTo: backdrop.topAnchor, constant: 40),
+            cardWrap.bottomAnchor.constraint(lessThanOrEqualTo: backdrop.bottomAnchor, constant: -40),
         ])
     }
 
-    /// The palette VC's reported natural height, ignored while it hasn't moved.
+    /// The palette's reported natural height, ignored while it hasn't moved.
     func setCardHeight(_ newHeight: CGFloat) {
         guard let cardHeight, abs(cardHeight.constant - newHeight) > 0.5 else { return }
         cardHeight.constant = newHeight
     }
 
-    // The card centers in the backdrop, which covers the whole window.
-    private func paletteArea() -> UILayoutGuide {
-        let area = UILayoutGuide()
-        backdrop.addLayoutGuide(area)
-        NSLayoutConstraint.activate([
-            area.topAnchor.constraint(equalTo: backdrop.topAnchor),
-            area.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
-            area.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
-            area.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
-        ])
-        return area
+    private static let hiddenTransform: CATransform3D = {
+        var transform = CATransform3DMakeTranslation(0, 6, 0)
+        transform = CATransform3DScale(transform, 0.97, 0.97, 1)
+        return transform
+    }()
+    private static let duration: TimeInterval = 0.10
+
+    private var motionAllowed: Bool {
+        !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && backdrop.window != nil
     }
 
-    private static let hiddenTransform =
-        CGAffineTransform(translationX: 0, y: 6).scaledBy(x: 0.97, y: 0.97)
-
-    /// Unhide instantly (layout must settle before animating), run `beforeAnimating`, then fade
-    /// and scale in. Reduce Motion skips the animation.
+    /// Unhide instantly (layout must settle before animating), run
+    /// `beforeAnimating`, then fade and scale in. Reduce Motion skips the animation.
     func present(beforeAnimating: () -> Void = {}) {
         guard let root = backdrop.superview else { return }
         isVisible = true
-        UIView.performWithoutAnimation {
-            root.bringSubviewToFront(backdrop)
-            backdrop.isHidden = false
-            root.layoutIfNeeded()
-        }
+        backdrop.isHidden = false
+        root.layoutSubtreeIfNeeded()
         beforeAnimating()
-        guard !UIAccessibility.isReduceMotionEnabled else {
-            backdrop.alpha = 1
-            card?.alpha = 1
-            card?.transform = .identity
+        guard motionAllowed, let card else {
+            backdrop.alphaValue = 1
+            card?.alphaValue = 1
+            card?.layer?.transform = CATransform3DIdentity
             return
         }
-        backdrop.alpha = 0
-        card?.alpha = 0
-        card?.transform = Self.hiddenTransform
-        UIView.animate(withDuration: 0.10,
-                       delay: 0,
-                       options: [.curveEaseOut, .beginFromCurrentState]) { [backdrop, card] in
-            backdrop.alpha = 1
-            card?.alpha = 1
-            card?.transform = .identity
+        backdrop.alphaValue = 0
+        card.alphaValue = 0
+        // The card's layer anchors at its centre so the scale breathes from the middle.
+        card.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        card.layer?.position = CGPoint(x: card.frame.midX, y: card.frame.midY)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            backdrop.animator().alphaValue = 1
+            card.animator().alphaValue = 1
+        }
+        if let layer = card.layer {
+            layer.transform = CATransform3DIdentity
+            let scale = CABasicAnimation(keyPath: "transform")
+            scale.fromValue = NSValue(caTransform3D: Self.hiddenTransform)
+            scale.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+            scale.duration = Self.duration
+            scale.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.add(scale, forKey: "chalk.palette.reveal")
         }
     }
 
-    /// Fade out, then hide and reset. `beforeResigning` runs before the card gives up the
-    /// keyboard. A reopen during the fade makes the completion skip hiding.
+    /// Fade out, then hide and reset. `beforeResigning` runs before the card
+    /// gives up the keyboard. A reopen during the fade makes the completion
+    /// skip hiding.
     func dismiss(beforeResigning: () -> Void = {}) {
         isVisible = false
         beforeResigning()
-        content?.endEditing(true) // resign the search field
-        guard !UIAccessibility.isReduceMotionEnabled else {
-            UIView.performWithoutAnimation { backdrop.isHidden = true }
+        resignContentFocus()
+        guard motionAllowed, let card else {
+            backdrop.isHidden = true
             return
         }
-        UIView.animate(withDuration: 0.10,
-                       delay: 0,
-                       options: [.curveEaseIn, .beginFromCurrentState]) { [backdrop, card] in
-            backdrop.alpha = 0
-            card?.alpha = 0
-            card?.transform = Self.hiddenTransform
-        } completion: { [weak self, backdrop, card] _ in
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = Self.duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            backdrop.animator().alphaValue = 0
+            card.animator().alphaValue = 0
+        }, completionHandler: { [weak self, backdrop, card] in
             guard !(self?.isVisible ?? false) else { return }
             backdrop.isHidden = true
-            backdrop.alpha = 1
-            card?.alpha = 1
-            card?.transform = .identity
+            backdrop.alphaValue = 1
+            card.alphaValue = 1
+        })
+    }
+
+    /// Give up the keyboard if the card holds it (the search field's editor),
+    /// so no keystroke lands in a hidden field.
+    private func resignContentFocus() {
+        guard let content, let window = content.window else { return }
+        let responder = window.firstResponder
+        let holder: NSView? = (responder as? NSTextView)?.delegate as? NSView ?? responder as? NSView
+        if let holder, holder.isDescendant(of: content) {
+            window.makeFirstResponder(nil)
         }
     }
 
-    @objc private func backdropTapped() { onBackdropTap?() }
-
-    // Tap-to-dismiss fires only on the dim area, so taps still reach the card's field and rows.
-    func gestureRecognizer(
-        _ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch
-    ) -> Bool {
-        guard isVisible, let content else { return false }
-        return !content.bounds.contains(touch.location(in: content))
+    #if DEBUG
+    /// The card's frame in the host root's coordinates; null while unmounted.
+    var cardFrameForTesting: CGRect {
+        guard let card, let root = backdrop.superview else { return .null }
+        return root.convert(card.frame, from: backdrop)
     }
+    #endif
 }

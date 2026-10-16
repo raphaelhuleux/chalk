@@ -1,11 +1,12 @@
-import UIKit
+import AppKit
 import ChalkKit
 
-/// What Chalk does with the user's data. Every claim is either checkable from the Terminal or backed
-/// by evidence on screen; unsaved snapshots and conflict copies are disclosed because they are the
-/// only user content kept outside the user's own files.
-final class PrivacyViewController: UIViewController {
-    private enum Section: Int, CaseIterable {
+/// What Chalk does with the user's data. Every claim is either checkable from
+/// the Terminal or backed by evidence on screen; unsaved snapshots and
+/// conflict copies are disclosed because they are the only user content kept
+/// outside the user's own files.
+final class PrivacyViewController: NSViewController {
+    enum Section: Int, CaseIterable {
         case network, unsaved, conflicts, folder, logs, crash
 
         var title: String {
@@ -57,35 +58,44 @@ final class PrivacyViewController: UIViewController {
 
     private let alpha: AlphaSession
     private let recovery = RecoveryStore(directory: RecoveryStore.appDirectory)
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let scrollView = NSScrollView()
+    private let document = FlippedView()
+    private var stack: NSStackView?
 
     init(alpha: AlphaSession) {
         self.alpha = alpha
         super.init(nibName: nil, bundle: nil)
+        title = "Privacy"
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        title = "Privacy"
-        view.backgroundColor = .chalkChromeBackground
-        tableView.backgroundColor = .chalkChromeBackground
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(tableView)
-        NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.topAnchor),
-            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
+    override func loadView() {
+        view = ChromeToneView()
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        scrollView.documentView = document
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(scrollView)
+        document.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            document.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+        ])
+        reloadRows()
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
         // The counts are live: reload so just-deleted snapshots disappear.
         reloadRows()
     }
@@ -97,27 +107,12 @@ final class PrivacyViewController: UIViewController {
         rows(in: Section(rawValue: section)!).map { ($0.title, $0.detail) }
     }
 
-    private struct Row {
+    struct Row {
         let title: String
         var detail: String?
         var isDestructive = false
         var action: (() -> Void)?
         var toggle: Bool?
-    }
-
-    /// What the table shows, by section. Built once per reload: the unsaved-work rows list the
-    /// recovery folder several times, and the data source asks per row.
-    private var sectionRows: [[Row]] = []
-
-    private func reloadRows() {
-        sectionRows = Section.allCases.map(rows(in:))
-        tableView.reloadData()
-    }
-
-    private func row(at indexPath: IndexPath) -> Row? {
-        guard sectionRows.indices.contains(indexPath.section),
-              sectionRows[indexPath.section].indices.contains(indexPath.row) else { return nil }
-        return sectionRows[indexPath.section][indexPath.row]
     }
 
     private func rows(in section: Section) -> [Row] {
@@ -134,20 +129,19 @@ final class PrivacyViewController: UIViewController {
             if let oldest = recovery.oldestPendingDate() {
                 rows.append(Row(title: "Oldest", detail: Self.formatted(date: oldest)))
             }
-            // clearPreviousLaunches, not clearAll: clearAll would delete the live snapshot of a
-            // window being edited and disarm crash recovery for the session. See RecoveryStore.
+            // clearPreviousLaunches, not clearAll: clearAll would delete the
+            // live snapshot of a window being edited and disarm crash recovery
+            // for the session. See RecoveryStore.
             rows.append(Row(title: "Delete Snapshots from Earlier Sessions",
                             isDestructive: true,
                             action: { [weak self] in self?.deleteEarlierSnapshots() }))
             return rows
 
         case .conflicts:
-            return [Row(title: "Kept in Chalk\u{2019}s folder",
-                        detail: "\(conflictCopyCount())")]
+            return [Row(title: "Kept in Chalk\u{2019}s folder", detail: "\(conflictCopyCount())")]
 
         case .folder:
-            return [Row(title: "Reveal in Finder",
-                        action: { [weak self] in self?.revealFolder() })]
+            return [Row(title: "Reveal in Finder", action: { [weak self] in self?.revealFolder() })]
 
         case .logs:
             return [Row(title: "Log files written", detail: "None")]
@@ -155,6 +149,54 @@ final class PrivacyViewController: UIViewController {
         case .crash:
             return [Row(title: "Ask me after a crash", toggle: alpha.isCrashPromptEnabled)]
         }
+    }
+
+    private func reloadRows() {
+        stack?.removeFromSuperview()
+        let cards = Section.allCases.map { section -> NSView in
+            let rowViews = rows(in: section).map(makeRow)
+            let card = SettingsCardView(title: section.title, rows: rowViews)
+            let footer = NSTextField(wrappingLabelWithString: section.footer)
+            footer.font = .systemFont(ofSize: 11)
+            footer.textColor = .chalkTextMuted
+            let group = NSStackView(views: [card, footer])
+            group.orientation = .vertical
+            group.alignment = .leading
+            group.spacing = 8
+            card.widthAnchor.constraint(equalTo: group.widthAnchor).isActive = true
+            footer.widthAnchor.constraint(equalTo: group.widthAnchor, constant: -SettingsRowView.inset * 2).isActive = true
+            return group
+        }
+        let stack = NSStackView(views: cards)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 22
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(stack)
+        let margin: CGFloat = 20
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: document.topAnchor, constant: margin),
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: margin),
+            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -margin),
+            stack.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -margin),
+        ])
+        for card in cards { card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        self.stack = stack
+    }
+
+    private func makeRow(_ row: Row) -> SettingsRowView {
+        var control: NSView?
+        if let isOn = row.toggle {
+            let toggle = NSSwitch()
+            toggle.state = isOn ? .on : .off
+            toggle.target = self
+            toggle.action = #selector(crashPromptToggled)
+            control = toggle
+        }
+        let view = SettingsRowView(title: row.title, detail: row.detail, control: control)
+        if row.isDestructive { view.titleLabel.textColor = .systemRed }
+        if let action = row.action { view.onClick = action }
+        return view
     }
 
     // MARK: - Actions
@@ -166,15 +208,11 @@ final class PrivacyViewController: UIViewController {
     }
 
     private func revealFolder() {
-        // Unverified that a sandboxed Catalyst app can open its own container. If not, the fallback
-        // is NSWorkspace.activateFileViewerSelecting via ChalkAppKitGlue.
-        UIApplication.shared.open(RecoveryStore.chalkFolder)
+        NSWorkspace.shared.activateFileViewerSelecting([RecoveryStore.chalkFolder])
     }
 
-    @objc private func crashPromptToggled(_ sender: UISwitch) {
-        alpha.isCrashPromptEnabled = sender.isOn
-        // A cell rebuilt after scrolling reads the cache, which must not show the old state.
-        sectionRows[Section.crash.rawValue] = rows(in: .crash)
+    @objc private func crashPromptToggled(_ sender: NSSwitch) {
+        alpha.isCrashPromptEnabled = sender.state == .on
     }
 
     /// Only the copies in Chalk's own folder; the footer says so rather than indexing the disk.
@@ -194,55 +232,5 @@ final class PrivacyViewController: UIViewController {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
-    }
-}
-
-extension PrivacyViewController: UITableViewDataSource {
-    func numberOfSections(in tableView: UITableView) -> Int { Section.allCases.count }
-
-    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        Section(rawValue: section)?.title
-    }
-
-    func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        Section(rawValue: section)?.footer
-    }
-
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        sectionRows.indices.contains(section) ? sectionRows[section].count : 0
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
-        guard let row = row(at: indexPath) else { return cell }
-        cell.backgroundColor = .chalkCardBackground
-        cell.textLabel?.font = .systemFont(ofSize: ChalkMetrics.sidebarRowFontSize)
-        cell.textLabel?.text = row.title
-        cell.textLabel?.textColor = row.isDestructive ? .systemRed : .chalkTextBody
-        cell.detailTextLabel?.text = row.detail
-        cell.detailTextLabel?.textColor = .chalkTextMuted
-        cell.selectionStyle = row.action == nil ? .none : .default
-
-        if let isOn = row.toggle {
-            let toggle = UISwitch()
-            toggle.isOn = isOn
-            toggle.onTintColor = .chalkAccent
-            toggle.addTarget(self, action: #selector(crashPromptToggled), for: .valueChanged)
-            cell.accessoryView = toggle
-        }
-        return cell
-    }
-}
-
-extension PrivacyViewController: UITableViewDelegate {
-    func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
-        guard let header = view as? UITableViewHeaderFooterView else { return }
-        header.textLabel?.textColor = .chalkTextMuted
-        header.textLabel?.font = .systemFont(ofSize: ChalkMetrics.s(11), weight: .semibold)
-    }
-
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: true)
-        row(at: indexPath)?.action?()
     }
 }

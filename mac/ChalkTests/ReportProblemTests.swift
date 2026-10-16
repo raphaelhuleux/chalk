@@ -10,6 +10,7 @@ import ChalkKit
 /// These tests exist to keep the preview and the payload the same string. A
 /// second composition path that drifted by one line would turn a checkable
 /// claim into a false one, and nothing about the screen would look different.
+@MainActor
 final class ReportProblemTests: XCTestCase {
     private var defaults: UserDefaults!
 

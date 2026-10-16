@@ -1,10 +1,10 @@
 #if DEBUG
-import Foundation
+import AppKit
 import ChalkKit
-import UIKit
 
 /// Debug-only fixtures and named UI states, picked with CHALK_AUDIT_STATE
-/// (usage in docs/ui-correctness.md).
+/// (usage in docs/ui-correctness.md). The fixtures match the Catalyst
+/// shell's `AuditMode` byte for byte, so the two shells' shots compare.
 enum AuditMode {
     static var requestedState: String? {
         ProcessInfo.processInfo.environment["CHALK_AUDIT_STATE"]
@@ -123,27 +123,31 @@ enum AuditMode {
     /// A plot-looking png (axes plus a rising line) for the asset-row and
     /// preview-sheet screenshots.
     private static func figurePNG() -> Data {
-        let size = CGSize(width: 640, height: 400)
-        let image = UIGraphicsImageRenderer(size: size).image { context in
-            UIColor.white.setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-            let axes = UIBezierPath()
-            axes.move(to: CGPoint(x: 60, y: 40))
-            axes.addLine(to: CGPoint(x: 60, y: 340))
-            axes.addLine(to: CGPoint(x: 600, y: 340))
-            UIColor.darkGray.setStroke()
+        let size = NSSize(width: 640, height: 400)
+        let image = NSImage(size: size, flipped: true) { rect in
+            NSColor.white.setFill()
+            rect.fill()
+            let axes = NSBezierPath()
+            axes.move(to: NSPoint(x: 60, y: 40))
+            axes.line(to: NSPoint(x: 60, y: 340))
+            axes.line(to: NSPoint(x: 600, y: 340))
+            NSColor.darkGray.setStroke()
             axes.lineWidth = 3
             axes.stroke()
-            let curve = UIBezierPath()
-            curve.move(to: CGPoint(x: 60, y: 320))
-            curve.addCurve(to: CGPoint(x: 600, y: 70),
-                           controlPoint1: CGPoint(x: 260, y: 300),
-                           controlPoint2: CGPoint(x: 380, y: 90))
-            UIColor.systemRed.setStroke()
+            let curve = NSBezierPath()
+            curve.move(to: NSPoint(x: 60, y: 320))
+            curve.curve(to: NSPoint(x: 600, y: 70),
+                        controlPoint1: NSPoint(x: 260, y: 300),
+                        controlPoint2: NSPoint(x: 380, y: 90))
+            NSColor.systemRed.setStroke()
             curve.lineWidth = 5
             curve.stroke()
+            return true
         }
-        return image.pngData() ?? Data()
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return Data() }
+        return png
     }
 
     /// ~400 lines: repeated section of headings, bold/italic, tables,
@@ -225,5 +229,184 @@ enum AuditMode {
     and the display form: \\[ \\sum_{k=0}^{\\infty} \\frac{x^k}{k!} = e^x \\]
     \\end{document}
     """
+}
+
+extension RootSplitViewController {
+    /// Applies CHALK_AUDIT_STATE after first layout. States: tabs1 tabs5 tabs12
+    /// tabs12to3 longtabs | promo-editor promo-library promo-outline
+    /// promo-file |
+    /// sidebar-deep sidebar-empty | tabs6-sidebar | preview | quickopen
+    /// quickopen-long outline fsoutline fstabs5 | settings | empty | stressdoc
+    /// | scale06 scale25 | narrow
+    func applyAuditStateIfRequested() {
+        guard let state = AuditMode.requestedState else { return }
+        // The stress tree (120 files, six levels, an 80-character name) exists
+        // to break the layout. It must not appear in a landing-page shot, and
+        // it lands inside the default location, so the promo states skip it.
+        let fixtures = state.hasPrefix("promo-") ? SampleContent.documentsURL
+                                                 : AuditMode.seedFixtures()
+        let shortNames = ["alpha.md", "beta.md", "gamma.tex", "delta.md", "epsilon.md",
+                          "zeta.md", "eta.md", "theta.tex", "iota.md", "kappa.md", "lambda.md"]
+        func showFolder(_ url: URL, expanded: Bool = false) {
+            locationStore.add(url: url)
+            sidebar.reload()
+            setSidebarVisible(true)
+            if expanded { sidebar.expandAll() }
+        }
+        func setWindowSize(_ width: Double, _ height: Double) {
+            view.window?.setFrame(NSRect(x: 80, y: 60, width: width, height: height), display: true)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+            switch state {
+            case "tabs1": break // Welcome.md is already open
+            case "tabs5":
+                for name in shortNames.prefix(4) {
+                    editor.open(url: fixtures.appendingPathComponent(name))
+                }
+            case "longtabs":
+                editor.open(url: fixtures.appendingPathComponent(
+                    "an-extremely-long-file-name-that-should-truncate-in-the-tab-strip-not-overflow-it.md"))
+                editor.open(url: fixtures.appendingPathComponent("many")
+                    .appendingPathComponent("001-lecture-notes-with-a-very-long-descriptive-title.md"))
+            case "tabs12":
+                for name in shortNames {
+                    editor.open(url: fixtures.appendingPathComponent(name))
+                }
+            case "tabs12to3":
+                // Overflow transition: open 12 (chevron + fades appear), then
+                // close back to 3 via the normal close path — the chevron and
+                // trailing fade must retract once the tabs fit again.
+                for name in shortNames {
+                    editor.open(url: fixtures.appendingPathComponent(name))
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
+                    editor.closeAllButFirstForAudit(keeping: 3)
+                }
+            // Landing-page shots. Real-looking work, not the stress tree.
+            case "promo-editor":
+                editor.closeAllTabsForAudit()
+                editor.open(url: AuditMode.seedPromoContent()
+                    .appendingPathComponent("Panel bias/estimator-bias.md"))
+            case "promo-library":
+                AuditMode.seedPromoContent()
+                editor.closeAllTabsForAudit()
+                showFolder(SampleContent.documentsURL, expanded: true)
+                editor.open(url: SampleContent.documentsURL
+                    .appendingPathComponent("Research/Panel bias/estimator-bias.md"))
+            case "promo-outline":
+                editor.closeAllTabsForAudit()
+                editor.open(url: AuditMode.seedPromoContent()
+                    .appendingPathComponent("Panel bias/estimator-bias.md"))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+                    cmdToggleOutline()
+                }
+            // README screenshots (scripts/screenshots/capture-mac.sh): one file, plus an optional
+            // Library folder, outline panel and window size, all from the environment.
+            case "promo-file":
+                let env = ProcessInfo.processInfo.environment
+                guard let path = env["CHALK_AUDIT_FILE"] else { break }
+                editor.closeAllTabsForAudit()
+                if let folder = env["CHALK_AUDIT_LIBRARY"] {
+                    showFolder(URL(fileURLWithPath: folder, isDirectory: true), expanded: true)
+                }
+                editor.open(url: URL(fileURLWithPath: path))
+                let size = (env["CHALK_AUDIT_SIZE"] ?? "").split(separator: "x").compactMap { Double($0) }
+                if size.count == 2 { setWindowSize(size[0], size[1]) }
+                // Off line 1, so the heading there renders instead of showing its markup.
+                if let line = env["CHALK_AUDIT_LINE"].flatMap(Int.init) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+                        editor.revealLine(line)
+                    }
+                }
+                if env["CHALK_AUDIT_OUTLINE"] != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+                        cmdToggleOutlinePanel()
+                    }
+                }
+            case "sidebar-deep":
+                showFolder(fixtures.appendingPathComponent("deep"), expanded: true)
+            case "tabs6-sidebar":
+                // A crowded strip and the Library open together: the one
+                // configuration that shows the chips short of room
+                // (docs/issues/2026-08-18-mac-tabs-vanish-when-the-library-is-open.md).
+                showFolder(fixtures)
+                for name in shortNames.prefix(5) {
+                    editor.open(url: fixtures.appendingPathComponent(name))
+                }
+            case "preview":
+                // Asset row → preview sheet (the Library lists images/PDFs).
+                showFolder(fixtures)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+                    openFromLibrary(fixtures.appendingPathComponent("figure.png"))
+                }
+            case "sidebar-empty":
+                showFolder(fixtures.appendingPathComponent("empty-location"))
+            case "quickopen": cmdQuickOpen()
+            case "quickopen-long":
+                locationStore.add(url: fixtures.appendingPathComponent("many"))
+                cmdQuickOpen()
+                // Without a query the palette shows files.prefix(50) — identical
+                // to plain quickopen; filter to surface the 120 long names.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [self] in
+                    quickOpenVCForTesting.setQueryForAudit("lecture")
+                }
+            case "settings": cmdSettings()
+            case "outline":
+                editor.open(url: fixtures.appendingPathComponent("outline.md"))
+                // The webview needs to boot and `init` before the outline
+                // exists to fetch; 2s matches the tabs12to3 settle delay.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
+                    cmdToggleOutline()
+                }
+            case "fsoutline":
+                // Replays the full-screen drop timeline
+                // (docs/issues/2026-08-17-fullscreen-drops-when-outline-opens.md):
+                // heavy doc, enter full screen, then open the outline shortly
+                // after didEnterFullScreen. The delay is tunable:
+                // CHALK_AUDIT_FS_DELAY (seconds).
+                editor.open(url: fixtures.appendingPathComponent("stress.md"))
+                let fsDelay = ProcessInfo.processInfo.environment["CHALK_AUDIT_FS_DELAY"]
+                    .flatMap(Double.init) ?? 0.25
+                // A reference box, not a captured `var`: the observer removes
+                // itself, so the closure reads a token assigned only after it
+                // exists.
+                final class ObserverToken { var value: NSObjectProtocol? }
+                let token = ObserverToken()
+                token.value = NotificationCenter.default.addObserver(
+                    forName: NSWindow.didEnterFullScreenNotification, object: view.window, queue: .main
+                ) { [weak self] _ in
+                    if let observer = token.value { NotificationCenter.default.removeObserver(observer) }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + fsDelay) {
+                        self?.cmdToggleOutline()
+                    }
+                }
+                // 2s webview-boot settle, as in the outline state.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
+                    view.window?.toggleFullScreen(nil)
+                }
+            case "fstabs5":
+                // Full-screen tab strip: five tabs, then a real toggleFullScreen.
+                for name in shortNames.prefix(4) {
+                    editor.open(url: fixtures.appendingPathComponent(name))
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
+                    view.window?.toggleFullScreen(nil)
+                }
+            case "empty": editor.closeAllTabsForAudit()
+            case "stressdoc": setSidebarVisible(true); editor.open(url: fixtures.appendingPathComponent("stress.md"))
+            case "scale06", "scale25":
+                Preferences.editorFontScale = state == "scale06" ? 0.6 : 2.5
+                editor.setFontScale(Preferences.editorFontScale)
+                editor.open(url: fixtures.appendingPathComponent("stress.md"))
+            case "narrow":
+                for name in shortNames.prefix(4) {
+                    editor.open(url: fixtures.appendingPathComponent(name))
+                }
+                setSidebarVisible(true)
+                setWindowSize(900, 600)
+            default: break
+            }
+        }
+    }
 }
 #endif

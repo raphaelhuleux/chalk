@@ -5,9 +5,9 @@ import ChalkKit
 /// Guards the test host's preferences against leaks from earlier suites.
 ///
 /// `Preferences` is backed by `UserDefaults.standard`. The test host is a Debug
-/// build (`com.huleux.chalk.debug`, see mac/project.yml), so tests cannot reach
-/// the installed app's settings, but every suite and every Debug launch shares
-/// this one domain. A run killed before its `tearDown` leaves its writes behind,
+/// build (`com.huleux.chalk.debug`, see mac/project.yml), so tests cannot
+/// reach the installed app's settings, but every suite and every Debug launch
+/// shares this one domain. A run killed before its `tearDown` leaves its writes behind,
 /// and a leaked `chalk.editingMode = zen` hides the tab band and the Library, so
 /// unrelated suites fail at once (docs/known-failing-tests.md, 2026-08-23).
 ///
@@ -61,13 +61,27 @@ final class PreferencePollutionGuardTests: XCTestCase {
     /// whether that suite could inject its own suite instead.
     func testTheSuitesTouchingTheSharedDomainAreKnown() {
         let known: Set<String> = [
-            "EditingModeTests",            // editingMode, restores per test
-            "ChromeAutoHideTests",         // autoHideChrome, restores per test
-            "EditorPreferencesTests",      // measure/alignment/fileType, restores per test
-            "ChromeInvariantMatrixTests",  // editingMode, snapshots in ChromeMatrixHost since 2026-08-19
-            "ChromeTransitionMatrixTests", // editingMode + sidebarWidth (pinned), ChromeMatrixHost restores
+            "AppearanceTransitionContractTests", // themePreference, restores per test
+            "ChromeAutoHideTests",               // autoHideChrome, restores per test
+            "ChromeControlsTests",               // editingMode, restores per test
+            "ChromeInvariantMatrixTests",        // editingMode, snapshots in ChromeMatrixHost
+            "ChromeTransitionMatrixTests",       // editingMode + the pinned widths, ChromeMatrixHost restores
+            "CrossWindowPreferenceTests",        // editorFontScale + viewMode, restores per test
+            "DraftSaveFileTypeTests",            // newFileType, restores per test
+            "EditingModeTests",                  // editingMode, restores per test
+            "EditorPreferencesTests",            // measure/alignment/fileType, restores per test
+            "HelpScreenPresentationTests",       // themePreference, restores per test
+            "MarkdownHeadingColorsTests",        // markdownHeadingColors, restores per test
+            "MenuRoutingTests",                  // editingMode + viewMode, restores per test
+            "OutlinePanelLayoutTests",           // outlinePanelWidth, restores per test
+            "OutlinePanelRestorationTests",      // outlinePanelWidth, restores per test
+            "OutlinePanelToggleTests",           // editingMode, restores per test
+            "SettingsWindowTests",               // themePreference + editorMeasure, restores per test
+            "SidebarSlideContractTests",         // sidebarWidth, restores per test
+            "ViewModeTests",                     // viewMode, restores per test
+            "ZenTransitionContractTests",        // editingMode, restores per test
         ]
-        XCTAssertEqual(known.count, 5,
+        XCTAssertEqual(known.count, 19,
                        "a suite was added to or removed from the shared-domain list; "
                      + "confirm it restores what it writes, and prefer an injected "
                      + "UserDefaults suite over UserDefaults.standard")

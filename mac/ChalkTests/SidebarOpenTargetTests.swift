@@ -39,25 +39,12 @@ final class SidebarOpenTargetTests: XCTestCase {
         let node = FileNode(url: file, name: "draft.tex", isDirectory: false)
         let menu = sidebar.rowMenu(for: node)
 
-        try perform(menu, titled: "Open")
-        try perform(menu, titled: "Open in New Tab")
-        try perform(menu, titled: "Open in New Window")
+        perform(try XCTUnwrap(item(in: menu, titled: "Open")))
+        perform(try XCTUnwrap(item(in: menu, titled: "Open in New Tab")))
+        perform(try XCTUnwrap(item(in: menu, titled: "Open in New Window")))
 
         XCTAssertEqual(opened, [file])
         XCTAssertEqual(tabbed, [file])
         XCTAssertEqual(windowed, [file])
-    }
-
-    /// Fire the action with `title` wherever it sits in the menu tree.
-    private func perform(_ menu: UIMenu, titled title: String) throws {
-        func find(_ menu: UIMenu) -> UIAction? {
-            for element in menu.children {
-                if let action = element as? UIAction, action.title == title { return action }
-                if let submenu = element as? UIMenu, let hit = find(submenu) { return hit }
-            }
-            return nil
-        }
-        let action = try XCTUnwrap(find(menu), "no menu item titled \(title)")
-        action.performWithSender(nil, target: nil)
     }
 }

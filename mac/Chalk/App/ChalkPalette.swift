@@ -1,43 +1,47 @@
-import UIKit
+import AppKit
+import CoreText
 import ChalkKit
 
-/// The colour theme as a UIKit trait. The root controller and every presented sheet set it in
-/// `traitOverrides` (`applyChalkAppearance`, `RootSplitViewController.applyThemePreference`), and
-/// the themed colours below resolve against it the way they resolve against light/dark.
-/// `affectsColorAppearance` makes UIKit re-resolve dynamic colours when it changes; CGColors cached
-/// in layers still need a `registerForTraitChanges` hook (`UITraitCollection.chalkColorTraits`).
-struct ChalkThemeTrait: UITraitDefinition {
-    static let defaultValue = ChalkTheme.ink
-    static let affectsColorAppearance = true
-    static let name = "ChalkTheme"
-    static let identifier = "com.huleux.chalk.theme"
+/// The colour theme every themed colour resolves against. AppKit has no custom trait, and the
+/// theme is one preference for the whole app, so it is process state: the shell writes it when the
+/// preference changes and redraws, and the dynamic providers below read it at resolve time.
+enum ChalkAppearance {
+    static var theme: ChalkTheme = Preferences.colorTheme {
+        didSet {
+            guard theme != oldValue else { return }
+            NotificationCenter.default.post(name: themeDidChange, object: nil)
+        }
+    }
+
+    /// Posted on the main thread when `theme` changes. A theme is not an
+    /// `NSAppearance`, so `viewDidChangeEffectiveAppearance` never fires for
+    /// it: every view that caches a resolved colour re-resolves on this.
+    static let themeDidChange = Notification.Name("chalk.appearance.themeDidChange")
 }
 
-extension UITraitCollection {
-    var chalkTheme: ChalkTheme { self[ChalkThemeTrait.self] }
-
-    /// Every trait a themed colour resolves against: light/dark and friends, plus the theme.
-    static let chalkColorTraits: [UITrait] =
-        systemTraitsAffectingColorAppearance + [ChalkThemeTrait.self]
-}
-
-extension UIMutableTraits {
-    var chalkTheme: ChalkTheme {
-        get { self[ChalkThemeTrait.self] }
-        set { self[ChalkThemeTrait.self] = newValue }
+extension NSAppearance {
+    /// Whether this appearance is one of the dark ones, the way the page's `data-theme` sees it.
+    var isChalkDark: Bool {
+        bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 }
 
 /// The app's colours. Opaque ones come from the active theme (ChalkKit `ThemePalette`, which the
-/// AppKit titlebar and `PaletteParityTests` read too); translucent washes are shared by every
-/// theme.
-extension UIColor {
+/// page's stylesheet is checked against); translucent washes are shared by every theme.
+extension NSColor {
     /// The single accent: caret, tab underline, toggles.
     static let chalkAccent = themed(\.accent)
 
-    /// Editor surface: equals the page's --vscode-editor-background, and the AppKit titlebar cover
-    /// paints the same pair (`StripColor.paperFill`).
+    /// Editor surface: equals the page's --vscode-editor-background.
     static let chalkEditorBackground = themed(\.editorBackground)
+
+    /// The same tone resolved for a given appearance and theme, for a consumer
+    /// that cannot resolve a dynamic colour itself (WebKit resolves one at set
+    /// time, under whatever appearance is current then).
+    static func chalkEditorBackground(dark: Bool, theme: ChalkTheme) -> NSColor {
+        let (red, green, blue) = theme.palette.editorBackground.components(dark: dark)
+        return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+    }
 
     /// Sidebar + header sidebar-segment.
     static let chalkChromeBackground = themed(\.chromeBackground)
@@ -50,35 +54,23 @@ extension UIColor {
     static let chalkTextFaint = themed(\.textFaint)
 
     /// Selected file row (spec: --selection-row).
-    static let chalkRowSelection = UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.09)
-            : UIColor(white: 0, alpha: 0.07)
-    }
+    static let chalkRowSelection = dynamicAlpha(dark: (0xFFFFFF, 0.09), light: (0x000000, 0.07))
 
-    /// Settings-sheet cards (grouped sections, form fields).
+    /// Settings cards (grouped sections, form fields).
     static let chalkCardBackground = themed(\.cardBackground)
 
-    /// Separator between rows inside a settings card — softer than
-    /// chalkBorderHard so rows divide without reading as drawn rules.
-    static let chalkCardSeparator = UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.06)
-            : UIColor(white: 0, alpha: 0.06)
-    }
+    /// Separator between rows inside a settings card: softer than chalkBorderHard so rows divide
+    /// without reading as drawn rules.
+    static let chalkCardSeparator = dynamicAlpha(dark: (0xFFFFFF, 0.06), light: (0x000000, 0.06))
 
-    /// Sidebar/editor divider and footer top hairline: a subtle seam instead of
-    /// the spec's near-black --border-hard, just present enough to stay legible
-    /// over both the chrome and editor backgrounds.
-    static let chalkBorderHard = UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.09)
-            : UIColor(white: 0, alpha: 0.10)
-    }
+    /// Sidebar/editor divider and footer top hairline: a subtle seam instead of the spec's
+    /// near-black --border-hard, just present enough to stay legible over both the chrome and
+    /// editor backgrounds.
+    static let chalkBorderHard = dynamicAlpha(dark: (0xFFFFFF, 0.09), light: (0x000000, 0.10))
 
     // MARK: - VisualGlass chrome
-    // The chrome floats over the editor surface as translucent glass. Alpha
-    // colors here are the spec verbatim; the accent family reuses chalkAccent.
+    // The chrome floats over the editor surface as translucent glass. Alpha colours here are the
+    // spec verbatim; the accent family reuses chalkAccent.
 
     /// Chrome foreground tiers (spec --chrome-fg…): the theme's chrome glyph colour at falling
     /// alphas.
@@ -87,11 +79,9 @@ extension UIColor {
     static let chalkChromeFgTertiary = themed(\.chromeFgDim, alpha: (dark: 0.48, light: 0.50))
     static let chalkChromeFgQuaternary = themed(\.chromeFgDim, alpha: (dark: 0.40, light: 0.42))
 
-    /// Glass material for the floating surfaces (utility pill, Quick Open,
-    /// outline palette): tint over the system blur. Light is stronger than the
-    /// spec's .34 white: UIKit's light material has a gray base the CSS
-    /// backdrop-filter doesn't, and the panel must read lighter than the
-    /// editor.
+    /// Glass material for the floating surfaces (utility pill, Quick Open, outline palette): tint
+    /// over the system blur. Light is stronger than the spec's .34 white: the light material has a
+    /// gray base the CSS backdrop-filter doesn't, and the panel must read lighter than the editor.
     static let chalkGlassTint = dynamicAlpha(dark: (0xFFFFFF, 0.05), light: (0xFFFFFF, 0.72))
     /// 0.5pt hairline ring around glass panels (spec --glass-edge).
     static let chalkGlassEdge = dynamicAlpha(dark: (0xFFFFFF, 0.09), light: (0x3C3228, 0.08))
@@ -99,20 +89,18 @@ extension UIColor {
     static let chalkGlassTopHighlight = dynamicAlpha(dark: (0xFFFFFF, 0.12), light: (0xFFFFFF, 0.85))
     /// Reduce Transparency: the glass panels' solid replacement fill.
     static let chalkGlassOpaque = themed(\.glassOpaque)
-    /// Light mode's glass replacement: a touch LIGHTER than the editor, so the panel floats the
-    /// way mock 1b does.
+    /// Light mode's glass replacement: a touch LIGHTER than the editor, so the panel floats.
     static let chalkGlassLightFill = themed(\.glassLightFill)
 
-    /// Glass panel drop-shadow color.
+    /// Glass panel drop-shadow colour.
     static let chalkPanelShadow = themed(\.panelShadow)
 
     // MARK: - Tab name row (Paper)
-    // Tabs are typography on the editor surface: label tiers, the unsaved dot,
-    // icon tiers, and one accent underline. The AppKit titlebar strip wraps the
-    // same palette fields in NSColor (`StripColor`).
+    // Tabs are typography on the editor surface: label tiers, the unsaved dot, icon tiers, and one
+    // accent underline.
 
-    /// The active name's short underline: the single accent, nothing else in
-    /// the chrome is saturated (Y-1).
+    /// The active name's short underline: the single accent, nothing else in the chrome is
+    /// saturated (Y-1).
     static let chalkTabUnderline = chalkAccent
     /// Mono labels: filename run.
     static let chalkTabLabelActive = themed(\.tabLabelActive)
@@ -132,16 +120,16 @@ extension UIColor {
     static let chalkRowHoverBackground = dynamicAlpha(dark: (0xFFFFFF, 0.07), light: (0x3C3228, 0.07))
 
     /// Accent-tinted selection (Quick Open selected row, spec --accent-selection).
-    static var chalkAccentSelection: UIColor {
-        UIColor { trait in chalkAccent.resolvedColor(with: trait).withAlphaComponent(0.22) }
-    }
+    static let chalkAccentSelection = themed(\.accent, alpha: (dark: 0.22, light: 0.22))
 
     /// Quick Open palette: denser glass than chalkGlassTint, the theme's palette tone in dark.
-    /// Light leans white for the same reason (gray-based UIKit material).
-    static let chalkPaletteTint = UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? chalkPaletteOpaque.resolvedColor(with: trait).withAlphaComponent(0.62)
-            : UIColor(white: 1, alpha: 0.80)
+    /// Light leans white for the same reason (gray-based material).
+    static let chalkPaletteTint = NSColor(name: nil) { appearance in
+        if appearance.isChalkDark {
+            let (red, green, blue) = ChalkAppearance.theme.palette.paletteOpaque.components(dark: true)
+            return NSColor(srgbRed: red, green: green, blue: blue, alpha: 0.62)
+        }
+        return NSColor(white: 1, alpha: 0.80)
     }
     static let chalkPaletteEdge = dynamicAlpha(dark: (0xFFFFFF, 0.12), light: (0x3C3228, 0.10))
     static let chalkPaletteTopHighlight = dynamicAlpha(dark: (0xFFFFFF, 0.16), light: (0xFFFFFF, 0.90))
@@ -149,67 +137,76 @@ extension UIColor {
     static let chalkPaletteOpaque = themed(\.paletteOpaque)
     /// Key badge border ("esc", "return") in the palette.
     static let chalkKeyBadgeEdge = dynamicAlpha(dark: (0xFFFFFF, 0.18), light: (0x3C3228, 0.18))
-    /// The palette scrim, darker than the spec's .25 because it also carries
-    /// the mock's "content dims to 45%" layer. Defined in ChalkKit
-    /// (`ChromeScrim`) so the AppKit titlebar strip paints the same colour from
-    /// its separate bundle.
-    static let chalkScrim = UIColor { trait in
-        let c = ChromeScrim.components(dark: trait.userInterfaceStyle == .dark)
-        return UIColor(red: c.red, green: c.green, blue: c.blue, alpha: c.alpha)
+    /// The palette scrim, darker than the spec's .25 because it also carries the mock's "content
+    /// dims to 45%" layer. Defined in ChalkKit (`ChromeScrim`).
+    static let chalkScrim = NSColor(name: nil) { appearance in
+        let c = ChromeScrim.components(dark: appearance.isChalkDark)
+        return NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: c.alpha)
     }
 
     private static func dynamicAlpha(
         dark: (hex: Int, alpha: CGFloat), light: (hex: Int, alpha: CGFloat)
-    ) -> UIColor {
-        UIColor { trait in
-            let value = trait.userInterfaceStyle == .dark ? dark : light
+    ) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let value = appearance.isChalkDark ? dark : light
             let (red, green, blue) = HexPair.rgb(hex: value.hex)
-            return UIColor(red: red, green: green, blue: blue, alpha: value.alpha)
+            return NSColor(srgbRed: red, green: green, blue: blue, alpha: value.alpha)
         }
     }
 
-    /// A palette field of the trait's theme, in the trait's appearance.
+    /// A palette field of the current theme, in the appearance being resolved.
     private static func themed(
         _ pick: @escaping (ThemePalette) -> HexPair,
         alpha: (dark: CGFloat, light: CGFloat) = (1, 1)
-    ) -> UIColor {
-        UIColor { trait in
-            let isDark = trait.userInterfaceStyle == .dark
-            let (red, green, blue) = pick(trait.chalkTheme.palette).components(dark: isDark)
-            return UIColor(
-                red: red, green: green, blue: blue, alpha: isDark ? alpha.dark : alpha.light)
+    ) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let isDark = appearance.isChalkDark
+            let (red, green, blue) = pick(ChalkAppearance.theme.palette).components(dark: isDark)
+            return NSColor(
+                srgbRed: red, green: green, blue: blue, alpha: isDark ? alpha.dark : alpha.light)
         }
     }
 }
 
-extension UIFont {
-    /// Synthetic oblique for the preview-tab cue. No IBM Plex Mono italic face
-    /// is bundled (three weights, no slant), and swapping to the system italic
-    /// mono would change family mid-strip — so slant the upright face by
-    /// ChalkMetrics.obliqueSlant instead.
-    static func chalkObliqueMatrix() -> CGAffineTransform {
-        CGAffineTransform(a: 1, b: 0, c: ChalkMetrics.obliqueSlant, d: 1, tx: 0, ty: 0)
+extension NSFont {
+    /// Synthetic oblique for the preview-tab cue. No IBM Plex Mono italic face is bundled (three
+    /// weights, no slant), and swapping to the system italic mono would change family mid-strip,
+    /// so slant the upright face by `TabStripMetrics.obliqueSlant` instead.
+    static func chalkObliqueTransform() -> AffineTransform {
+        AffineTransform(m11: 1, m12: 0, m21: TabStripMetrics.obliqueSlant, m22: 1, tX: 0, tY: 0)
     }
 
-    /// IBM Plex Mono (spec: --font-editor) with a system-mono fallback so a
-    /// missing font never breaks the UI. `oblique` slants the face in place
-    /// (see chalkObliqueMatrix).
+    /// IBM Plex Mono (spec: --font-editor) with a system-mono fallback so a missing font never
+    /// breaks the UI. `oblique` slants the face in place (see chalkObliqueTransform).
     static func chalkMono(
-        size: CGFloat, weight: UIFont.Weight = .regular, oblique: Bool = false
-    ) -> UIFont {
-        let name: String
+        size: CGFloat, weight: NSFont.Weight = .regular, oblique: Bool = false
+    ) -> NSFont {
+        let key = "\(size)|\(weight.rawValue)|\(oblique)"
+        if let font = chalkMonoCache[key] { return font }
+        let font = makeChalkMono(size: size, weight: weight, oblique: oblique)
+        chalkMonoCache[key] = font
+        return font
+    }
+
+    /// Every tab chip asks for the same few fonts on every strip rebuild;
+    /// the name lookup and the Core Text shear are not free.
+    private static var chalkMonoCache: [String: NSFont] = [:]
+
+    private static func makeChalkMono(size: CGFloat, weight: NSFont.Weight, oblique: Bool) -> NSFont {
+        let names: [String]
         switch weight {
-        case .semibold, .bold: name = "IBMPlexMono-SemiBold"
-        case .medium: name = "IBMPlexMono-Medium"
-        default: name = "IBMPlexMono"
+        case .semibold, .bold: names = ["IBMPlexMono-SemiBold"]
+        case .medium: names = ["IBMPlexMono-Medium"]
+        default: names = ["IBMPlexMono-Regular", "IBMPlexMono"] // the regular face's PostScript name first
         }
-        let upright = UIFont(name: name, size: size)
+        let upright = names.lazy.compactMap { NSFont(name: $0, size: size) }.first
             ?? .monospacedSystemFont(ofSize: size, weight: weight)
         guard oblique else { return upright }
-        // The matrix carries slant only (unit scale), so the point size still
-        // travels as `size`. Note UIFont.fontDescriptor.matrix reads back as
-        // identity afterwards — CTFontGetMatrix is what sees the shear.
-        let slanted = upright.fontDescriptor.addingAttributes([.matrix: chalkObliqueMatrix()])
-        return UIFont(descriptor: slanted, size: size)
+        // Through Core Text: `NSFont(descriptor:textTransform:)` reports a
+        // 1pt font for a bundled face under a unit shear and squares the size
+        // under a sized one, while a descriptor `.matrix` beside a size
+        // reports 1pt too (TabLabelFontTests pins the size and the shear).
+        var shear = CGAffineTransform(a: 1, b: 0, c: TabStripMetrics.obliqueSlant, d: 1, tx: 0, ty: 0)
+        return CTFontCreateCopyWithAttributes(upright as CTFont, size, &shear, nil) as NSFont
     }
 }

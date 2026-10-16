@@ -8,6 +8,7 @@ import ChalkKit
 @MainActor
 final class OutlinePanelToggleTests: XCTestCase {
     private var previousMode: EditingMode!
+    private var windows: [NSWindow] = []
 
     override func setUp() {
         super.setUp()
@@ -17,18 +18,20 @@ final class OutlinePanelToggleTests: XCTestCase {
 
     override func tearDown() {
         Preferences.editingMode = previousMode
+        for window in windows { dismantleHostedSidebar(window) }
+        windows = []
         super.tearDown()
     }
 
-    private func makeRoot() -> (UIWindow, RootSplitViewController) {
-        let window = UIWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1180, height: 820))
+    private func makeRoot() -> (NSWindow, RootSplitViewController) {
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1180, height: 820))
         let root = RootSplitViewController()
-        root.stripBridgeDetachedForTesting = true
         root.motionPolicyForTesting = .instant
         window.rootViewController = root
-        window.makeKeyAndVisible()
+        window.isHidden = false
         root.loadViewIfNeeded()
-        root.view.layoutIfNeeded()
+        root.view.layoutSubtreeIfNeeded()
+        windows.append(window)
         return (window, root)
     }
 
@@ -88,19 +91,19 @@ final class OutlinePanelToggleTests: XCTestCase {
     /// the panel reaches the window's top with its header in the band. The
     /// hole starts at the panel's leading edge and runs to the band's
     /// trailing edge; it goes away with the panel.
-    func testOpeningThePanelCutsItOutOfTheBand() {
+    func testOpeningThePanelCutsItOutOfTheBand() throws {
         let (_, root) = makeRoot()
         XCTAssertNil(root.bandTrailingHoleForTesting)
         root.cmdToggleOutlinePanel()
-        root.view.layoutIfNeeded()
-        let hole = try! XCTUnwrap(root.bandTrailingHoleForTesting)
-        let panel = try! XCTUnwrap(root.editorForTesting.outlinePanelFrame
+        root.view.layoutSubtreeIfNeeded()
+        let hole = try XCTUnwrap(root.bandTrailingHoleForTesting)
+        let panel = try XCTUnwrap(root.editorForTesting.outlinePanelFrame
             .map { root.view.convert($0, from: root.editorForTesting.view) })
         XCTAssertEqual(hole.minX, panel.minX, accuracy: 1)
         XCTAssertEqual(hole.maxX, root.view.bounds.maxX, accuracy: 1)
         outlastAdmitWindow()
         root.cmdToggleOutlinePanel()
-        root.view.layoutIfNeeded()
+        root.view.layoutSubtreeIfNeeded()
         XCTAssertNil(root.bandTrailingHoleForTesting)
     }
 }

@@ -1,6 +1,6 @@
+import AppKit
 import Foundation
 import PDFKit
-import UIKit
 import ChalkKit
 
 /// Reads a resolved asset and packages it as a data URL for the webview's `<img>`; PDFs are
@@ -27,15 +27,30 @@ enum AssetLoader {
         }
     }
 
+    /// Drawn into an explicit bitmap, not through `PDFPage.thumbnail`: that one sizes its backing
+    /// store by the main screen's scale, so the pixel bound would depend on the display.
     private static func rasterizedPDF(url: URL) -> String? {
         guard let document = PDFDocument(url: url),
               let page = document.page(at: 0) else { return nil }
         let bounds = page.bounds(for: .cropBox)
         guard bounds.width > 0, bounds.height > 0 else { return nil }
         let scale = min(2, CGFloat(maxPDFPixelDimension) / max(bounds.width, bounds.height))
-        let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
-        let image = page.thumbnail(of: size, for: .cropBox)
-        guard let bytes = image.pngData() else { return nil }
+        let width = Int((bounds.width * scale).rounded())
+        let height = Int((bounds.height * scale).rounded())
+        guard width > 0, height > 0,
+              let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.scaleBy(x: scale, y: scale)
+        context.translateBy(x: -bounds.minX, y: -bounds.minY)
+        page.draw(with: .cropBox, to: context)
+        guard let image = context.makeImage() else { return nil }
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let bytes = rep.representation(using: .png, properties: [:]) else { return nil }
         return AssetResolution.dataURL(mime: "image/png", bytes: bytes)
     }
 }
