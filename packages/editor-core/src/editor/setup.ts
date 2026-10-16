@@ -49,6 +49,7 @@ import {
   mdTypesetPlugin,
 } from './md-typeset';
 import { pointerGestureExtension } from './pointer-gesture';
+import { paragraphSelectExtension } from './paragraph-select';
 import { texVerticalArrowKeymap } from './tex-vertical-motion';
 import { mdVerticalArrowKeymap } from './md-vertical-motion';
 import { hangingIndent } from './hanging-indent';
@@ -139,6 +140,8 @@ function buildExtensions(
 
     keymap.of(hsnipsKeymap),
     keymap.of([{ key: 'Tab', run: acceptCompletion }]),
+    // Triple-click takes the paragraph without its break (prose, not code).
+    paragraphSelectExtension(),
 
     // indentWithTab is wired per-language AFTER taboutKeymap so Tabout gets
     // Tab first.
