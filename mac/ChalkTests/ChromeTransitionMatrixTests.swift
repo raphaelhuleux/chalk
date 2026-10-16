@@ -52,7 +52,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         // is every later comparison against that cell.
         host.settleToFixedPoint(root, state: state, budget: 2.0, stableTurns: 3) { root in
             root.isSidebarVisible == (state.sidebar == .shown)
-                && root.isOutlinePanelVisibleForTesting == (state.outline == .shown)
+                && root.trailingPanelStateForTesting == state.outline
         }
         let layout = root.chromeLayout(for: state)
         Self.freshLayouts[state.id] = layout
@@ -154,7 +154,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         // still layout; the budget only costs time when a step has not landed.
         host.settle(root, state: state, budget: 2.0, stableTurns: 3) { root in
             root.isSidebarVisible == (expected.sidebar == .shown)
-                && root.isOutlinePanelVisibleForTesting == (expected.outline == .shown)
+                && root.trailingPanelStateForTesting == expected.outline
         }
 
         var complaints: [String] = []
@@ -167,10 +167,9 @@ final class ChromeTransitionMatrixTests: XCTestCase {
                               + "expected \(expected.sidebar.rawValue)")
         }
 
-        let outlineShown = root.isOutlinePanelVisibleForTesting
-        if outlineShown != (expected.outline == .shown) {
-            complaints.append("\(path): outline panel \(outlineShown ? "shown" : "hidden"), "
-                              + "expected \(expected.outline.rawValue)")
+        let slot = root.trailingPanelStateForTesting
+        if slot != expected.outline {
+            complaints.append("\(path): trailing slot \(slot.rawValue), expected \(expected.outline.rawValue)")
         }
 
         for invariant in ChromeInvariant.catalogue where invariant.isEvidence(about: layout) {

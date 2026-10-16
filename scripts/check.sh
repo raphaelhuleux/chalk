@@ -61,7 +61,7 @@ browser-tests    Tests/browser/run.mjs, pointer and motion over real geometry
 geometric-matrix Tests/matrix/run-geometric.mjs, the caret/reveal discovery matrix
 snapshots        Tests/__Snapshots__, the 16-case layout matrix
 pref-guard       no earlier run left a test preference in the Debug domain
-ui-invariants    chrome geometry asserted across the 32-state matrix
+ui-invariants    chrome geometry asserted across the 48-state matrix
 mac-tests        the rest of ChalkTests
 bench            scripts/bench.sh against thresholds.json
 STEPS

@@ -70,6 +70,8 @@ enum MainMenu {
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         window.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         window.addItem(.separator())
+        main.addItem(submenu(typesetMenu(), title: "Typeset"))
+
         window.addItem(withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         main.addItem(submenu(window, title: "Window"))
         NSApp.windowsMenu = window
@@ -86,6 +88,18 @@ enum MainMenu {
     /// by `RootSplitViewController.validateMenuItem`); one shortcut cycles.
     static func editingModeMenu() -> NSMenu {
         let menu = NSMenu(title: "Editing Mode")
+    /// Compile and the PDF. ⌘R and the ⌥⌘ chords are free in editor-core's keymap, so the
+    /// menu sees them without a `ShellCommand` lane.
+    static func typesetMenu() -> NSMenu {
+        let menu = NSMenu(title: "Typeset")
+        menu.addItem(withTitle: "Compile", action: #selector(RootSplitViewController.cmdCompile(_:)), keyEquivalent: "r")
+        let panel = menu.addItem(withTitle: "PDF Panel", action: #selector(RootSplitViewController.cmdTogglePDFPanel(_:)), keyEquivalent: "p")
+        panel.keyEquivalentModifierMask = [.command, .option]
+        let sync = menu.addItem(withTitle: "Show in PDF", action: #selector(RootSplitViewController.cmdShowInPDF(_:)), keyEquivalent: "j")
+        sync.keyEquivalentModifierMask = [.command, .option]
+        return menu
+    }
+
         menu.addItem(withTitle: "Normal", action: #selector(RootSplitViewController.cmdEditingModeNormal(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Zen", action: #selector(RootSplitViewController.cmdEditingModeZen(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Typewriter", action: #selector(RootSplitViewController.cmdEditingModeTypewriter(_:)), keyEquivalent: "")

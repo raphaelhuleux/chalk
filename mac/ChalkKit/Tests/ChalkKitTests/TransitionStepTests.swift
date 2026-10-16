@@ -60,6 +60,11 @@ final class TransitionStepTests: XCTestCase {
                        state(outline: .shown))
         XCTAssertEqual(state(outline: .shown).applying(.outline(false)),
                        state(outline: .hidden))
+        // Closing the slot closes it whatever it shows.
+        XCTAssertEqual(state(outline: .pdf).applying(.outline(false)),
+                       state(outline: .hidden))
+        XCTAssertEqual(state(outline: .pdf).applying(.zen(true)),
+                       state(sidebar: .hidden, outline: .hidden, mode: .zen))
     }
 
     func testZenEntryForcesTheOutlineHidden() {

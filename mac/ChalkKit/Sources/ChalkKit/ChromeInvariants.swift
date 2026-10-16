@@ -65,11 +65,11 @@ public struct ChromeInvariant: Sendable {
     // COVERAGE-DOC-BEGIN
     // ## Where each rule is actually asserted
     //
-    // `ChromeInvariantMatrixTests` walks all 32 cells of the state matrix (`ChalkTests`).
+    // `ChromeInvariantMatrixTests` walks all 48 cells of the state matrix (`ChalkTests`).
     // In each cell it asserts every rule that both APPLIES there and is FALSIFIABLE there.
     // A rule evaluated against absent geometry passes whatever the app did, so it is not counted as coverage and never reported as a pass.
     //
-    // The matrix carries an outline axis: every cell exists with the outline panel open and closed, and the four `outlinePanel*` rules are evidence only in the open cells.
+    // The matrix carries a trailing-slot axis: every cell exists with the slot closed, showing the outline, and showing the PDF. The PDF shares the outline's frame, so the four `outlinePanel*` rules are evidence in every open cell, whichever content fills it.
     //
     // EVERY cell asserts something falsifiable, and the blind-cell guard in the matrix test PASSES.
     // The utility pill stands in every state, so `pillRestsInTheCorner` is evidence everywhere rather than only where the pill happened to be showing.
@@ -81,12 +81,12 @@ public struct ChromeInvariant: Sendable {
     //
     // | Cells | Falsifiable rules | Why |
     // | --- | --- | --- |
-    // | normal, Library open, outline open (4) | 15 of 15 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
-    // | normal, Library open, outline closed (4) | 11 of 15 | as above, minus the four `outlinePanel*` rules |
-    // | normal, Library closed, outline open (4) | 11 of 15 | as the first row, minus the three Library rules and the name row |
-    // | normal, Library closed, outline closed (4) | 7 of 15 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
-    // | zen, outline closed (8) | 4 of 15 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
-    // | zen, outline open (8) | 4 of 15 | zen forces the outline panel closed regardless of the request, so its four rules are never evidence here |
+    // | normal, Library open, slot open: outline or PDF (8) | 15 of 15 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
+    // | normal, Library open, slot closed (4) | 11 of 15 | as above, minus the four `outlinePanel*` rules |
+    // | normal, Library closed, slot open: outline or PDF (8) | 11 of 15 | as the first row, minus the three Library rules and the name row |
+    // | normal, Library closed, slot closed (4) | 7 of 15 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
+    // | zen, slot closed (8) | 4 of 15 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
+    // | zen, slot open: outline or PDF (16) | 4 of 15 | zen forces the slot closed regardless of the request, so its four rules are never evidence here |
     //
     // COVERAGE-DOC-END
 

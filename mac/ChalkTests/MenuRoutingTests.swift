@@ -38,7 +38,7 @@ final class MenuRoutingTests: XCTestCase {
 
     func testTheMenuIsTheCatalystMenu() throws {
         let main = MainMenu.build()
-        XCTAssertEqual(main.items.map { $0.submenu?.title ?? "" }, ["", "File", "Edit", "View", "Window", "Help"])
+        XCTAssertEqual(main.items.map { $0.submenu?.title ?? "" }, ["", "File", "Edit", "View", "Typeset", "Window", "Help"])
 
         let file = try submenu(titled: "File", in: main)
         XCTAssertEqual(itemTitles(file), ["New Window", "New", "Quick Open\u{2026}", "Add Folder to Window\u{2026}", "Save", "Close Tab"])
@@ -51,6 +51,7 @@ final class MenuRoutingTests: XCTestCase {
         XCTAssertEqual(itemTitles(modes), ["Normal", "Zen", "Typewriter", "Focus", "Cycle Editing Mode"])
         let viewModes = try XCTUnwrap(view.items.first { $0.title == "View Mode" }?.submenu)
         XCTAssertEqual(itemTitles(viewModes), ["Preview", "Mixed", "Source"])
+        XCTAssertEqual(itemTitles(try submenu(titled: "Typeset", in: main)), ["Compile", "PDF Panel", "Show in PDF"])
 
         XCTAssertNil(main.items.first { $0.submenu?.title == "Format" }, "⌘B stays free for the editor")
         let app = try XCTUnwrap(main.items.first?.submenu)
@@ -89,6 +90,12 @@ final class MenuRoutingTests: XCTestCase {
     /// A target would pin an item to one window; nil lets the responder chain
     /// pick the key window, and greys the item out when no editor is key.
     func testShellItemsHaveNoTarget() {
+        XCTAssertEqual(try item("Compile").keyEquivalent, "r")
+        XCTAssertEqual(try item("Compile").keyEquivalentModifierMask, [.command])
+        XCTAssertEqual(try item("PDF Panel").keyEquivalent, "p")
+        XCTAssertEqual(try item("PDF Panel").keyEquivalentModifierMask, [.command, .option])
+        XCTAssertEqual(try item("Show in PDF").keyEquivalent, "j")
+        XCTAssertEqual(try item("Show in PDF").keyEquivalentModifierMask, [.command, .option])
         func walk(_ menu: NSMenu) {
             for item in menu.items {
                 // AppKit points a submenu item's target at the submenu itself.

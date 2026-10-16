@@ -41,6 +41,22 @@ extension Preferences {
         set { setStoredDouble(Double(newValue), outlinePanelWidthKey, in: widthRange) }
     }
 
+    static let pdfPanelWidthKey = "chalk.pdfPanelWidth.appkit"
+    /// The PDF shares the outline's slot but reads at a page's width, so it has its own range.
+    static let pdfPanelWidthRange: ClosedRange<CGFloat> = 320...1400
+
+    /// Last-used width of the trailing slot while it shows the PDF.
+    static var pdfPanelWidth: CGFloat {
+        get {
+            CGFloat(storedDouble(pdfPanelWidthKey, default: 560,
+                                 in: Double(pdfPanelWidthRange.lowerBound)...Double(pdfPanelWidthRange.upperBound)))
+        }
+        set {
+            setStoredDouble(Double(newValue), pdfPanelWidthKey,
+                            in: Double(pdfPanelWidthRange.lowerBound)...Double(pdfPanelWidthRange.upperBound))
+        }
+    }
+
     private static var widthRange: ClosedRange<Double> {
         Double(sidebarWidthRange.lowerBound)...Double(sidebarWidthRange.upperBound)
     }

@@ -21,7 +21,7 @@ introduced it.
 
 | Command | Covers | Time |
 | --- | --- | --- |
-| `xcodebuild test -project mac/Chalk.xcodeproj -scheme Chalk -destination 'platform=macOS' -only-testing:ChalkTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 32 cells | seconds after build |
+| `xcodebuild test -project mac/Chalk.xcodeproj -scheme Chalk -destination 'platform=macOS' -only-testing:ChalkTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 48 cells | seconds after build |
 | `node scripts/generate-ui-invariants.mjs --check` | the docs match the catalogue | instant |
 | `./scripts/check.sh` | both of the above, plus everything else | minutes |
 
@@ -172,7 +172,7 @@ Be honest about the edges; a system trusted past its limits is worse than none.
 
 | File | Role |
 | --- | --- |
-| `mac/ChalkKit/Sources/ChalkKit/UIState.swift` | the 32-cell matrix and its ids |
+| `mac/ChalkKit/Sources/ChalkKit/UIState.swift` | the 48-cell matrix and its ids |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeLayout.swift` | the geometry, as a value |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeInvariants.swift` | the rules |
 | `mac/ChalkTests/ChromeInvariantMatrixTests.swift` | drives the matrix, asserts the rules |

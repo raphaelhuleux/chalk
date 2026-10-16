@@ -7,9 +7,12 @@ public struct UIState: Equatable, Hashable, Sendable {
     /// Raw values carry the id vocabulary ("sidebar"/"nosidebar"), which
     /// reads less ambiguously in the hyphenated id than "shown"/"hidden".
     public enum SidebarState: String, CaseIterable, Sendable { case shown = "sidebar", hidden = "nosidebar" }
-    /// The persistent outline panel on the editor's trailing edge (⌘K).
-    /// Same id vocabulary rule as `SidebarState`.
-    public enum OutlineState: String, CaseIterable, Sendable { case shown = "outline", hidden = "nooutline" }
+    /// The editor's trailing slot: closed, the persistent outline (⌘K), or
+    /// the compiled PDF (⌥⌘P) in the same frame. Same id vocabulary rule as
+    /// `SidebarState`.
+    public enum OutlineState: String, CaseIterable, Sendable {
+        case shown = "outline", hidden = "nooutline", pdf
+    }
     /// Only the chrome-affecting editing modes (not typewriter or focus).
     public enum ChromeMode: String, CaseIterable, Sendable { case normal, zen }
     public enum Appearance: String, CaseIterable, Sendable { case light, dark }
@@ -57,7 +60,7 @@ public struct UIState: Equatable, Hashable, Sendable {
 public enum TransitionStep: Equatable, Sendable {
     /// Show or hide the Library column.
     case sidebar(Bool)
-    /// Show or hide the outline panel.
+    /// Show the outline in the trailing slot, or close the slot (whatever it shows).
     case outline(Bool)
     /// Enter or leave full screen.
     case window(UIState.WindowMode)

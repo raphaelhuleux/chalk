@@ -123,6 +123,10 @@ public enum Preferences {
     private static let textAlignmentKey = "chalk.textAlignment"
     private static let defaultFileTypeKey = "chalk.defaultFileType"
     private static let colorHeadingsKey = "chalk.colorHeadings"
+    private static let compileOnSaveKey = "chalk.compileOnSave"
+    private static let latexEngineKey = "chalk.latexEngine"
+    private static let pandocPdfEngineKey = "chalk.pandocPdfEngine"
+    private static let extraToolDirectoryKey = "chalk.extraToolDirectory"
 
     /// Posted when `autoHideChrome` changes. Settings runs in its own window, so every open window
     /// re-applies from this notification.
@@ -247,6 +251,38 @@ public enum Preferences {
             return DefaultFileType(rawValue: raw) ?? .md
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: defaultFileTypeKey) }
+    }
+
+    // MARK: - Compile
+
+    /// Cmd+S also compiles: a .tex file always, a .md/.qmd file once its PDF
+    /// panel is open or it was compiled this session. Default on.
+    public static var compileOnSave: Bool {
+        get { UserDefaults.standard.object(forKey: compileOnSaveKey) == nil || UserDefaults.standard.bool(forKey: compileOnSaveKey) }
+        set { UserDefaults.standard.set(newValue, forKey: compileOnSaveKey) }
+    }
+
+    public static var latexEngine: LatexEngineChoice {
+        get { LatexEngineChoice(rawValue: UserDefaults.standard.string(forKey: latexEngineKey) ?? "") ?? .automatic }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: latexEngineKey) }
+    }
+
+    /// pandoc's `--pdf-engine` for Markdown. xelatex by default: pdflatex
+    /// fails on the Unicode that Markdown notes are full of.
+    public static var pandocPdfEngine: String {
+        get { UserDefaults.standard.string(forKey: pandocPdfEngineKey).flatMap { $0.isEmpty ? nil : $0 } ?? "xelatex" }
+        set { UserDefaults.standard.set(newValue, forKey: pandocPdfEngineKey) }
+    }
+
+    /// A folder searched before the standard ones, for tools installed
+    /// somewhere unusual. Empty when unset.
+    public static var extraToolDirectory: String {
+        get { UserDefaults.standard.string(forKey: extraToolDirectoryKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: extraToolDirectoryKey) }
+    }
+
+    public static var compileSettings: CompileSettings {
+        CompileSettings(latexEngine: latexEngine, pandocPdfEngine: pandocPdfEngine)
     }
 
     // MARK: - Clamped numbers

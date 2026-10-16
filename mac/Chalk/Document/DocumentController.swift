@@ -17,6 +17,9 @@ protocol DocumentControllerDelegate: AnyObject {
     /// The user saved THIS document on purpose (Cmd+S). Fires before the write, even with nothing to write:
     /// the intent alone pins the tab out of "preview".
     func documentControllerDidRequestExplicitSave(_ controller: DocumentController)
+    /// An explicit save (Cmd+S) of a file-backed document finished, written or already clean.
+    /// The compile-on-save hook: it fires after the bytes are on disk.
+    func documentController(_ controller: DocumentController, didFinishExplicitSave succeeded: Bool)
     /// `url` changed on disk since our last read/write and is about to be overwritten (or an iCloud
     /// conflict version lost). The losing version was copied to `backupAt` (the `.conflict.` sibling, else
     /// `RecoveryStore.conflictCopiesDirectory`), or nil when both copies failed: the host must word the
@@ -38,6 +41,7 @@ extension DocumentControllerDelegate {
     /// Optional: only the editor container reacts to it (test mocks opt out).
     func documentControllerDidSave(_ controller: DocumentController) {}
     func documentControllerDidRequestExplicitSave(_ controller: DocumentController) {}
+    func documentController(_ controller: DocumentController, didFinishExplicitSave succeeded: Bool) {}
     func documentController(_ controller: DocumentController,
                             hasSaveConflictAt url: URL, backupAt backupURL: URL?) {}
     func documentController(_ controller: DocumentController, didFailSaveTo url: URL) {}
@@ -322,6 +326,15 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         // After the no-op return above, so a clean mismatched tab doesn't report a failed save.
         if let source = bufferSourceURL, source != doc.fileURL {
             log.error("refusing to save: buffer came from a different file than the open document")
+        var completion = completion
+        if explicit, !isDraft {
+            let caller = completion
+            completion = { [weak self] ok in
+                caller?(ok)
+                guard let self else { return }
+                self.delegate?.documentController(self, didFinishExplicitSave: ok)
+            }
+        }
             delegate?.documentController(self, didFailSaveTo: doc.fileURL)
             completion?(false)
             return

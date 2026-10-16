@@ -34,7 +34,7 @@ public enum SampleContent {
     private static let welcomeMarkdown = #"""
     # Welcome to Chalk
 
-    Chalk renders your document where you wrote it. There is no preview pane and no compile step, so there is nothing to keep in sync and nothing to wait for.
+    Chalk renders your document where you wrote it, so there is nothing to keep in sync and nothing to wait for while you write. When you want the PDF, **Cmd R** compiles it with your own pandoc or Quarto and shows it beside the text.
 
     This file is a real document. Type in it, break it, save it with **Cmd S**. Chalk does not autosave: nothing reaches the disk until you ask.
 
@@ -110,9 +110,9 @@ public enum SampleContent {
     private static let welcomeTeX = #"""
     % Welcome.tex — the same tour, in LaTeX.
     %
-    % Chalk renders LaTeX, it does not compile it. No PDF pipeline and no
-    % bibliography manager: you already have those, and they are better than
-    % anything a text editor would bolt on.
+    % Chalk renders LaTeX as you write. Cmd R compiles it with your own TeX
+    % distribution and shows the PDF beside the text; Cmd-click in the PDF
+    % jumps back here, and Option-Cmd J jumps from here to the PDF.
 
     \documentclass{article}
     \usepackage{amsmath}

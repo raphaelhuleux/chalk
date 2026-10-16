@@ -715,7 +715,8 @@ final class RootSplitViewController: NSViewController {
         return WindowSession(
             tabs: editor.sessionTabRecords(), activeIndex: editor.sessionSnapshot().activeIndex,
             isSidebarVisible: isSidebarVisible,
-            isOutlineVisible: editor.isOutlinePanelVisible)
+            // The slot restores as the outline; a PDF slot reopens on the next compile.
+            isOutlineVisible: editor.isOutlinePanelVisible && editor.trailingPanelContent == .outline)
     }
 
     /// Reopen a restored window's tabs. Unresolvable or unreadable files (moved
@@ -1254,10 +1255,35 @@ final class RootSplitViewController: NSViewController {
     /// is refused, like the Library.
     @objc func cmdToggleOutlinePanel(_ sender: Any? = nil) {
         guard admitShellAction(#selector(cmdToggleOutlinePanel(_:)), window: 0.3) else { return }
-        let show = !editor.isOutlinePanelVisible
-        if show, isZen { return }
+        toggleTrailingPanel(.outline)
+    }
+
+    /// ⌥⌘P: the compiled PDF in the outline's slot, toggled like ⌘K.
+    @objc func cmdTogglePDFPanel(_ sender: Any? = nil) {
+        toggleTrailingPanel(.pdf)
+    }
+
+    /// Hides the slot when it shows `content`, else shows `content` there. Zen owns the
+    /// chrome: opening into it is refused, like the Library.
+    private func toggleTrailingPanel(_ content: EditorContainerViewController.TrailingPanelContent) {
+        let hides = editor.isOutlinePanelVisible && editor.trailingPanelContent == content
+        if !hides, isZen { return }
         revealChrome()
-        editor.setOutlinePanelVisible(show, animated: motionAllowed)
+        editor.toggleTrailingPanel(content, animated: motionAllowed)
+    }
+
+    /// ⌘R: save and compile the active file's root, then show its PDF. In zen it compiles
+    /// without opening the slot.
+    @objc func cmdCompile(_ sender: Any? = nil) {
+        if !isZen { revealChrome() }
+        editor.compileActive(showingPDF: !isZen)
+    }
+
+    /// ⌥⌘J: forward SyncTeX from the caret. Needs the slot, so zen refuses it.
+    @objc func cmdShowInPDF(_ sender: Any? = nil) {
+        guard !isZen else { return NSSound.beep() }
+        revealChrome()
+        editor.syncActiveToPDF()
     }
 
     /// The session the crash prompt and the Help screens read. Overridable so
@@ -1672,6 +1698,16 @@ extension RootSplitViewController: NSMenuItemValidation {
         if let action = item.action, let mode = Self.viewModeByAction[action] {
             item.state = mode == Preferences.viewMode ? .on : .off
         }
+        switch item.action {
+        case #selector(cmdTogglePDFPanel(_:))?:
+            item.state = editor.isPDFPanelShowing ? .on : .off
+        case #selector(cmdCompile(_:))?:
+            return editor.canCompileActive
+        case #selector(cmdShowInPDF(_:))?:
+            return editor.canSyncActiveToPDF
+        default:
+            break
+        }
         return true
     }
 
@@ -1707,6 +1743,18 @@ extension RootSplitViewController {
         headerBar.paintTrailingHoleForTesting.map { view.convert($0, from: headerBar) }
     }
     func setOutlinePanelForTesting(_ visible: Bool) { editor.setOutlinePanelVisible(visible, animated: false) }
+    /// The trailing slot as the matrix names it.
+    var trailingPanelStateForTesting: UIState.OutlineState {
+        guard editor.isOutlinePanelVisible else { return .hidden }
+        return editor.trailingPanelContent == .pdf ? .pdf : .shown
+    }
+    func setTrailingPanelForTesting(_ state: UIState.OutlineState) {
+        switch state {
+        case .hidden: editor.setOutlinePanelVisible(false, animated: false)
+        case .shown: editor.showTrailingPanel(.outline, animated: false)
+        case .pdf: editor.showTrailingPanel(.pdf, animated: false)
+        }
+    }
     /// Drive the web-forwarded shell command lane (`editor.onShellCommand`).
     func simulateShellCommandForTesting(_ name: String) { editor.onShellCommand?(name) }
     /// Drives the real `onTabsChanged` sink with a canned strip.
@@ -1803,10 +1851,15 @@ extension RootSplitViewController {
         case .zen(let on):
             setEditingMode(on ? .zen : .normal)
         case .outline(let visible):
-            guard visible != editor.isOutlinePanelVisible else { return }
             if visible, isZen { return }
             revealChrome()
-            editor.setOutlinePanelVisible(visible, animated: false)
+            // Through the menu's own paths: showing puts the outline in the slot, hiding closes
+            // the slot whatever it shows.
+            if visible {
+                editor.showTrailingPanel(.outline, animated: false)
+            } else {
+                editor.setOutlinePanelVisible(false, animated: false)
+            }
         }
     }
 

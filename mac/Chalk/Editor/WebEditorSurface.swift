@@ -115,6 +115,8 @@ final class WebEditorSurface: NSObject, EditorSurface {
     /// Text pushes waiting for `ready`. Only `init`/`update`: queued settings would pile up one
     /// per Settings slider tick on a dormant tab.
     private var pending: [HostToEditorMessage] = []
+    /// A `revealLine` that arrived before `ready`, applied after the seed.
+    private var pendingRevealLine: Int?
     /// One-shot pre-ready watchdog, armed by every `loadBundle()`. A JS throw before `ready`
     /// produces no navigation error or process termination, so without it the tab stays blank.
     /// First expiry reloads once; the second gives up visibly.
@@ -543,8 +545,13 @@ final class WebEditorSurface: NSObject, EditorSurface {
         webView.takeSnapshot(with: nil) { image, _ in completion(image) }
     }
 
-    /// Jump to a 1-based line.
+    /// Jump to a 1-based line. Before `ready` the jump waits for it: reverse SyncTeX opens a
+    /// tab and jumps in the same turn.
     func revealLine(_ line: Int) {
+        guard isReady else {
+            pendingRevealLine = line
+            return
+        }
         webView.evaluateJavaScript(
             "window.__chalkEditor?.gotoLine(\(line))", completionHandler: nil)
     }
@@ -715,6 +722,10 @@ extension WebEditorSurface: WKScriptMessageHandler {
             sendEditorSettings()
             delegate?.editorDidBecomeReady(self)
             flushPending()
+            if let line = pendingRevealLine {
+                pendingRevealLine = nil
+                revealLine(line)
+            }
             applyAppearance()
             applyCSSVariables()
             if desiredOutlineSubscription { applyOutlineSubscription() }

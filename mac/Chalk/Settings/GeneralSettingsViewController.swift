@@ -186,7 +186,7 @@ final class GeneralSettingsViewController: NSViewController {
 
     /// The screen a row leads to, or nil for a row that only states a fact. Also the tests' seam.
     func destination(section: Int, row: Int) -> NSViewController? {
-        guard section == 2, row < aboutRows.count else { return nil }
+        guard section == Self.sectionTitles.firstIndex(of: "About"), row < aboutRows.count else { return nil }
         switch aboutRows[row] {
         case .version: return nil
         case .report: return ReportProblemViewController(alpha: alpha)
@@ -208,7 +208,7 @@ final class GeneralSettingsViewController: NSViewController {
     private weak var measureRow: SettingsRowView?
     private weak var lineHeightRow: SettingsRowView?
 
-    static let sectionTitles = ["Appearance", "Editor", "About"]
+    static let sectionTitles = ["Appearance", "Editor", "Compile", "About"]
 
     override func loadView() {
         view = ChromeToneView()
@@ -234,7 +234,7 @@ final class GeneralSettingsViewController: NSViewController {
     }
 
     private func buildSections() {
-        sectionRows = [appearanceRows(), editorRows(), aboutRowViews()]
+        sectionRows = [appearanceRows(), editorRows(), compileRows(), aboutRowViews()]
         let cards = zip(Self.sectionTitles, sectionRows).map { SettingsCardView(title: $0, rows: $1) }
         let stack = NSStackView(views: cards)
         stack.orientation = .vertical
@@ -250,6 +250,94 @@ final class GeneralSettingsViewController: NSViewController {
             stack.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -margin),
         ])
         for card in cards { card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+    }
+
+    // MARK: - Compile
+
+    private weak var toolsRow: SettingsRowView?
+    private weak var toolFolderRow: SettingsRowView?
+    private static let pandocEngines = ["xelatex", "lualatex", "pdflatex", "tectonic"]
+
+    private func compileRows() -> [SettingsRowView] {
+        let onSave = makeSwitch(isOn: Preferences.compileOnSave, action: #selector(compileOnSaveToggled))
+        let engine = NSPopUpButton(frame: .zero, pullsDown: false)
+        for choice in LatexEngineChoice.allCases {
+            engine.addItem(withTitle: choice.title)
+            engine.lastItem?.representedObject = choice.rawValue
+        }
+        engine.selectItem(at: LatexEngineChoice.allCases.firstIndex(of: Preferences.latexEngine) ?? 0)
+        engine.target = self
+        engine.action = #selector(latexEngineChanged)
+        let pandoc = NSPopUpButton(frame: .zero, pullsDown: false)
+        pandoc.addItems(withTitles: Self.pandocEngines)
+        pandoc.selectItem(withTitle: Preferences.pandocPdfEngine)
+        pandoc.target = self
+        pandoc.action = #selector(pandocEngineChanged)
+        let choose = NSButton(title: "Choose\u{2026}", target: self, action: #selector(chooseToolFolder))
+        choose.bezelStyle = .rounded
+        let folder = SettingsRowView(title: "Extra Tool Folder", detail: toolFolderDetail, control: choose)
+        toolFolderRow = folder
+        let tools = SettingsRowView(title: "Found", detail: "Looking\u{2026}")
+        toolsRow = tools
+        refreshFoundTools()
+        return [
+            SettingsRowView(title: "Compile on Save", detail: ".tex always, .md once its PDF is open", control: onSave),
+            SettingsRowView(title: "LaTeX Engine", control: engine),
+            SettingsRowView(title: "Markdown PDF Engine", detail: "pandoc --pdf-engine", control: pandoc),
+            folder,
+            tools,
+        ]
+    }
+
+    private var toolFolderDetail: String {
+        Preferences.extraToolDirectory.isEmpty ? "None" : (Preferences.extraToolDirectory as NSString).abbreviatingWithTildeInPath
+    }
+
+    /// Which tools this Mac has, as a compile would find them (login shell PATH included).
+    private func refreshFoundTools() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let locator = CompileController.makeLocator()
+            let names = ["latexmk", "pdflatex", "xelatex", "lualatex", "biber", "synctex", "tectonic", "pandoc", "quarto"]
+            let found = names.filter { locator.locate($0) != nil }
+            DispatchQueue.main.async {
+                self?.toolsRow?.detailLabel.stringValue = found.isEmpty ? "No TeX, pandoc or quarto found" : found.joined(separator: ", ")
+                self?.toolsRow?.detailLabel.toolTip = found.compactMap { locator.locate($0) }.joined(separator: "\n")
+            }
+        }
+    }
+
+    @objc private func compileOnSaveToggled(_ toggle: NSSwitch) {
+        Preferences.compileOnSave = toggle.state == .on
+    }
+
+    @objc private func latexEngineChanged(_ button: NSPopUpButton) {
+        let raw = button.selectedItem?.representedObject as? String ?? ""
+        Preferences.latexEngine = LatexEngineChoice(rawValue: raw) ?? .automatic
+    }
+
+    @objc private func pandocEngineChanged(_ button: NSPopUpButton) {
+        Preferences.pandocPdfEngine = button.titleOfSelectedItem ?? "xelatex"
+    }
+
+    @objc private func chooseToolFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use Folder"
+        panel.message = "A folder with latexmk, pandoc or quarto, searched before the usual places."
+        let apply = { [weak self] (response: NSApplication.ModalResponse) in
+            guard let self else { return }
+            // Cancel clears the folder: the only way back to "None".
+            Preferences.extraToolDirectory = response == .OK ? (panel.url?.path ?? "") : ""
+            self.toolFolderRow?.detailLabel.stringValue = self.toolFolderDetail
+            self.refreshFoundTools()
+        }
+        if let window = view.window {
+            panel.beginSheetModal(for: window, completionHandler: apply)
+        } else {
+            apply(panel.runModal())
+        }
     }
 
     // MARK: - Appearance

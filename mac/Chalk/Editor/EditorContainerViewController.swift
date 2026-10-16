@@ -38,6 +38,8 @@ final class EditorContainerViewController: NSViewController {
     deinit {
         // The run loop retains the timer, so without this each closed dirty window leaks one.
         recoverySnapshotTimer?.invalidate()
+        // A closed window's TeX runs would otherwise finish into nothing.
+        compiler.cancelAll()
     }
 
     /// Edge pin swapped out while the content width is frozen for a sidebar
@@ -67,6 +69,21 @@ final class EditorContainerViewController: NSViewController {
     private var outlinePanelTrailing: NSLayoutConstraint?
     private var contentTrailingToEdge: NSLayoutConstraint?
     private var contentTrailingToPanel: NSLayoutConstraint?
+
+    // MARK: PDF panel
+
+    /// What the trailing slot shows. The PDF panel reuses the outline panel's frame, slide,
+    /// grip and band cut-out, so the chrome has one trailing slot whatever fills it;
+    /// `isOutlinePanelVisible` is that slot's visibility.
+    enum TrailingPanelContent { case outline, pdf }
+    private(set) var trailingPanelContent: TrailingPanelContent = .outline
+    /// The compiled PDF, pinned over the outline panel's frame while the slot shows it.
+    let pdfPanel = PDFPanelViewController()
+    /// This window's compiles (⌘R, Cmd+S) and SyncTeX.
+    let compiler = CompileController()
+    /// The slot shows the outline: only then do surfaces push outline snapshots.
+    private var isOutlineShowing: Bool { isOutlinePanelVisible && trailingPanelContent == .outline }
+    var isPDFPanelShowing: Bool { isOutlinePanelVisible && trailingPanelContent == .pdf }
 
     /// Fired when the open tabs change so the host can redraw the strip.
     var onTabsChanged: (([TabItem]) -> Void)?
@@ -246,9 +263,35 @@ final class EditorContainerViewController: NSViewController {
             self.setOutlinePanelWidth(self.outlinePanelWidth?.constant ?? 0, persist: true)
         }
 
+        installPDFPanel(over: panelView)
+
         // A pre-load `setOutlinePanelVisible` ran this with nil constraints. The column may still
         // be unsized, so `viewDidLayout` re-evaluates it.
         updateOutlinePanelMode()
+    }
+
+    /// The PDF panel rides on the outline panel's view: same frame, same slide. Below the grip,
+    /// which must stay on top to catch drags on the slot's edge.
+    private func installPDFPanel(over slot: NSView) {
+        addChild(pdfPanel)
+        let pdfView: NSView = pdfPanel.view
+        pdfView.translatesAutoresizingMaskIntoConstraints = false
+        pdfView.isHidden = !isPDFPanelShowing
+        view.addSubview(pdfView, positioned: .above, relativeTo: slot)
+        NSLayoutConstraint.activate([
+            pdfView.topAnchor.constraint(equalTo: slot.topAnchor),
+            pdfView.bottomAnchor.constraint(equalTo: slot.bottomAnchor),
+            pdfView.leadingAnchor.constraint(equalTo: slot.leadingAnchor),
+            pdfView.trailingAnchor.constraint(equalTo: slot.trailingAnchor),
+        ])
+        pdfPanel.onCompile = { [weak self] in self?.compileActive() }
+        pdfPanel.onSyncClick = { [weak self] page, point in self?.reverseSync(page: page, point: point) }
+        pdfPanel.onIssue = { [weak self] issue in self?.jump(to: issue) }
+        compiler.libraryRootsProvider = { [weak self] in self?.libraryRootsProvider() ?? [] }
+        compiler.onStateChange = { [weak self] root in
+            guard let self, self.isPDFPanelShowing, self.pdfPanelRoot == root else { return }
+            self.pdfPanel.show(root: root, state: self.compiler.states[root])
+        }
     }
 
     private var outlineResizeStartWidth: CGFloat = 0
@@ -262,16 +305,16 @@ final class EditorContainerViewController: NSViewController {
         if visible {
             panelView.isHidden = false
             outlineResizeGrip.isHidden = false
+            pdfPanel.view.isHidden = trailingPanelContent != .pdf
             updateOutlinePanelMode()
             // Place the panel at its off-screen start before the slide: a
             // hidden view keeps a stale frame, and un-hiding it inside the
             // animated pass showed that frame for one frame at the top
             // trailing corner before the slide began.
             view.layoutSubtreeIfNeeded()
-            seedOutlinePanel()
-            activeTab?.surface.setOutlineSubscription(true)
+            seedTrailingPanel()
         } else {
-            activeTab?.surface.setOutlineSubscription(false)
+            if trailingPanelContent == .outline { activeTab?.surface.setOutlineSubscription(false) }
             outlinePanelIsOverlay = false
             contentTrailingToPanel?.isActive = false
             contentTrailingToEdge?.isActive = true
@@ -283,6 +326,7 @@ final class EditorContainerViewController: NSViewController {
             guard let self else { return }
             if !self.isOutlinePanelVisible {
                 panelView.isHidden = true
+                self.pdfPanel.view.isHidden = true
                 self.outlineResizeGrip.isHidden = true
             }
             self.onOutlinePanelLayoutChanged?()
@@ -319,6 +363,48 @@ final class EditorContainerViewController: NSViewController {
         onOutlinePanelLayoutChanged?()
     }
 
+    /// Fill whichever content the slot shows from the active tab.
+    private func seedTrailingPanel() {
+        switch trailingPanelContent {
+        case .outline:
+            seedOutlinePanel()
+            activeTab?.surface.setOutlineSubscription(true)
+        case .pdf:
+            refreshPDFPanel()
+        }
+    }
+
+    /// Show the slot with `content`: slides it in when hidden, swaps the content in place when
+    /// the slot already shows the other one.
+    func showTrailingPanel(_ content: TrailingPanelContent, animated: Bool) {
+        if isOutlinePanelVisible, trailingPanelContent == content { return }
+        if trailingPanelContent != content {
+            if isOutlineShowing { activeTab?.surface.setOutlineSubscription(false) }
+            trailingPanelContent = content
+            setOutlinePanelWidth(Self.preferredWidth(for: content), persist: false)
+        }
+        if isOutlinePanelVisible {
+            pdfPanel.view.isHidden = content != .pdf
+            seedTrailingPanel()
+            onOutlinePanelLayoutChanged?()
+        } else {
+            setOutlinePanelVisible(true, animated: animated)
+        }
+    }
+
+    /// ⌘K / ⌥⌘P: hide the slot when it shows `content`, else show `content`.
+    func toggleTrailingPanel(_ content: TrailingPanelContent, animated: Bool) {
+        if isOutlinePanelVisible, trailingPanelContent == content {
+            setOutlinePanelVisible(false, animated: animated)
+        } else {
+            showTrailingPanel(content, animated: animated)
+        }
+    }
+
+    private static func preferredWidth(for content: TrailingPanelContent) -> CGFloat {
+        content == .pdf ? Preferences.pdfPanelWidth : Preferences.outlinePanelWidth
+    }
+
     /// Fill the panel from the active tab before the first push lands.
     private func seedOutlinePanel() {
         outlinePanel.setDocumentName(activeTab?.displayName ?? "")
@@ -333,12 +419,17 @@ final class EditorContainerViewController: NSViewController {
     }
 
     func setOutlinePanelWidth(_ proposed: CGFloat, persist: Bool) {
-        let range = Preferences.sidebarWidthRange
+        let range = trailingPanelContent == .pdf ? Preferences.pdfPanelWidthRange : Preferences.sidebarWidthRange
         let clamped = min(range.upperBound, max(range.lowerBound, proposed))
         outlinePanelWidth?.constant = clamped
         if !isOutlinePanelVisible { outlinePanelTrailing?.constant = clamped }
         updateOutlinePanelMode()
-        if persist { Preferences.outlinePanelWidth = clamped }
+        if persist {
+            switch trailingPanelContent {
+            case .outline: Preferences.outlinePanelWidth = clamped
+            case .pdf: Preferences.pdfPanelWidth = clamped
+            }
+        }
         if isOutlinePanelVisible {
             view.layoutSubtreeIfNeeded()
             onOutlinePanelLayoutChanged?()
@@ -549,7 +640,7 @@ final class EditorContainerViewController: NSViewController {
             self.onActiveEditorScroll?(y)
         }
         surface.onOutline = { [weak self, weak tab] snapshot in
-            guard let self, let tab, self.activeTab === tab, self.isOutlinePanelVisible else { return }
+            guard let self, let tab, self.activeTab === tab, self.isOutlineShowing else { return }
             self.outlinePanel.setSnapshot(snapshot)
         }
         tabs.append(tab)
@@ -939,7 +1030,7 @@ final class EditorContainerViewController: NSViewController {
     private func activate(_ tab: Tab) {
         if activeTab !== tab {
             let outgoingSurface = activeTab?.surface
-            if isOutlinePanelVisible { activeTab?.surface.setOutlineSubscription(false) }
+            if isOutlineShowing { activeTab?.surface.setOutlineSubscription(false) }
             activeTab = tab
             // Dress the incoming surface (appearance, chrome-top) BEFORE install, so it never
             // flashes a stale theme or band height (docs/motion.md "Tab switch").
@@ -959,10 +1050,7 @@ final class EditorContainerViewController: NSViewController {
             #if DEBUG
             activateEventTrailForTesting.append("install")
             #endif
-            if isOutlinePanelVisible {
-                seedOutlinePanel()
-                tab.surface.setOutlineSubscription(true)
-            }
+            if isOutlinePanelVisible { seedTrailingPanel() }
             if let outgoingSurface, outgoingSurface.view !== tab.surface.view {
                 crossFade(from: outgoingSurface, to: tab.surface)
             }
@@ -1095,7 +1183,7 @@ final class EditorContainerViewController: NSViewController {
                 let neighbor = tabs[min(index ?? 0, tabs.count - 1)]
                 activate(neighbor)
             } else {
-                if isOutlinePanelVisible { seedOutlinePanel() }
+                if isOutlinePanelVisible { seedTrailingPanel() }
                 refreshEmptyState()
                 refreshTabBar()
             }
@@ -1184,6 +1272,117 @@ final class EditorContainerViewController: NSViewController {
     }
 }
 
+// MARK: - Compile and PDF
+
+extension EditorContainerViewController {
+    /// The file behind the active tab, when it is one Chalk compiles.
+    private var activeCompilableURL: URL? {
+        guard let url = activeTab?.url, CompileSource(fileExtension: url.pathExtension) != nil else { return nil }
+        return url
+    }
+
+    var canCompileActive: Bool { activeCompilableURL != nil }
+    var canSyncActiveToPDF: Bool { activeCompilableURL.map { CompileSource(fileExtension: $0.pathExtension) == .latex } ?? false }
+
+    /// The root the PDF panel shows: the active file's known root.
+    var pdfPanelRoot: URL? {
+        activeCompilableURL.flatMap { compiler.knownRoot(for: $0) }
+    }
+
+    /// Point the PDF panel at the active tab's root, resolving it first when this session has
+    /// not compiled the file yet.
+    func refreshPDFPanel() {
+        guard let file = activeCompilableURL else {
+            pdfPanel.show(root: nil, state: nil)
+            return
+        }
+        if let root = compiler.knownRoot(for: file) {
+            pdfPanel.show(root: root, state: compiler.states[root])
+            return
+        }
+        compiler.lookUpRoot(for: file) { [weak self] root in
+            guard let self, self.isPDFPanelShowing, self.activeCompilableURL == file else { return }
+            self.pdfPanel.show(root: root, state: root.flatMap { self.compiler.states[$0] })
+        }
+    }
+
+    /// ⌘R: save the active tab, compile its root, and show the PDF.
+    func compileActive(showingPDF: Bool = true) {
+        guard let file = activeCompilableURL, let tab = activeTab else {
+            NSSound.beep()
+            return
+        }
+        guard !CompileController.isSandboxed else {
+            presentChalkNotice(title: "Compiling Is Not Available",
+                               message: "This build of Chalk runs in the App Sandbox, which cannot start TeX or pandoc.")
+            return
+        }
+        tab.controller.save { [weak self] ok in
+            guard let self, ok else { return }
+            self.compiler.compile(file) { [weak self] _ in
+                guard let self, self.isPDFPanelShowing else { return }
+                self.refreshPDFPanel()
+            }
+            if showingPDF { self.showTrailingPanel(.pdf, animated: true) }
+        }
+    }
+
+    /// Cmd+S landed on disk: compile when the policy says so (`CompileController.compilesOnSave`).
+    fileprivate func compileAfterExplicitSave(of controller: DocumentController) {
+        guard let tab = tabs.first(where: { $0.controller === controller }), let url = tab.url,
+              compiler.compilesOnSave(url, pdfPanelShowing: isPDFPanelShowing && activeTab === tab),
+              !CompileController.isSandboxed else { return }
+        compiler.compile(url) { [weak self] _ in
+            guard let self, self.isPDFPanelShowing else { return }
+            self.refreshPDFPanel()
+        }
+    }
+
+    /// ⌥⌘J: the PDF spot of the active tab's caret line.
+    func syncActiveToPDF() {
+        guard let file = activeCompilableURL, CompileSource(fileExtension: file.pathExtension) == .latex,
+              let tab = activeTab else {
+            NSSound.beep()
+            return
+        }
+        let root = compiler.knownRoot(for: file)
+        tab.surface.fetchOutline { [weak self] snapshot in
+            guard let self, let snapshot else { return }
+            let go = { [weak self] (root: URL?) in
+                guard let self, let root else { return NSSound.beep() }
+                self.showTrailingPanel(.pdf, animated: true)
+                self.compiler.forwardSync(file: file, line: snapshot.cursorLine, root: root) { [weak self] hit in
+                    guard let self, let hit else { return NSSound.beep() }
+                    self.refreshPDFPanel()
+                    self.pdfPanel.reveal(hit)
+                }
+            }
+            if let root { go(root) } else { self.compiler.lookUpRoot(for: file, completion: go) }
+        }
+    }
+
+    /// Cmd-click in the PDF: open the source at that line.
+    private func reverseSync(page: Int, point: CGPoint) {
+        guard let pdf = pdfPanel.shownPDF else { return }
+        compiler.reverseSync(pdf: pdf, page: page, x: point.x, y: point.y) { [weak self] hit in
+            guard let self, let hit else { return NSSound.beep() }
+            self.open(url: URL(fileURLWithPath: hit.input))
+            self.revealLine(hit.line)
+        }
+    }
+
+    /// A click on a compile issue: its file (relative to the root's folder) at its line.
+    private func jump(to issue: CompileIssue) {
+        guard let root = pdfPanelRoot else { return }
+        if let file = issue.file {
+            let url = URL(fileURLWithPath: file, relativeTo: root.deletingLastPathComponent()).standardizedFileURL
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            open(url: url)
+        }
+        if let line = issue.line { revealLine(line) }
+    }
+}
+
 extension EditorContainerViewController: DocumentControllerDelegate {
     func documentController(_ controller: DocumentController, didChangeDirty isDirty: Bool) {
         guard let tab = tabs.first(where: { $0.controller === controller }) else { return }
@@ -1219,6 +1418,10 @@ extension EditorContainerViewController: DocumentControllerDelegate {
               tab.url != nil, !tab.isCommitted else { return }
         tab.isCommitted = true
         refreshTabBar()
+    }
+
+    func documentController(_ controller: DocumentController, didFinishExplicitSave succeeded: Bool) {
+        if succeeded { compileAfterExplicitSave(of: controller) }
     }
 
     /// A save failed; the buffer is intact, so tell the user their work is safe.

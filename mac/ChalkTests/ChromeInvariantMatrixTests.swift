@@ -69,8 +69,10 @@ final class ChromeInvariantMatrixTests: XCTestCase {
             if layout.outlinePanel != nil {
                 faults.append("\(state.id): zen was requested but the outline panel is still open")
             }
-        } else if state.outline == .shown && layout.outlinePanel == nil {
-            faults.append("\(state.id): the outline panel was requested and is not open")
+        } else if state.outline != .hidden && layout.outlinePanel == nil {
+            faults.append("\(state.id): the trailing slot was requested and is not open")
+        } else if state.mode == .normal && controller.trailingPanelStateForTesting != state.outline {
+            faults.append("\(state.id): the trailing slot shows \(controller.trailingPanelStateForTesting.rawValue)")
         }
         if state.outline == .hidden && layout.outlinePanel != nil {
             faults.append("\(state.id): the outline panel was not requested and is open")

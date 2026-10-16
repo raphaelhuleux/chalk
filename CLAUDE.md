@@ -91,8 +91,8 @@ so `swift test` works from the command line without Xcode's test runner
   have hardcoded fallbacks — leave them. Keep its touch handling: VS Code runs
   on touchscreen laptops.
 - **Chrome geometry is asserted, not eyeballed.** `ChromeInvariantMatrixTests`
-  drives a 32-cell state matrix (window mode x sidebar x outline panel x
-  editing mode x appearance) and checks named rules over the chrome's real
+  drives a 48-cell state matrix (window mode x sidebar x trailing slot
+  (closed, outline, PDF) x editing mode x appearance) and checks named rules over the chrome's real
   laid-out frames. Before changing the band, the Library panel,
   the tab strip or the editor's resting offset, read
   [docs/ui-correctness.md](docs/ui-correctness.md) — it lists the traps that

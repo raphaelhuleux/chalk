@@ -46,6 +46,9 @@ final class ChromeMatrixHost {
     /// pinned width.
     private let incomingOutlinePanelWidthRaw: Any?
     private static let outlinePanelWidthKey = Preferences.outlinePanelWidthKey
+    /// And for the slot's width while it shows the PDF.
+    private let incomingPDFPanelWidthRaw: Any?
+    private static let pdfPanelWidthKey = Preferences.pdfPanelWidthKey
 
     /// One folder with one file, so every Library-open cell has a first area
     /// header to measure: `libraryListStartsAtTheChromeFloor` is evidence only
@@ -61,6 +64,8 @@ final class ChromeMatrixHost {
         incomingSidebarWidthRaw = UserDefaults.standard.object(forKey: Self.sidebarWidthKey)
         incomingOutlinePanelWidthRaw = UserDefaults.standard.object(forKey: Self.outlinePanelWidthKey)
         UserDefaults.standard.removeObject(forKey: Self.outlinePanelWidthKey)
+        incomingPDFPanelWidthRaw = UserDefaults.standard.object(forKey: Self.pdfPanelWidthKey)
+        UserDefaults.standard.removeObject(forKey: Self.pdfPanelWidthKey)
         window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
         window.isHidden = false
     }
@@ -77,6 +82,11 @@ final class ChromeMatrixHost {
             UserDefaults.standard.set(raw, forKey: Self.outlinePanelWidthKey)
         } else {
             UserDefaults.standard.removeObject(forKey: Self.outlinePanelWidthKey)
+        }
+        if let raw = incomingPDFPanelWidthRaw {
+            UserDefaults.standard.set(raw, forKey: Self.pdfPanelWidthKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.pdfPanelWidthKey)
         }
         window.isHidden = true
         window.rootViewController = nil
@@ -139,7 +149,7 @@ final class ChromeMatrixHost {
         // The outline axis, before zen: zen closes the panel the way it
         // closes the Library, so a zen cell requested with the panel open
         // must reach zen with the panel already open and watch it close.
-        root.setOutlinePanelForTesting(state.outline == .shown)
+        root.setTrailingPanelForTesting(state.outline)
         window.layoutIfNeeded()
         root.view.layoutIfNeeded()
         // `setEditingMode` runs AFTER the window has its real size and a real

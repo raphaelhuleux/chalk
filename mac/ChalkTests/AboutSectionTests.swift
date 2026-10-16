@@ -25,8 +25,10 @@ final class AboutSectionTests: XCTestCase {
         return controller
     }
 
+    private let aboutSection = GeneralSettingsViewController.sectionTitles.firstIndex(of: "About")!
+
     private func aboutTitles(_ controller: GeneralSettingsViewController) -> [String] {
-        controller.rowTitlesForTesting(section: 2)
+        controller.rowTitlesForTesting(section: aboutSection)
     }
 
     func testTheAboutRows() {
@@ -37,7 +39,7 @@ final class AboutSectionTests: XCTestCase {
     /// The version row is what a screenshot has to answer with. Without the
     /// commit, "which build is this?" costs a round trip.
     func testTheVersionRowNamesTheCommit() {
-        let detail = settings().rowDetailForTesting(section: 2, row: 0)
+        let detail = settings().rowDetailForTesting(section: aboutSection, row: 0)
         XCTAssertTrue(detail.contains("1.0.0"))
         XCTAssertTrue(detail.contains("42"))
         XCTAssertTrue(detail.contains("deadbee"))
@@ -48,8 +50,8 @@ final class AboutSectionTests: XCTestCase {
     func testEveryDisclosureRowHasADestination() {
         let controller = settings()
         for row in 0..<aboutTitles(controller).count {
-            let hasArrow = controller.rowHasDisclosureForTesting(section: 2, row: row)
-            let opens = controller.destination(section: 2, row: row) != nil
+            let hasArrow = controller.rowHasDisclosureForTesting(section: aboutSection, row: row)
+            let opens = controller.destination(section: aboutSection, row: row) != nil
             XCTAssertEqual(hasArrow, opens,
                            "row \(row) (\(aboutTitles(controller)[row])) shows an arrow "
                            + "but leads nowhere, or leads somewhere without saying so")
@@ -58,7 +60,7 @@ final class AboutSectionTests: XCTestCase {
 
     /// The Acknowledgements screen carries the bundled notices.
     func testAcknowledgementsReadTheBundledNotices() throws {
-        let screen = try XCTUnwrap(settings().destination(section: 2, row: 3) as? AcknowledgementsViewController)
+        let screen = try XCTUnwrap(settings().destination(section: aboutSection, row: 3) as? AcknowledgementsViewController)
         XCTAssertFalse(screen.textForTesting.isEmpty)
         XCTAssertFalse(screen.textForTesting.contains("unavailable in this build"),
                        "THIRD-PARTY-NOTICES must ship in the app bundle")

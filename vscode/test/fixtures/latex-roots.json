@@ -1,0 +1,171 @@
+{
+  "_comment": "LaTeX root-finding cases shared by vscode/test/unit/latex-root-parity.test.ts and mac/ChalkKit LatexRootParityTests. Each case is an in-memory file system, the saved file, finder options, and the expected root (null for none).",
+  "cases": [
+    {
+      "name": "magic comment, relative to the saved file",
+      "files": { "/ws/paper/2_method.tex": "% !TEX root = main.tex\n\\section{Method}\n", "/ws/paper/main.tex": "\\documentclass{article}\n" },
+      "saved": "/ws/paper/2_method.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/paper/main.tex",
+      "reasonContains": "magic comment"
+    },
+    {
+      "name": "magic comment with ../, lower case tag and no extension",
+      "files": { "/ws/sub/chapter.tex": "%!tex ROOT = ../main\ntext\n", "/ws/main.tex": "\\documentclass{book}\n" },
+      "saved": "/ws/sub/chapter.tex",
+      "options": {},
+      "root": "/ws/main.tex"
+    },
+    {
+      "name": "magic comment late in the file",
+      "files": { "/ws/ch.tex": "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\n% !TEX root = main.tex\n", "/ws/main.tex": "\\documentclass{article}\n" },
+      "saved": "/ws/ch.tex",
+      "options": {},
+      "root": "/ws/main.tex"
+    },
+    {
+      "name": "magic comment beats the configured root",
+      "files": { "/ws/a.tex": "% !TEX root = b.tex\n", "/ws/b.tex": "\\documentclass{article}", "/ws/other.tex": "\\documentclass{article}" },
+      "saved": "/ws/a.tex",
+      "options": { "configuredRoot": "other.tex", "workspaceDir": "/ws" },
+      "root": "/ws/b.tex"
+    },
+    {
+      "name": "dangling magic target stops the search",
+      "files": { "/ws/a.tex": "% !TEX root = gone.tex\n\\documentclass{article}\n" },
+      "saved": "/ws/a.tex",
+      "options": {},
+      "root": null,
+      "reasonContains": "missing"
+    },
+    {
+      "name": "configured root relative to the workspace",
+      "files": { "/ws/notes/frag.tex": "no class here\n", "/ws/paper/main.tex": "\\documentclass{article}\n" },
+      "saved": "/ws/notes/frag.tex",
+      "options": { "configuredRoot": "paper/main.tex", "workspaceDir": "/ws" },
+      "root": "/ws/paper/main.tex"
+    },
+    {
+      "name": "the saved file is a root",
+      "files": { "/ws/standalone.tex": "\\documentclass{article}\n\\begin{document}x\\end{document}\n" },
+      "saved": "/ws/standalone.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/standalone.tex"
+    },
+    {
+      "name": "a commented-out documentclass does not count",
+      "files": { "/ws/frag.tex": "% \\documentclass{article}\ntext only\n" },
+      "saved": "/ws/frag.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": null
+    },
+    {
+      "name": "transitive include, paths against the root dir",
+      "files": {
+        "/ws/main.tex": "\\documentclass{article}\n\\input{sections/all}\n",
+        "/ws/sections/all.tex": "\\include{sections/deep}\n",
+        "/ws/sections/deep.tex": "content\n"
+      },
+      "saved": "/ws/sections/deep.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/main.tex",
+      "reasonContains": "include graph"
+    },
+    {
+      "name": "brace-less \\input",
+      "files": { "/ws/main.tex": "\\documentclass{article}\n\\input chapters/one\n", "/ws/chapters/one.tex": "one\n" },
+      "saved": "/ws/chapters/one.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/main.tex"
+    },
+    {
+      "name": "\\includegraphics and \\includeonly are not includes",
+      "files": { "/ws/main.tex": "\\documentclass{article}\n\\includeonly{frag}\n\\includegraphics{frag}\n", "/ws/frag.tex": "x\n" },
+      "saved": "/ws/frag.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": null
+    },
+    {
+      "name": "commented-out include",
+      "files": { "/ws/decoy.tex": "\\documentclass{article}\n% \\input{frag}\n", "/ws/frag.tex": "text\n" },
+      "saved": "/ws/frag.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": null
+    },
+    {
+      "name": "\\import then \\subimport then \\input inside the import dir",
+      "files": {
+        "/ws/main.tex": "\\documentclass{article}\n\\import{parts/}{body}\n",
+        "/ws/parts/body.tex": "\\subimport{ch1/}{intro}\n",
+        "/ws/parts/ch1/intro.tex": "\\input{figure}\n",
+        "/ws/parts/ch1/figure.tex": "fig\n"
+      },
+      "saved": "/ws/parts/ch1/figure.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/main.tex"
+    },
+    {
+      "name": "include cycle without a root",
+      "files": { "/ws/main.tex": "\\documentclass{article}\n\\input{a}\n", "/ws/a.tex": "\\input{b}\n", "/ws/b.tex": "\\input{a}\n", "/ws/orphan.tex": "nope\n" },
+      "saved": "/ws/orphan.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": null
+    },
+    {
+      "name": "several roots: nearest wins",
+      "files": {
+        "/ws/main.tex": "\\documentclass{article}\n\\input{sections/intro}\n",
+        "/ws/slides/slides.tex": "\\documentclass{beamer}\n\\input{../sections/intro}\n",
+        "/ws/sections/intro.tex": "shared\n"
+      },
+      "saved": "/ws/sections/intro.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/main.tex",
+      "reasonContains": "1 other root"
+    },
+    {
+      "name": "several roots: name breaks a distance tie",
+      "files": {
+        "/ws/main.tex": "\\documentclass{article}\n\\input{sections/intro}\n",
+        "/ws/a-notes.tex": "\\documentclass{article}\n\\input{sections/intro}\n",
+        "/ws/sections/intro.tex": "shared\n"
+      },
+      "saved": "/ws/sections/intro.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/a-notes.tex"
+    },
+    {
+      "name": "several roots: .fls evidence beats distance",
+      "files": {
+        "/ws/main.tex": "\\documentclass{article}\n\\input{sections/intro}\n",
+        "/ws/slides/slides.tex": "\\documentclass{beamer}\n\\input{../sections/intro}\n",
+        "/ws/sections/intro.tex": "shared\n"
+      },
+      "fls": { "/ws/slides/slides.tex": ["/ws/sections/intro.tex"] },
+      "saved": "/ws/sections/intro.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/slides/slides.tex",
+      "reasonContains": ".fls"
+    },
+    {
+      "name": "several roots: the previous root of this file wins",
+      "files": {
+        "/ws/main.tex": "\\documentclass{article}\n\\input{sections/intro}\n",
+        "/ws/slides/slides.tex": "\\documentclass{beamer}\n\\input{../sections/intro}\n",
+        "/ws/sections/intro.tex": "shared\n"
+      },
+      "fls": { "/ws/slides/slides.tex": ["/ws/sections/intro.tex"] },
+      "saved": "/ws/sections/intro.tex",
+      "options": { "workspaceDir": "/ws", "preferredRoot": "/ws/main.tex" },
+      "root": "/ws/main.tex"
+    },
+    {
+      "name": "an include built from a macro is found through the .fls",
+      "files": { "/ws/main.tex": "\\documentclass{article}\n\\newcommand\\ch{chapters}\n\\input{\\ch/one}\n", "/ws/chapters/one.tex": "one\n" },
+      "fls": { "/ws/main.tex": ["/ws/chapters/one.tex"] },
+      "saved": "/ws/chapters/one.tex",
+      "options": { "workspaceDir": "/ws" },
+      "root": "/ws/main.tex"
+    }
+  ]
+}
