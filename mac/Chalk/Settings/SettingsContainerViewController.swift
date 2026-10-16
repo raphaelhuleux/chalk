@@ -12,9 +12,6 @@ final class SettingsContainerViewController: NSViewController {
     /// Done, Esc or ⌘,: the host closes the window.
     var onDismiss: (() -> Void)?
 
-    #if DEBUG
-    #endif
-
     /// The rail's rows: General, then a banner over one row per shortcut
     /// category, all backed by the one shortcuts controller showing a
     /// different slice.
@@ -131,12 +128,6 @@ final class SettingsContainerViewController: NSViewController {
         show(.general)
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        #if DEBUG
-        #endif
-    }
-
     /// Esc, from anywhere in the window.
     override func cancelOperation(_ sender: Any?) { done() }
 
@@ -238,10 +229,8 @@ final class SettingsRailRowView: NSTableRowView {
 
     override func drawSelection(in dirtyRect: NSRect) {
         guard isSelected else { return }
-        let rect = bounds.insetBy(dx: 10, dy: 2)
-        NSColor.chalkAccent.withAlphaComponent(0.15).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: ChalkMetrics.rowCornerRadius,
-                     yRadius: ChalkMetrics.rowCornerRadius).fill()
+        fillChalkPill(NSColor.chalkAccent.withAlphaComponent(0.15), insetX: 10, insetY: 2,
+                      radius: ChalkMetrics.rowCornerRadius)
     }
 }
 

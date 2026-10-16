@@ -355,9 +355,7 @@ final class RootSplitViewController: NSViewController {
 
     private func refreshBackground() {
         // The window is one editor surface; chrome floats above it.
-        view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
-        }
+        view.chalkSetLayerBackground(.chalkEditorBackground)
     }
 
     @objc private func themeDidChange() {
@@ -598,18 +596,15 @@ final class RootSplitViewController: NSViewController {
     }
 
     private func animateChrome(_ apply: @escaping () -> Void) {
-        guard motionAllowed, view.window != nil else {
+        let change = { [self] in
             apply()
             view.layoutSubtreeIfNeeded()
+        }
+        guard motionAllowed else {
+            change()
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = ChalkMetrics.motionAutoHide
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            context.allowsImplicitAnimation = true
-            apply()
-            view.layoutSubtreeIfNeeded()
-        }
+        view.chalkAnimateStyle(over: ChalkMetrics.motionAutoHide, timing: .easeOut, change)
     }
 
     private func setPointerInTopBand(_ inside: Bool) {
@@ -950,8 +945,6 @@ final class RootSplitViewController: NSViewController {
         if outlineHost.isVisible { hideOutlinePalette(then: nil) }
         setUpQuickOpenOverlay()
         quickOpenVC.prepareForReuse()
-        #if DEBUG
-        #endif
         quickOpenHost.present { editor.blurActiveSurface() }
         quickOpenVC.didReveal()
 
@@ -1010,8 +1003,6 @@ final class RootSplitViewController: NSViewController {
         if quickOpenHost.isVisible { hideQuickOpen(then: nil) }
         setUpOutlineOverlay()
         outlinePaletteVC.prepareForReuse()
-        #if DEBUG
-        #endif
         outlineHost.present {
             // Release the webview's DOM focus before the palette grabs the
             // keyboard, or WebKit re-asserts first responder behind the
@@ -1606,14 +1597,10 @@ final class RootSplitViewController: NSViewController {
         guard editorView.window != nil else { return nil }
         let cover = PassthroughView()
         cover.wantsLayer = true
-        editorView.effectiveAppearance.performAsCurrentDrawingAppearance {
-            cover.layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
-        }
+        cover.chalkSetLayerBackground(.chalkEditorBackground)
         cover.clipsToBounds = true
         cover.frame = editorView.bounds
         if let image, let bitmapSource {
-            let bitmap = NSImageView(image: image)
-            bitmap.imageScaling = .scaleAxesIndependently
             // Where the pixels ARE on screen: the frame, plus the slide's
             // translation as the PRESENTATION layers carry it. `NSView.convert`
             // sees only frames, and the model transform is not the truth
@@ -1621,10 +1608,10 @@ final class RootSplitViewController: NSViewController {
             // one placed the bitmap a sidebar's width from the content it was
             // covering, where it faded as a ghost.
             let shift = Self.presentedTranslation(of: bitmapSource, upTo: editorView)
-            bitmap.frame = editorView
+            let frame = editorView
                 .convert(bitmapSource.bounds, from: bitmapSource)
                 .offsetBy(dx: shift.dx - cover.frame.origin.x, dy: shift.dy - cover.frame.origin.y)
-            cover.addSubview(bitmap)
+            cover.addSubview(NSImageView.chalkSnapshot(image, frame: frame))
         }
         editorView.addSubview(cover)
         return cover

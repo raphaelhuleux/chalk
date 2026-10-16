@@ -57,7 +57,7 @@ final class HelpScreenPresentationTests: XCTestCase {
         let host = try XCTUnwrap(sheet.contentViewController as? HelpSheetHostViewController)
         XCTAssertTrue(host.screen is ReportProblemViewController)
         // Done ends the sheet.
-        host.close()
+        host.endChalkSheet()
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
         XCTAssertNil(window?.attachedSheet)
     }

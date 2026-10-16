@@ -1,5 +1,6 @@
 import AppKit
 import ChalkKit
+import os
 
 /// The palette card's content view. ⌘↩ is a key equivalent, which AppKit
 /// offers to the view tree before the menu and never to the field editor's
@@ -18,7 +19,7 @@ final class PaletteContentView: FlippedView {
 }
 
 /// A key badge ("esc", "return"): small text in a hairline ring.
-final class KeyBadgeView: FlippedView {
+final class KeyBadgeView: ThemedView {
     private let label = NSTextField(labelWithString: "")
     var onClick: (() -> Void)?
 
@@ -44,23 +45,10 @@ final class KeyBadgeView: FlippedView {
             constraints.append(widthAnchor.constraint(equalTo: label.widthAnchor, constant: 12))
         }
         NSLayoutConstraint.activate(constraints)
-        refreshEdge()
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
+        refreshColors()
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    @objc private func themeDidChange() { refreshEdge() }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshEdge()
-    }
-
-    /// A layer colour does not follow a dynamic colour: re-resolve on appearance and theme flips.
-    private func refreshEdge() {
+    override func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.borderColor = NSColor.chalkKeyBadgeEdge.cgColor
         }
@@ -90,10 +78,7 @@ final class PaletteRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         guard isSelected else { return }
         // The table is already inset from the card, so the pill spans the row minus a hair.
-        let rect = bounds.insetBy(dx: 0, dy: 1)
-        NSColor.chalkAccentSelection.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: ChalkMetrics.paletteRowRadius,
-                     yRadius: ChalkMetrics.paletteRowRadius).fill()
+        fillChalkPill(.chalkAccentSelection, insetY: 1, radius: ChalkMetrics.paletteRowRadius)
     }
 
     override func drawSeparator(in dirtyRect: NSRect) {}
@@ -311,4 +296,240 @@ func paletteHighlightedTitle(_ text: String, query: String, baseWeight: NSFont.W
         ], range: NSRange(range, in: text))
     }
     return attributed
+}
+
+/// Focus-grab breadcrumbs. See docs/issues/2026-08-17-fullscreen-drops-when-outline-opens.md.
+private let paletteFocusLog = Logger(subsystem: "com.huleux.chalk", category: "palette")
+
+/// What the two palettes share above the `PaletteFrame`: keyboard selection,
+/// the focus grab, the query debounce, the field and table plumbing, and the
+/// card height report. A subclass owns its results and overrides the hooks
+/// under "Subclass hooks".
+class PaletteListViewController: NSViewController, NSTextFieldDelegate,
+                                 NSTableViewDataSource, NSTableViewDelegate {
+    /// Fired once the overlay is hidden, on every exit path.
+    var onDismiss: (() -> Void)?
+    /// Ask the host to hide the overlay, then run `then`. A child view can't dismiss itself.
+    var onClose: ((_ then: (() -> Void)?) -> Void)?
+    /// The card's natural height for the current results. The host caps it against the window.
+    var onContentHeightChanged: ((CGFloat) -> Void)?
+
+    let frame: PaletteFrame
+    var selectedIndex = 0
+    /// The query the current results were computed for.
+    private(set) var appliedQuery = ""
+    private var pendingQuery: DispatchWorkItem?
+    /// Bumped on every reveal and on willHide; a grabFocus retry from an older generation bails.
+    private var revealGeneration = 0
+
+    init(frame: PaletteFrame) {
+        self.frame = frame
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    // MARK: Subclass hooks
+
+    var resultCount: Int { 0 }
+    /// "result" / "item": the footer's count label.
+    var resultNoun: String { "result" }
+    /// Shown over an empty table; nil keeps the table bare.
+    var emptyMessage: String? { nil }
+    /// Recompute the results and `selectedIndex` for `query`.
+    func computeResults(for query: String) {}
+    /// The height of the rows (or the empty state) between the input row and the footer.
+    func bodyHeight() -> CGFloat { 0 }
+    /// The cell for `row`, dequeued from `tableView`.
+    func cell(for row: Int, in tableView: NSTableView) -> NSView? { nil }
+    /// The action for the confirmed row, run once the overlay is hidden. Captures what it
+    /// needs now: the results may change before it runs.
+    func confirmation(of index: Int, inNewTab: Bool) -> () -> Void { {} }
+    /// Drop per-presentation content before a reused instance is re-presented.
+    func resetForReuse() {}
+
+    // MARK: Shared behaviour
+
+    var currentQuery: String { isViewLoaded ? frame.searchField.stringValue : "" }
+
+    func applyQuery(_ query: String) {
+        appliedQuery = query
+        computeResults(for: query)
+        guard isViewLoaded else { return }
+        frame.tableView.reloadData()
+        select(selectedIndex)
+        frame.countLabel.stringValue = resultCount == 1 ? "1 \(resultNoun)" : "\(resultCount) \(resultNoun)s"
+        if let emptyMessage {
+            frame.emptyLabel.stringValue = emptyMessage
+            frame.emptyLabel.isHidden = resultCount > 0
+        }
+        reportContentHeight()
+    }
+
+    private func reportContentHeight() {
+        onContentHeightChanged?(PaletteFrame.inputRowHeight + 1 + PaletteFrame.resultsPadding * 2
+                                + bodyHeight() + PaletteFrame.footerHeight)
+    }
+
+    private func moveUp() { select(max(0, selectedIndex - 1)) }
+    private func moveDown() { select(min(resultCount - 1, selectedIndex + 1)) }
+    private func cancelPalette() {
+        onClose? { [weak self] in self?.onDismiss?() }
+    }
+
+    private func select(_ index: Int) {
+        guard (0..<resultCount).contains(index) else {
+            frame.tableView.deselectAll(nil)
+            return
+        }
+        selectedIndex = index
+        frame.tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        frame.tableView.scrollRowToVisible(index)
+    }
+
+    private func confirmSelected(inNewTab: Bool = false) {
+        guard (0..<resultCount).contains(selectedIndex) else { return }
+        let action = confirmation(of: selectedIndex, inNewTab: inNewTab)
+        onClose? { [weak self] in
+            action()
+            self?.onDismiss?()
+        }
+    }
+
+    /// Reset before a reused instance is re-presented.
+    func prepareForReuse() {
+        loadViewIfNeeded()
+        frame.searchField.stringValue = ""
+        resetForReuse()
+        applyQuery("")
+    }
+
+    override func loadView() {
+        let content = PaletteContentView()
+        content.onCommandReturn = { [weak self] in self?.confirmSelected(inNewTab: true) }
+        view = content
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        frame.install(in: view) { [weak self] in self?.cancelPalette() }
+        frame.searchField.delegate = self
+        frame.tableView.dataSource = self
+        frame.tableView.delegate = self
+        frame.tableView.target = self
+        frame.tableView.action = #selector(rowClicked)
+    }
+
+    /// Called by the host on each reveal; the VC is mounted once, so `viewDidAppear` doesn't fire.
+    func didReveal() {
+        loadViewIfNeeded()
+        reportContentHeight()
+        // The editor webview holds the keyboard, and an immediate grab can
+        // lose to it (its blur round-trips through the web process). Retry
+        // until we win; `willHide` cancels the chain.
+        revealGeneration += 1
+        grabFocus(retries: 5, generation: revealGeneration)
+    }
+
+    /// Called by the host as the overlay hides. Cancels pending focus retries,
+    /// which would otherwise hand the keyboard to the hidden field and swallow
+    /// the editor's keystrokes.
+    func willHide() {
+        revealGeneration += 1
+    }
+
+    private func grabFocus(retries: Int, generation: Int) {
+        guard generation == revealGeneration else { return }
+        #if DEBUG
+        focusAttemptCountForTesting += 1
+        #endif
+        let won = view.window?.makeFirstResponder(frame.searchField) ?? false
+        paletteFocusLog.info("grabFocus: won=\(won, privacy: .public) retriesLeft=\(retries, privacy: .public)")
+        if won { return }
+        guard retries > 0 else { return }
+        // Spaced retries: the webview's release can land several runloop turns later.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+            self?.grabFocus(retries: retries - 1, generation: generation)
+        }
+    }
+
+    private func textChanged() {
+        // Debounce burst typing (the filter walks every item on the main thread); clearing
+        // applies at once.
+        pendingQuery?.cancel()
+        let text = frame.searchField.stringValue
+        if text.isEmpty {
+            applyQuery("")
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.applyQuery(text) }
+        pendingQuery = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
+    }
+
+    @objc private func rowClicked() {
+        let row = frame.tableView.clickedRow
+        guard (0..<resultCount).contains(row) else { return }
+        selectedIndex = row
+        confirmSelected()
+    }
+
+    // MARK: NSTextFieldDelegate
+
+    func controlTextDidBeginEditing(_ notification: Notification) {
+        if let editor = notification.userInfo?["NSFieldEditor"] as? NSTextView {
+            PaletteFrame.dress(fieldEditor: editor)
+        }
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        textChanged()
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        guard let command = PaletteFrame.command(for: selector) else { return false }
+        switch command {
+        case .up: moveUp()
+        case .down: moveDown()
+        case .cancel: cancelPalette()
+        case .confirm: confirmSelected()
+        }
+        return true
+    }
+
+    // MARK: Table
+
+    func numberOfRows(in tableView: NSTableView) -> Int { resultCount }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        PaletteRowView()
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        cell(for: row, in: tableView)
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let row = frame.tableView.selectedRow
+        if row >= 0 { selectedIndex = row }
+    }
+
+    #if DEBUG
+    /// Force a query without the debounce.
+    func setQueryForAudit(_ query: String) {
+        loadViewIfNeeded()
+        frame.searchField.stringValue = query
+        applyQuery(query)
+    }
+
+    var selectedIndexForTesting: Int { selectedIndex }
+    var isEmptyStateVisibleForTesting: Bool { !frame.emptyLabel.isHidden }
+    func confirmSelectedForTesting(inNewTab: Bool = false) { confirmSelected(inNewTab: inNewTab) }
+    func moveSelectionForTesting(down: Bool) { down ? moveDown() : moveUp() }
+    var searchFieldForTesting: NSTextField { frame.searchField }
+    var tableViewForTesting: NSTableView { frame.tableView }
+    /// becomeFirstResponder attempts by grabFocus.
+    private(set) var focusAttemptCountForTesting = 0
+    #endif
 }

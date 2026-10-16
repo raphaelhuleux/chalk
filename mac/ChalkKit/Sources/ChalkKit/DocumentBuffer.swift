@@ -18,14 +18,20 @@ public final class DocumentBuffer {
     }
 
     /// True when there are unsaved edits. Stored, not computed: it is read
-    /// several times per keystroke, so the full-string compare runs once per
-    /// mutation instead.
+    /// several times per keystroke, so the compare runs once per mutation.
     public private(set) var isDirty: Bool = false
 
     /// Record an editor edit. Buffered, not written.
     public func recordEdit(_ text: String) {
         pendingText = text
-        isDirty = text != savedText
+        isDirty = Self.differ(text, savedText)
+    }
+
+    /// `String ==` on non-ASCII text (any math document) is a normalising walk
+    /// of the whole document per keystroke; the byte counts, O(1) on native
+    /// strings, disagree after almost every edit.
+    private static func differ(_ a: String, _ b: String) -> Bool {
+        a.utf8.count != b.utf8.count || a != b
     }
 
     /// The text a flush should write, or nil if nothing needs saving.
@@ -40,7 +46,7 @@ public final class DocumentBuffer {
         if pendingText == text {
             pendingText = nil
         }
-        isDirty = pendingText.map { $0 != savedText } ?? false
+        isDirty = pendingText.map { Self.differ($0, savedText) } ?? false
     }
 
     /// Adopt an external change as the saved baseline, when no local edits are

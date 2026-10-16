@@ -27,14 +27,7 @@ final class AssetPreviewViewController: NSViewController {
         let parentSize = parent?.frame.size ?? NSSize(width: 1100, height: 760)
         let size = NSSize(width: max(480, parentSize.width * 0.72),
                           height: max(360, parentSize.height * 0.78))
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
-                              styleMask: [.titled, .closable, .resizable],
-                              backing: .buffered, defer: false)
-        window.title = preview.title ?? ""
-        window.contentViewController = preview
-        window.setContentSize(size)
-        window.isReleasedWhenClosed = false
-        return window
+        return HelpSheet.makeWindow(for: preview, size: size)
     }
 
     override func loadView() {
@@ -45,13 +38,11 @@ final class AssetPreviewViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
-        }
+        view.chalkSetLayerBackground(.chalkEditorBackground)
 
         let bar = FlippedView()
         bar.translatesAutoresizingMaskIntoConstraints = false
-        let done = NSButton(title: "Done", target: self, action: #selector(close))
+        let done = NSButton(title: "Done", target: self, action: #selector(endChalkSheet))
         done.bezelStyle = .rounded
         done.keyEquivalent = "\r"
         done.translatesAutoresizingMaskIntoConstraints = false
@@ -82,16 +73,7 @@ final class AssetPreviewViewController: NSViewController {
     }
 
     /// Esc closes, matching the palettes.
-    override func cancelOperation(_ sender: Any?) { close() }
-
-    @objc func close() {
-        guard let window = view.window else { return }
-        if let parent = window.sheetParent {
-            parent.endSheet(window)
-        } else {
-            window.close()
-        }
-    }
+    override func cancelOperation(_ sender: Any?) { endChalkSheet() }
 
     // MARK: - Content
 

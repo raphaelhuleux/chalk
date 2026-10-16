@@ -84,7 +84,7 @@ final class SettingsRowView: FlippedView {
 
 /// A titled card of rows, the inset-grouped look: a caption above a rounded
 /// card with hairlines between the rows.
-final class SettingsCardView: FlippedView {
+final class SettingsCardView: ThemedView {
     let caption = NSTextField(labelWithString: "")
     let card = FlippedView()
     private let stack = NSStackView()
@@ -132,28 +132,14 @@ final class SettingsCardView: FlippedView {
             stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
         ])
         refreshColors()
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
     }
 
     private static let ruleInset: CGFloat = 16
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    @objc private func themeDidChange() { refreshColors() }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColors()
-    }
-
-    private func refreshColors() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            card.layer?.backgroundColor = NSColor.chalkCardBackground.cgColor
-            for rule in stack.arrangedSubviews where !(rule is SettingsRowView) {
-                rule.layer?.backgroundColor = NSColor.chalkCardSeparator.cgColor
-            }
+    override func refreshColors() {
+        card.chalkSetLayerBackground(.chalkCardBackground)
+        for rule in stack.arrangedSubviews where !(rule is SettingsRowView) {
+            rule.chalkSetLayerBackground(.chalkCardSeparator)
         }
     }
 }

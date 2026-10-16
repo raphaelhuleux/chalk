@@ -3,32 +3,18 @@ import ChalkKit
 
 /// The full-window scrim behind a palette. A click on the dim area (outside
 /// the card's content) dismisses; clicks on the card reach its field and rows.
-final class PaletteBackdropView: FlippedView {
+final class PaletteBackdropView: ThemedView {
     var onTapOutside: (() -> Void)?
     weak var content: NSView?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        refreshColor()
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
+        refreshColors()
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    @objc private func themeDidChange() { refreshColor() }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColor()
-    }
-
-    private func refreshColor() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor.chalkScrim.cgColor
-        }
+    override func refreshColors() {
+        chalkSetLayerBackground(.chalkScrim)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -115,9 +101,7 @@ final class PaletteOverlayHost {
     }()
     private static let duration: TimeInterval = 0.10
 
-    private var motionAllowed: Bool {
-        !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion && backdrop.window != nil
-    }
+    private var motionAllowed: Bool { backdrop.chalkMotionAllowed }
 
     /// Unhide instantly (layout must settle before animating), run
     /// `beforeAnimating`, then fade and scale in. Reduce Motion skips the animation.

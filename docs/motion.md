@@ -114,7 +114,7 @@ Existing 0.10 fade + 6 pt rise + 0.97 scale is kept; Reduce Motion instant.
 
 ### Auto-hide chrome
 
-Existing 0.22 translate+fade is kept; ownership re-applied to both chromes on every ownership change (`TabChromeOwnership`).
+Existing 0.22 translate+fade is kept; zen stands the band down, so auto-hide never slides it there (`applyChromeAutoHideState`).
 
 ## Verification
 

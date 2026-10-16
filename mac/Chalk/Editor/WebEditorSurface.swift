@@ -53,31 +53,19 @@ final class EditorSurfaceHostView: NSView {
 }
 
 /// The pre-paint cover: the editor's tone under the current appearance and theme.
-final class PrePaintCoverView: NSView {
+final class PrePaintCoverView: ThemedView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(refresh), name: ChalkAppearance.themeDidChange, object: nil)
     }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
-        }
+        chalkSetLayerBackground(.chalkEditorBackground)
     }
 
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-
-    @objc private func refresh() { needsDisplay = true }
+    override func refreshColors() { needsDisplay = true }
 }
 
 /// `WKUserContentController` retains its handler strongly, so registering the surface directly

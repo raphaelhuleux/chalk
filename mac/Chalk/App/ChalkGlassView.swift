@@ -12,7 +12,7 @@ import ChalkKit
 ///
 /// Honors Reduce Transparency: material and tint swap for a near-solid fill
 /// with identical geometry.
-final class ChalkGlassView: NSView {
+final class ChalkGlassView: ThemedView {
     /// Subviews belong here, above the material stack and inside the clip.
     let contentView = NSView()
 
@@ -146,15 +146,7 @@ final class ChalkGlassView: NSView {
         NotificationCenter.default.addObserver(
             self, selector: #selector(refreshAppearance),
             name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(refreshAppearance), name: ChalkAppearance.themeDidChange, object: nil)
     }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    /// Up (unflipped) coordinates: the top light sits at the top edge.
-    override var isFlipped: Bool { true }
 
     override func layout() {
         super.layout()
@@ -162,11 +154,7 @@ final class ChalkGlassView: NSView {
             roundedRect: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
     }
 
-    /// CGColors don't track dynamic NSColors; re-resolve on light/dark flips.
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshAppearance()
-    }
+    override func refreshColors() { refreshAppearance() }
 
     #if DEBUG
     /// The material driving the panel: NSGlassEffectView on 26, the blur before.

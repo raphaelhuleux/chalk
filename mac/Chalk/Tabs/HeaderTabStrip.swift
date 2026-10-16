@@ -27,12 +27,6 @@ struct TabItem: Hashable {
     }
 }
 
-/// A view whose origin is top-left, so the chrome's geometry reads the way the
-/// spec and the invariant catalogue state it (y grows downward).
-class FlippedView: NSView {
-    override var isFlipped: Bool { true }
-}
-
 /// The tab name row: a quiet mono text row on the editor surface. The active
 /// tab is weight plus a short accent underline; background tabs are muted. No
 /// band of its own, no chip fill, marker, divider or rounding.
@@ -45,7 +39,7 @@ class FlippedView: NSView {
 /// fade over 16pt where content is clipped, and a trailing chevron button
 /// (hidden when everything fits) opens a menu of every tab. The active tab is
 /// always scrolled into view on `update(_:)`.
-final class HeaderTabStrip: FlippedView {
+final class HeaderTabStrip: ThemedView {
     var onSelect: ((UUID) -> Void)?
     var onClose: ((UUID) -> Void)?
     /// The "+" glyph (new file).
@@ -193,33 +187,17 @@ final class HeaderTabStrip: FlippedView {
             content.heightAnchor.constraint(equalTo: scroll.heightAnchor),
         ])
         refreshColors()
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
     }
 
     /// The names cache their attributed titles: rebuild them in the new theme.
-    @objc private func themeDidChange() {
-        refreshColors()
+    override func themeDidChange() {
+        super.themeDidChange()
         guard draggingID == nil, pressedTabID == nil else { return }
         rebuild(latestItems)
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColors()
-    }
-
-    private func refreshColors() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            underline.layer?.backgroundColor = NSColor.chalkTabUnderline.cgColor
-        }
+    override func refreshColors() {
+        underline.chalkSetLayerBackground(.chalkTabUnderline)
     }
 
     func update(_ items: [TabItem]) {
@@ -417,7 +395,7 @@ final class HeaderTabStrip: FlippedView {
         }
         let slides = TabStripPolicy.underlineSlides(
             wasHidden: wasHidden, previousID: underlinedID, newID: item.itemID)
-            && window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            && chalkMotionAllowed
         underlinedID = item.itemID
         guard slides else {
             underline.frame = target
@@ -884,10 +862,7 @@ private final class HeaderTabName: FlippedView {
     /// never a size change.
     private func applyStyle() {
         label.attributedText = hovering ? hoverTitle : restTitle
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            slotDotView.layer?.backgroundColor = (isActiveItem
-                ? NSColor.chalkTabDirtyDotActive : NSColor.chalkTabDirtyDotInactive).cgColor
-        }
+        slotDotView.chalkSetLayerBackground(isActiveItem ? .chalkTabDirtyDotActive : .chalkTabDirtyDotInactive)
         switch TabStripPolicy.slotContent(isDirty: isDirtyItem) {
         case .dot:
             slotDotView.alphaValue = slotHovering ? 0 : 1
@@ -909,15 +884,7 @@ private final class HeaderTabName: FlippedView {
 
     /// Tone and alpha changes ride `motionTab`.
     private func crossFadeStyle() {
-        guard window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            applyStyle()
-            return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = ChalkMetrics.motionTab
-            context.allowsImplicitAnimation = true
-            applyStyle()
-        }
+        chalkAnimateStyle(over: ChalkMetrics.motionTab) { [self] in applyStyle() }
     }
 }
 

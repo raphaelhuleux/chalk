@@ -14,7 +14,20 @@ import ChalkKit
 /// title for that window ("Untitled", "Untitled 2", …).
 final class Tab {
     let id = UUID()
-    var url: URL?
+    var url: URL? {
+        didSet { cachedIdentity = nil }
+    }
+    private var cachedIdentity: String?
+
+    /// `url.fileIdentity`, resolved once per URL: every open and every save
+    /// anywhere compares it against each tab.
+    var fileIdentity: String? {
+        if let cached = cachedIdentity { return cached }
+        guard let url else { return nil }
+        let identity = url.fileIdentity
+        cachedIdentity = identity
+        return identity
+    }
     let draftTitle: String?
     var isDirty = false
     /// A "committed" tab is a permanent tab: the user has either edited it or

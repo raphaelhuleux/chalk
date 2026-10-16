@@ -15,7 +15,7 @@ import ChalkKit
 ///
 /// RootSplitViewController pins it across the whole window, above both
 /// columns, and the chips take the divider's inset (`setStripLeadingInset`).
-final class HeaderBarView: FlippedView {
+final class HeaderBarView: ThemedView {
     let tabStrip = HeaderTabStrip()
 
     private let backdrop = FlippedView()
@@ -84,16 +84,6 @@ final class HeaderBarView: FlippedView {
             tabStrip.heightAnchor.constraint(equalToConstant: ChalkMetrics.tabStripHeight),
         ])
         refreshColors()
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refreshColors()
     }
 
     /// The window's lights may sit elsewhere than the seed assumed.
@@ -102,12 +92,8 @@ final class HeaderBarView: FlippedView {
         stripLeading.constant = restingStart + stripInset
     }
 
-    @objc private func themeDidChange() { refreshColors() }
-
-    private func refreshColors() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            backdrop.layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
-        }
+    override func refreshColors() {
+        backdrop.chalkSetLayerBackground(.chalkEditorBackground)
     }
 
     /// The empty paper between the names drags the window, as the titlebar
@@ -138,14 +124,11 @@ final class HeaderBarView: FlippedView {
         stripInset = inset
         let wanted = restingStart + inset
         guard abs(stripLeading.constant - wanted) > 0.5 else { return }
-        guard let duration, duration > 0, window != nil else {
+        guard let duration, duration > 0 else {
             stripLeading.constant = wanted
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            context.allowsImplicitAnimation = true
+        chalkAnimateStyle(over: duration, timing: .easeOut) { [self] in
             stripLeading.constant = wanted
             layoutSubtreeIfNeeded()
         }
@@ -216,7 +199,7 @@ final class HeaderBarView: FlippedView {
 
 /// Gradient under the tab band, editor background dissolving to clear, so
 /// text fades out before it slides under the chips. Never intercepts events.
-final class ChromeFadeView: FlippedView {
+final class ChromeFadeView: ThemedView {
     private let gradient = CAGradientLayer()
 
     init() {
@@ -229,15 +212,8 @@ final class ChromeFadeView: FlippedView {
         gradient.startPoint = CGPoint(x: 0.5, y: 0)
         gradient.endPoint = CGPoint(x: 0.5, y: 1)
         layer?.addSublayer(gradient)
-        updateColors()
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChangeFade), name: ChalkAppearance.themeDidChange, object: nil)
+        refreshColors()
     }
-
-    @objc private func themeDidChangeFade() { updateColors() }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -249,12 +225,7 @@ final class ChromeFadeView: FlippedView {
         CATransaction.commit()
     }
 
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        updateColors()
-    }
-
-    private func updateColors() {
+    override func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let bg = NSColor.chalkEditorBackground
             gradient.colors = [1.0, 0.92, 0.0].map { bg.withAlphaComponent($0).cgColor }

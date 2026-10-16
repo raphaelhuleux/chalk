@@ -118,9 +118,7 @@ final class ChromeIconButton: NSView {
     private func applyStyle() {
         let engaged = pressed || hovering
         imageView.contentTintColor = engaged ? .chalkChromeFg : .chalkChromeFgTertiary
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = engaged ? NSColor.chalkRowHoverBackground.cgColor : nil
-        }
+        chalkSetLayerBackground(engaged ? .chalkRowHoverBackground : nil)
     }
 }
 

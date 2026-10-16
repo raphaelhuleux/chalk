@@ -1446,7 +1446,8 @@ extension SidebarViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
-        let rowView = LibraryRowView()
+        let rowView = outlineView.makeView(withIdentifier: LibraryRowView.identifier, owner: nil)
+            as? LibraryRowView ?? LibraryRowView()
         switch item {
         case let section as LibraryLocationItem: applyHeaderState(to: rowView, section: section)
         case let item as LibraryRowItem: applyRowState(to: rowView, item: item)

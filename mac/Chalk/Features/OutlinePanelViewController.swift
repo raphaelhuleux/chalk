@@ -178,10 +178,8 @@ final class OutlinePanelViewController: NSViewController {
 
     private func refreshColors() {
         guard isViewLoaded else { return }
-        view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            for hairline in [edge, headerRule, footerRule] {
-                hairline.layer?.backgroundColor = NSColor.chalkPaletteDivider.cgColor
-            }
+        for hairline in [edge, headerRule, footerRule] {
+            hairline.chalkSetLayerBackground(.chalkPaletteDivider)
         }
     }
 
@@ -337,11 +335,7 @@ final class OutlineTreeRowView: NSTableRowView {
 
     override func drawSelection(in dirtyRect: NSRect) {
         guard isSelected else { return }
-        let pill = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 0, dy: 1),
-            xRadius: ChalkMetrics.paletteRowRadius, yRadius: ChalkMetrics.paletteRowRadius)
-        NSColor.chalkAccentSelection.setFill()
-        pill.fill()
+        fillChalkPill(.chalkAccentSelection, insetY: 1, radius: ChalkMetrics.paletteRowRadius)
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
@@ -356,34 +350,17 @@ final class OutlineTreeRowView: NSTableRowView {
 }
 
 /// A flipped view painted in the chrome tone, re-resolved on appearance flips.
-final class ChromeToneView: FlippedView {
+final class ChromeToneView: ThemedView {
     var onAppearanceChange: (() -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        refresh()
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
+        refreshColors()
     }
 
-    @objc private func themeDidChange() {
-        refresh()
+    override func refreshColors() {
+        chalkSetLayerBackground(.chalkChromeBackground)
         onAppearanceChange?()
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        refresh()
-        onAppearanceChange?()
-    }
-
-    private func refresh() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor.chalkChromeBackground.cgColor
-        }
     }
 }

@@ -93,7 +93,7 @@ final class AssetPreviewRoutingTests: XCTestCase {
         XCTAssertTrue(sheet.contentViewController === preview)
 
         // Done ends the sheet and clears the slot for the next preview.
-        preview.close()
+        preview.endChalkSheet()
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
         XCTAssertNil(window.attachedSheet)
         XCTAssertNil(shell.livePreviewForTesting)

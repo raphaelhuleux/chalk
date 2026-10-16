@@ -39,8 +39,7 @@ extension NSColor {
     /// that cannot resolve a dynamic colour itself (WebKit resolves one at set
     /// time, under whatever appearance is current then).
     static func chalkEditorBackground(dark: Bool, theme: ChalkTheme) -> NSColor {
-        let (red, green, blue) = theme.palette.editorBackground.components(dark: dark)
-        return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+        NSColor(theme.palette.editorBackground, dark: dark)
     }
 
     /// Sidebar + header sidebar-segment.
@@ -125,11 +124,9 @@ extension NSColor {
     /// Quick Open palette: denser glass than chalkGlassTint, the theme's palette tone in dark.
     /// Light leans white for the same reason (gray-based material).
     static let chalkPaletteTint = NSColor(name: nil) { appearance in
-        if appearance.isChalkDark {
-            let (red, green, blue) = ChalkAppearance.theme.palette.paletteOpaque.components(dark: true)
-            return NSColor(srgbRed: red, green: green, blue: blue, alpha: 0.62)
-        }
-        return NSColor(white: 1, alpha: 0.80)
+        appearance.isChalkDark
+            ? NSColor(ChalkAppearance.theme.palette.paletteOpaque, dark: true, alpha: 0.62)
+            : NSColor(white: 1, alpha: 0.80)
     }
     static let chalkPaletteEdge = dynamicAlpha(dark: (0xFFFFFF, 0.12), light: (0x3C3228, 0.10))
     static let chalkPaletteTopHighlight = dynamicAlpha(dark: (0xFFFFFF, 0.16), light: (0xFFFFFF, 0.90))
@@ -140,8 +137,7 @@ extension NSColor {
     /// The palette scrim, darker than the spec's .25 because it also carries the mock's "content
     /// dims to 45%" layer. Defined in ChalkKit (`ChromeScrim`).
     static let chalkScrim = NSColor(name: nil) { appearance in
-        let c = ChromeScrim.components(dark: appearance.isChalkDark)
-        return NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: c.alpha)
+        NSColor(ChromeScrim.components(dark: appearance.isChalkDark))
     }
 
     private static func dynamicAlpha(
@@ -149,8 +145,7 @@ extension NSColor {
     ) -> NSColor {
         NSColor(name: nil) { appearance in
             let value = appearance.isChalkDark ? dark : light
-            let (red, green, blue) = HexPair.rgb(hex: value.hex)
-            return NSColor(srgbRed: red, green: green, blue: blue, alpha: value.alpha)
+            return NSColor(ChromeScrim.Components(hex: value.hex, alpha: value.alpha))
         }
     }
 
@@ -161,10 +156,19 @@ extension NSColor {
     ) -> NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.isChalkDark
-            let (red, green, blue) = pick(ChalkAppearance.theme.palette).components(dark: isDark)
-            return NSColor(
-                srgbRed: red, green: green, blue: blue, alpha: isDark ? alpha.dark : alpha.light)
+            return NSColor(pick(ChalkAppearance.theme.palette), dark: isDark,
+                           alpha: isDark ? alpha.dark : alpha.light)
         }
+    }
+
+    /// One side of a theme pair, as sRGB.
+    private convenience init(_ pair: HexPair, dark: Bool, alpha: CGFloat = 1) {
+        let (red, green, blue) = pair.components(dark: dark)
+        self.init(srgbRed: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    private convenience init(_ c: ChromeScrim.Components) {
+        self.init(srgbRed: c.red, green: c.green, blue: c.blue, alpha: c.alpha)
     }
 }
 

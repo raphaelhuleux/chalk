@@ -68,6 +68,7 @@ final class LibraryOutlineView: NSOutlineView {
 /// document, hover, or the drop target) drawn by this view, never by the
 /// table's own highlight. Flipped, like every chrome view.
 final class LibraryRowView: NSTableRowView {
+    static let identifier = NSUserInterfaceItemIdentifier("library-row-view")
     var isOpenDocument = false { didSet { if oldValue != isOpenDocument { needsDisplay = true } } }
     var isDropTarget = false { didSet { if oldValue != isDropTarget { needsDisplay = true } } }
     /// Headers fold on click and never hover or select.
@@ -76,6 +77,14 @@ final class LibraryRowView: NSTableRowView {
     private var trackingArea: NSTrackingArea?
 
     override var isFlipped: Bool { true }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        identifier = Self.identifier
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     /// The pill this row paints right now (nil when idle).
     var currentBackground: SidebarViewController.RowBackground {
@@ -108,10 +117,7 @@ final class LibraryRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {
         let background = currentBackground
         guard let color = background.backgroundColor else { return }
-        let rect = bounds.insetBy(dx: 0, dy: 0.5)
-        color.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: background.cornerRadius,
-                     yRadius: background.cornerRadius).fill()
+        fillChalkPill(color, insetY: 0.5, radius: background.cornerRadius)
     }
 
     override func drawSeparator(in dirtyRect: NSRect) {}
@@ -388,15 +394,11 @@ final class HeaderTrailingSlot: NSView {
             chevron.alphaValue = collapsed ? 1 : 0
             count.alphaValue = collapsed ? 0 : 1
         }
-        guard changed, window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        guard changed else {
             show()
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = ChalkMetrics.motionFast
-            context.allowsImplicitAnimation = true
-            show()
-        }
+        chalkAnimateStyle(over: ChalkMetrics.motionFast, show)
     }
 
     #if DEBUG

@@ -8,24 +8,10 @@ private let containerLog = Logger(subsystem: "com.huleux.chalk", category: "edit
 
 /// The container's root view: flipped, clipping, and reporting appearance
 /// flips to the controller.
-final class EditorContainerView: FlippedView {
+final class EditorContainerView: ThemedView {
     var onAppearanceChange: (() -> Void)?
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(themeDidChange), name: ChalkAppearance.themeDidChange, object: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        onAppearanceChange?()
-    }
-
-    @objc private func themeDidChange() { onAppearanceChange?() }
+    override func refreshColors() { onAppearanceChange?() }
 }
 
 /// Hosts the open tabs and shows the active tab's editor surface. Each tab owns its surface and
@@ -208,9 +194,7 @@ final class EditorContainerViewController: NSViewController {
     }
 
     private func refreshBackground() {
-        view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
-        }
+        view.chalkSetLayerBackground(.chalkEditorBackground)
     }
 
     private func installOutlinePanel() {
@@ -366,9 +350,9 @@ final class EditorContainerViewController: NSViewController {
     @objc private func documentDidSaveElsewhere(_ note: Notification) {
         guard let url = note.userInfo?[ChalkNotificationKey.url] as? URL else { return }
         let sender = note.object as? DocumentController
+        let identity = url.fileIdentity
         for tab in tabs {
-            guard let tabURL = tab.url, Self.sameFile(tabURL, url),
-                  tab.controller !== sender else { continue }
+            guard tab.fileIdentity == identity, tab.controller !== sender else { continue }
             tab.controller.reloadIfChangedExternally()
         }
     }
@@ -519,7 +503,7 @@ final class EditorContainerViewController: NSViewController {
     /// the new tab's surface dormant, with no webview boot.
     func open(url: URL, reuseCurrentIfClean: Bool = false, activating: Bool = true) {
         loadViewIfNeeded() // open() can be called before this VC is on screen
-        if let existing = tabs.first(where: { $0.url.map { Self.sameFile($0, url) } ?? false }) {
+        if let existing = tab(showing: url) {
             if activating { activate(existing) }
             return
         }
@@ -740,7 +724,7 @@ final class EditorContainerViewController: NSViewController {
             // Already re-keyed onto a live tab (possibly in another window): don't steal it.
             guard !Self.claimedRecoveryIDs.contains(record.id) else { continue }
             if let url = record.fileURL, FileManager.default.fileExists(atPath: url.path) {
-                if let existing = tabs.first(where: { $0.url.map { Self.sameFile($0, url) } ?? false }) {
+                if let existing = tab(showing: url) {
                     existing.controller.layerRecoveredText(record.text)
                     writeSnapshot(id: existing.id.uuidString, text: record.text, fileURL: url)
                     Self.claimedRecoveryIDs.insert(existing.id.uuidString)
@@ -776,15 +760,21 @@ final class EditorContainerViewController: NSViewController {
     func snapshotDirtyBuffers() {
         var writes: [(id: String, text: String, fileURL: URL?)] = []
         var clears: [String] = []
+        var live: [String: String] = [:]
         for tab in tabs {
+            let id = tab.id.uuidString
             if tab.isDirty {
-                writes.append((tab.id.uuidString, tab.controller.currentText, tab.url))
+                let text = tab.controller.currentText
+                live[id] = text
+                // Unchanged since the last tick: the file on disk already says this.
+                if lastSnapshotText[id] != text { writes.append((id, text, tab.url)) }
             } else if !tab.controller.hasUnappliedRecovery {
                 // A failed restore-open reads clean, but its snapshot is the only copy of the
                 // crash edits.
-                clears.append(tab.id.uuidString)
+                clears.append(id)
             }
         }
+        lastSnapshotText = live
         guard !writes.isEmpty || !clears.isEmpty else { return }
         let store = recovery
         recoveryQueue.async {
@@ -792,6 +782,10 @@ final class EditorContainerViewController: NSViewController {
             for id in clears { store.clear(id: id) }
         }
     }
+
+    /// What the last snapshot pass wrote per dirty tab, so an idle dirty document is not
+    /// rewritten every ten seconds.
+    private var lastSnapshotText: [String: String] = [:]
 
     /// Serializes every recovery-store mutation outside the startup drain. A save's clear must
     /// land after any queued write for the same id, or stale pre-save text resurrects at the next
@@ -935,10 +929,11 @@ final class EditorContainerViewController: NSViewController {
 
     // MARK: - Internals
 
-    /// Tab-dedupe comparison. A raw `URL ==` misses aliases such as `/private/var/…` versus
-    /// `/var/…`, which would open one file in two tabs.
-    private static func sameFile(_ a: URL, _ b: URL) -> Bool {
-        a.fileIdentity == b.fileIdentity
+    /// Tab dedupe by file identity: a raw `URL ==` misses aliases such as `/private/var/…`
+    /// versus `/var/…`, which would open one file in two tabs.
+    private func tab(showing url: URL) -> Tab? {
+        let identity = url.fileIdentity
+        return tabs.first { $0.fileIdentity == identity }
     }
 
     private func activate(_ tab: Tab) {
@@ -995,8 +990,7 @@ final class EditorContainerViewController: NSViewController {
         let outgoing = outgoingSurface.view
         let incoming = incomingSurface.view
         incoming.alphaValue = 1
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, !motionIsInstant,
-              incoming.window != nil else {
+        guard incoming.chalkMotionAllowed, !motionIsInstant else {
             DebugTrace.log("tab cross-fade: instant swap")
             outgoing.removeFromSuperview()
             return
@@ -1013,10 +1007,7 @@ final class EditorContainerViewController: NSViewController {
                 outgoing.removeFromSuperview()
                 return
             }
-            let bitmap = NSImageView(image: image)
-            bitmap.imageScaling = .scaleAxesIndependently
-            bitmap.wantsLayer = true
-            bitmap.frame = outgoing.frame
+            let bitmap = NSImageView.chalkSnapshot(image, frame: outgoing.frame)
             self.contentView.addSubview(bitmap, positioned: .above, relativeTo: nil)
             outgoing.removeFromSuperview()
             #if DEBUG
