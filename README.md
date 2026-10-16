@@ -2,14 +2,14 @@
 
 Chalk is a Markdown and LaTeX editor for writing mathematics.
 Your document renders where you type it: equations, numbered equations, theorems and proofs, callouts and Beamer slides, all in the same pane as the source.
-When you want the PDF, Chalk compiles it with your own TeX, pandoc or Quarto and shows it beside the text.
+Chalk compiles the pdf with your own TeX, pandoc or Quarto and shows it beside the text.
 
 ![Chalk for Mac: a Markdown note with a theorem, a proof, numbered equations, cross-references and a callout](docs/images/mac-hero.png)
 
 Chalk comes in two forms, built on one editor engine:
 
 - **Chalk for Mac**: a native app with tabs, a folder sidebar, an outline panel and a PDF panel.
-- **Chalk for VS Code**: the same editor for `.tex`, `.md` and `.qmd` files, working alongside LaTeX Workshop.
+- **Chalk for VS Code**: the same editor for `.tex`, `.md` and `.qmd` files, compatible with LaTeX Workshop.
 
 ## Features
 
