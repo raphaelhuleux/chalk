@@ -19,6 +19,14 @@ extension CALayer {
         animation.toValue = x
         animation.duration = duration
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        // The presentation holds the end state until `chalkEndSlide`, whatever
+        // the model says: AppKit resets a layer-backed view's layer transform
+        // when it lays the view out, and the hide re-lays the editor column
+        // out in the slide's completion. With a removed-on-completion
+        // animation the content then snapped to the untranslated frame for
+        // the frames before the settle's snapshot arrived.
+        animation.isRemovedOnCompletion = false
+        animation.fillMode = .forwards
         add(animation, forKey: Self.chalkSlideKey)
     }
 

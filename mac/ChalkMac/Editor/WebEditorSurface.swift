@@ -11,16 +11,73 @@ import os
 /// one keystroke, so there is nothing to dedupe. Copy and cut are WebKit's own on AppKit.
 final class EditorWebView: WKWebView {}
 
-/// The surface's view: holds the web view so the container's tab cross-fade and the surface's
-/// own pre-paint cover are two alphas on two views, never one fighting the other.
+/// The surface's view: holds the web view under the pre-paint cover, so the container's tab
+/// cross-fade (the host's alpha) and the cover never fight over one view.
 final class EditorSurfaceHostView: NSView {
+    /// Opaque, in the editor's tone, above the web view. An alpha of 0 on the web view was
+    /// not enough: its content is a remote layer whose first frame reached the screen white
+    /// regardless, for one frame, when the page process produced its first composite.
+    private let cover = PrePaintCoverView()
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        cover.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(cover)
+        NSLayoutConstraint.activate([
+            cover.leadingAnchor.constraint(equalTo: leadingAnchor),
+            cover.trailingAnchor.constraint(equalTo: trailingAnchor),
+            cover.topAnchor.constraint(equalTo: topAnchor),
+            cover.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// The web view goes under the cover.
+    func install(_ webView: NSView) {
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(webView, positioned: .below, relativeTo: cover)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            webView.topAnchor.constraint(equalTo: topAnchor),
+            webView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    var isCovering: Bool { !cover.isHidden }
+    func coverWebView() { cover.isHidden = false }
+    func liftCover() { cover.isHidden = true }
+}
+
+/// The pre-paint cover: the editor's tone under the current appearance and theme.
+final class PrePaintCoverView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(refresh), name: ChalkAppearance.themeDidChange, object: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    @objc private func refresh() { needsDisplay = true }
 }
 
 /// `WKUserContentController` retains its handler strongly, so registering the surface directly
@@ -116,25 +173,33 @@ final class WebEditorSurface: NSObject, EditorSurface {
         // The page's own `:root` background is the editor colour from the first paint (the theme
         // seed is a document-start script), and the under-page colour covers overscroll. Before
         // that first paint AppKit's WKWebView composites WHITE, and it has no public opaque
-        // switch, so the web view stays transparent until `ready` and the editor-toned host
-        // shows through; a private `drawsBackground` toggle is not an option.
+        // switch (a private `drawsBackground` toggle is not an option), so the host keeps an
+        // opaque cover over the web view until the page has painted twice after `ready`.
         webView.underPageBackgroundColor = .chalkEditorBackground
         webView.allowsLinkPreview = false
-        webView.alphaValue = 0
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        host.addSubview(webView)
-        NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: host.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-        ])
+        host.install(webView)
     }
 
-    /// The page has painted in the editor's tone: show it. Also on a final failure, so the
-    /// shell's error state is not hidden behind the cover.
-    private func revealWebView() {
-        webView.alphaValue = 1
+    /// Bumped per cover, so a lift scheduled for one page generation cannot uncover the next.
+    private var coverGeneration = 0
+
+    /// Lift the cover once the page has composited the editor's tone: two animation frames
+    /// after `ready`, asked of the page itself (a fixed delay races the async repaint). The
+    /// backstop lifts it regardless, so a page whose frames never come is never a blank tab.
+    private func revealWebView(afterPaint: Bool) {
+        guard host.isCovering else { return }
+        coverGeneration += 1
+        let generation = coverGeneration
+        let lift = { [weak self] in
+            guard let self, self.coverGeneration == generation else { return }
+            self.host.liftCover()
+        }
+        guard afterPaint else { return lift() }
+        webView.callAsyncJavaScript(
+            "await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
+            in: nil, in: .page
+        ) { _ in lift() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: lift)
     }
 
     /// Called on the tab's first show. Until then the WKWebView holds no page, no web content
@@ -203,7 +268,8 @@ final class WebEditorSurface: NSObject, EditorSurface {
     // Async, so a missing-bundle failure fired inside `bootIfNeeded()` reaches the shell after
     // its caller returns.
     private func notifyFailedToBecomeReady() {
-        revealWebView()
+        // Not hidden behind the cover: the shell's error state must show.
+        revealWebView(afterPaint: false)
         DispatchQueue.main.async { [weak self] in self?.onFailedToBecomeReady?() }
     }
 
@@ -262,7 +328,7 @@ final class WebEditorSurface: NSObject, EditorSurface {
 
     #if DEBUG
     /// Whether the pre-paint cover has lifted.
-    var isWebViewRevealedForTesting: Bool { webView.alphaValue == 1 }
+    var isWebViewRevealedForTesting: Bool { !host.isCovering }
     var userScriptsForTesting: [WKUserScript] {
         webView.configuration.userContentController.userScripts
     }
@@ -538,7 +604,8 @@ extension WebEditorSurface: WKNavigationDelegate {
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         isReady = false
         // The reload paints white first, like a boot: cover it until the next `ready`.
-        self.webView.alphaValue = 0
+        coverGeneration += 1
+        host.coverWebView()
         // Stale queued messages would flush into the fresh editor; the controller re-seeds via
         // `editorDidResetConnection`.
         pending.removeAll()
@@ -629,7 +696,7 @@ extension WebEditorSurface: WKScriptMessageHandler {
                 return
             }
             isReady = true
-            revealWebView()
+            revealWebView(afterPaint: true)
             Self.log.info("ready received; flushing \(self.pending.count) pending message(s)")
             // Reset the one-reload budget for a later crash reload.
             readyWatchdog?.cancel()

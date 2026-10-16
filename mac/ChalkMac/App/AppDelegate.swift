@@ -332,12 +332,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWindowForTesting: SettingsWindowController? { settingsWindow }
 
     /// Debug launch switches for screenshots and manual checks:
-    /// `CHALK_AUDIT_STATE` (the audit harness, `AuditMode`), `CHALK_DEBUG_LIBRARY=<folder>`
-    /// and `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel|settings|settings-shortcuts`.
+    /// `CHALK_AUDIT_STATE` (the audit harness, `AuditMode`), `CHALK_DEBUG_LIBRARY=<folder>`,
+    /// `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel|settings|settings-shortcuts` and
+    /// `CHALK_DEBUG_SCRIPT=<seconds>:<action>,...` (actions: new-tab, close-tab,
+    /// toggle-sidebar, toggle-outline-panel, quick-open), which drives the shell on a clock so
+    /// a screen recording can catch a flicker no screenshot shows.
     private func applyDebugLaunchEnvironment() {
         guard let controller = frontmostEditorWindow else { return }
         controller.root.applyAuditStateIfRequested()
         let env = ProcessInfo.processInfo.environment
+        if let script = env["CHALK_DEBUG_SCRIPT"], !script.isEmpty {
+            for step in script.split(separator: ",") {
+                let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
+                guard parts.count == 2, let delay = Double(parts[0]) else { continue }
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak controller] in
+                    guard let root = controller?.root else { return }
+                    switch parts[1] {
+                    case "new-tab": root.cmdNewFile(nil)
+                    case "close-tab": root.cmdCloseTab(nil)
+                    case "toggle-sidebar": root.cmdToggleSidebar(nil)
+                    case "toggle-outline-panel": root.cmdToggleOutlinePanel(nil)
+                    case "quick-open": root.cmdQuickOpen(nil)
+                    default: break
+                    }
+                }
+            }
+        }
         if let path = env["CHALK_DEBUG_LIBRARY"], !path.isEmpty {
             controller.root.setLibraryLocationsForTesting([URL(fileURLWithPath: path)])
             controller.root.setSidebarVisible(true)

@@ -39,6 +39,12 @@ Implemented 2026-08-24 (C1); what building it taught:
 - A canceled slide's animation completion still fires (finished=false), and it used to run the settle into the NEXT slide — unfreezing mid-motion, the exact flicker the freeze prevents. The cancel bumps a slide epoch; a completion from a stale epoch does nothing. The contract test fires the canceled settle's held snapshot mid-new-slide to pin this.
 - The strip applies the payload clock only to the slide's one big jump (>40 pt); the dense small deltas of a live divider drag stay instant, and an untagged post (bind replay) is instant too — a replayed inset is state restoration, not motion.
 
+AppKit shell (2026-10-16), what porting it taught:
+
+- AppKit resets a layer-backed view's layer `transform` when it lays the view out, and the hide re-lays the editor column out in the slide's completion. The slide animation therefore holds its end state itself (`fillMode = .forwards`, not removed on completion) until `chalkEndSlide`; with a removed-on-completion animation the content snapped to the untranslated frame for the frames before the settle's snapshot arrived.
+- The settle cover's bitmap is placed from the PRESENTATION layers (`presentedTranslation`), not from `NSView.convert` (frames only) nor the model transform (reset, see above). Either placed the bitmap a sidebar's width from the content it covered, where it faded as a ghost.
+- Recorded, not eyeballed: `scripts/screenshots/winrec.swift` records one window as a frame sequence through ScreenCaptureKit, and `CHALK_DEBUG_SCRIPT` drives the shell on a clock, so a one-frame ghost shows up as a number in a per-frame measurement.
+
 ### Tab switch
 
 - Moves: an alpha cross-fade between the outgoing and incoming surface views over `motionFast`, with both views hosted for the duration of the fade; and, since Paper (2026-08-24), the accent underline SLIDES to the new name on the same clock, ease-out.
@@ -53,6 +59,7 @@ The underline belongs to the ROW, not to a tab, and that is what makes the slide
 Implemented 2026-08-24 (C2); what building it taught:
 
 - A rapid A→B→A switch brings the fading-out view back as the ACTIVE surface while the A→B fade's completion is still pending — the completion must never remove the view the active tab currently owns (`TabSwitchContractTests` pins it by switching back mid-fade).
+- AppKit (2026-10-16): a new tab's `WKWebView` composites one WHITE frame when its page process first paints, and alpha 0 on the web view did not stop it (the content is a remote layer). The surface keeps an opaque editor-toned cover over the web view until the page reports `ready` and has painted two frames (`PrePaintCoverView`, lifted on a double rAF with a 0.5 s backstop).
 - Tab CLOSE keeps its instant surface swap: `performClose` tears the closing surface down before the neighbor activates, so there is no outgoing view to fade — the close's motion is the chip fade (`motionTab`/`motionFast`), as the tokens table always said.
 - The ordering rule is pinned by a DEBUG event trail on the activate path (appearance, chrome-top, install), not by intercepting the webview — install is the moment a surface can first become visible, so "dressed before install" is the testable form of "dressed before visible".
 

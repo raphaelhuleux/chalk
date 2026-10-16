@@ -415,12 +415,33 @@ final class RootSplitViewController: NSViewController {
 
     private typealias BandInputs = (dividerX: CGFloat, libraryColumn: NSView?)
 
-    /// The spec constants `BandLayout` builds the band out of.
-    private static let bandMetrics = BandLayout.Metrics(
-        tabStripHeight: ChalkMetrics.tabStripHeight,
-        tabStripLeading: ChalkMetrics.tabStripLeading,
-        tabRowDividerGap: ChalkMetrics.tabRowDividerGap,
-        editorRestingPad: ChalkMetrics.editorRestingPad)
+    /// The spec constants `BandLayout` builds the band out of, with the row's
+    /// resting start as measured off this window's traffic lights.
+    private var bandMetrics: BandLayout.Metrics {
+        BandLayout.Metrics(
+            tabStripHeight: ChalkMetrics.tabStripHeight,
+            tabStripLeading: trafficLightsClearance,
+            tabRowDividerGap: ChalkMetrics.tabRowDividerGap,
+            editorRestingPad: ChalkMetrics.editorRestingPad)
+    }
+
+    /// Where the names start with no Library tiled: the traffic lights'
+    /// trailing edge plus `TabStripMetrics.trafficLightGap`, read off the
+    /// window's own zoom button rather than the spec constant, which was
+    /// measured on a short titlebar and sits 16pt short under the unified
+    /// one. Full screen hides the buttons, so the last windowed reading
+    /// stands and the row does not jump (`ChalkMetrics.tabStripLeading` is
+    /// the seed before any window).
+    private var trafficLightsClearance: CGFloat = ChalkMetrics.tabStripLeading
+
+    private func measureTrafficLights() {
+        guard !isMacFullscreen,
+              let zoom = view.window?.standardWindowButton(.zoomButton), !zoom.isHidden,
+              let container = zoom.superview else { return }
+        let edge = view.convert(zoom.frame, from: container).maxX
+        guard edge > 0 else { return }
+        trafficLightsClearance = edge + TabStripMetrics.trafficLightGap
+    }
 
     /// The band's one layout pass: measure the divider off the live columns,
     /// ask `BandLayout` for the numbers, write them. Every trigger goes through
@@ -429,12 +450,14 @@ final class RootSplitViewController: NSViewController {
     /// full-bleed under the band and rests below web-side padding.
     private func applyBandLayout(measured: BandInputs? = nil) {
         let measured = measured ?? measuredBandInputs()
+        measureTrafficLights()
+        headerBar.setTrafficLightsClearance(trafficLightsClearance)
         let layout = BandLayout.resolve(
             glueAvailable: true,
             fullscreen: isMacFullscreen, zen: isZen,
             safeAreaTop: systemTitlebarHeight,
             lastRealBandHeight: lastRealBandHeight,
-            dividerX: measured.dividerX, metrics: Self.bandMetrics)
+            dividerX: measured.dividerX, metrics: bandMetrics)
         lastRealBandHeight = layout.recordedBandHeight
 
         if abs((headerHeight?.constant ?? -1) - layout.bandHeight) > 0.5 {
@@ -1640,13 +1663,36 @@ final class RootSplitViewController: NSViewController {
         if let image, let bitmapSource {
             let bitmap = NSImageView(image: image)
             bitmap.imageScaling = .scaleAxesIndependently
+            // Where the pixels ARE on screen: the frame, plus the slide's
+            // translation as the PRESENTATION layers carry it. `NSView.convert`
+            // sees only frames, and the model transform is not the truth
+            // either (AppKit resets it on layout, see `chalkSlide`); either
+            // one placed the bitmap a sidebar's width from the content it was
+            // covering, where it faded as a ghost.
             bitmap.frame = editorView
                 .convert(bitmapSource.bounds, from: bitmapSource)
-                .offsetBy(dx: -finalRect.origin.x, dy: -finalRect.origin.y)
+                .offsetBy(dx: Self.presentedTranslation(of: bitmapSource, upTo: editorView).dx - finalRect.origin.x,
+                          dy: Self.presentedTranslation(of: bitmapSource, upTo: editorView).dy - finalRect.origin.y)
             cover.addSubview(bitmap)
         }
         editorView.addSubview(cover)
         return cover
+    }
+
+    /// The translation the layers between `view` and `ancestor` are drawing
+    /// with right now (the presentation, falling back to the model).
+    private static func presentedTranslation(of view: NSView, upTo ancestor: NSView) -> CGVector {
+        var dx: CGFloat = 0, dy: CGFloat = 0
+        var current: NSView? = view
+        while let node = current, node !== ancestor {
+            if let layer = node.layer {
+                let transform = CATransform3DGetAffineTransform((layer.presentation() ?? layer).transform)
+                dx += transform.tx
+                dy += transform.ty
+            }
+            current = node.superview
+        }
+        return CGVector(dx: dx, dy: dy)
     }
 
     /// Give the editor focus back after a sheet or overlay goes away.
