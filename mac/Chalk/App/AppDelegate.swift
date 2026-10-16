@@ -339,7 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel|settings|settings-shortcuts` and
     /// `CHALK_DEBUG_SCRIPT=<seconds>:<action>,...` (actions: new-tab, close-tab, next-tab,
     /// toggle-sidebar, toggle-outline-panel, quick-open, zen, normal, dark, light, fullscreen,
-    /// open:<path>, scroll:<px>),
+    /// open:<path>, scroll:<px>, snap:<png path>),
     /// which drives the shell on a clock so a window recording (`scripts/screenshots/winrec.swift`)
     /// can catch a flicker no screenshot shows.
     private func applyDebugLaunchEnvironment() {
@@ -355,6 +355,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DebugTrace.log("script \(parts[1])")
                     if parts[1].hasPrefix("open:") {
                         root.openExternalDocument(URL(fileURLWithPath: String(parts[1].dropFirst(5))))
+                        return
+                    }
+                    if parts[1].hasPrefix("snap:") {
+                        // The whole window frame (titlebar, toolbar, chrome) rendered in-process, so a
+                        // full-screen window on another Space can still be inspected. WebKit's remote
+                        // layer renders blank here; the chrome is what this is for.
+                        if let frame = root.view.window?.contentView?.superview,
+                           let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) {
+                            frame.cacheDisplay(in: frame.bounds, to: rep)
+                            try? rep.representation(using: .png, properties: [:])?
+                                .write(to: URL(fileURLWithPath: String(parts[1].dropFirst(5))))
+                        }
                         return
                     }
                     if parts[1].hasPrefix("scroll:"), let px = Int(parts[1].dropFirst(7)) {

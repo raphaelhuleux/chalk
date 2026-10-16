@@ -72,13 +72,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     static let defaultSize = NSSize(width: 1100, height: 760)
 
     /// What the journal keeps for this window: its id, its tabs and its frame.
+    /// In full screen the frame is the screen, so the one from before the
+    /// episode is kept: a relaunch opens a window, not a screen-sized one.
     func windowRecord() -> WindowRecord {
         var frame: WindowRecord.Frame?
-        if let rect = window?.frame {
+        if let rect = frameBeforeFullScreen ?? window?.frame {
             frame = WindowRecord.Frame(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
         }
         return WindowRecord(id: windowID, session: root.captureSession(), frame: frame)
     }
+
+    /// The windowed frame while in full screen, nil otherwise.
+    private var frameBeforeFullScreen: NSRect?
 
     /// The red close button is the user's "done with this": it saves, or the
     /// window's edits would drain into another window at the next launch. The scopes release only after the
@@ -90,12 +95,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         onClose?()
     }
 
+    /// The empty toolbar exists for the tall windowed titlebar. In full screen
+    /// AppKit keeps a toolbar on screen as an opaque bar at the top, which
+    /// would paint over the band; without one the top edge is the band.
     func windowWillEnterFullScreen(_ notification: Notification) {
+        frameBeforeFullScreen = window?.frame
+        window?.toolbar?.isVisible = false
         root.setMacFullscreen(true)
     }
 
     func windowWillExitFullScreen(_ notification: Notification) {
+        window?.toolbar?.isVisible = true
         root.setMacFullscreen(false)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        frameBeforeFullScreen = nil
     }
 
     func windowDidResignKey(_ notification: Notification) {
