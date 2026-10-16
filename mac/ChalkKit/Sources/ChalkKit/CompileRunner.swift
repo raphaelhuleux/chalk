@@ -78,6 +78,25 @@ public final class CompileProcessRunner: @unchecked Sendable {
         let start = Date()
         var log = job.notes.map { "[chalk] \($0)\n" }.joined()
         var ok = true
+        if let staged = job.staged {
+            let url = job.workingDirectory.appendingPathComponent(staged.fileName)
+            do {
+                try staged.contents.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                log += "[chalk] could not write \(staged.fileName): \(error.localizedDescription)\n"
+                return CompileOutcome(succeeded: false, cancelled: false, log: log, issues: [], pdf: nil)
+            }
+        }
+        defer {
+            if let staged = job.staged {
+                let fm = FileManager.default
+                let base = job.workingDirectory.appendingPathComponent(staged.fileName)
+                try? fm.removeItem(at: base)
+                // Quarto's supporting folder, left behind when a render fails.
+                try? fm.removeItem(at: job.workingDirectory
+                    .appendingPathComponent(base.deletingPathExtension().lastPathComponent + "_files"))
+            }
+        }
 
         func step(_ tool: String, _ args: [String]) -> (code: Int32, output: String) {
             let (code, output) = execute(tool, args, in: job.workingDirectory)

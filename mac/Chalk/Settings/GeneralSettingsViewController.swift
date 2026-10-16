@@ -285,6 +285,11 @@ final class GeneralSettingsViewController: NSViewController {
         choose.bezelStyle = .rounded
         let folder = SettingsRowView(title: "Extra Tool Folder", detail: toolFolderDetail, control: choose)
         toolFolderRow = folder
+        let useHeader = makeSwitch(isOn: Preferences.usesMarkdownDefaultHeader, action: #selector(markdownHeaderToggled))
+        let editHeader = NSButton(title: "Edit\u{2026}", target: self, action: #selector(editMarkdownHeader))
+        editHeader.bezelStyle = .rounded
+        let headerControls = NSStackView(views: [editHeader, useHeader])
+        headerControls.spacing = 10
         let tools = SettingsRowView(title: "Found", detail: "Looking\u{2026}")
         toolsRow = tools
         refreshFoundTools()
@@ -293,6 +298,7 @@ final class GeneralSettingsViewController: NSViewController {
             SettingsRowView(title: "LaTeX Engine", control: engine),
             SettingsRowView(title: "Markdown Compiler", detail: "Automatic uses Quarto when installed", control: markdown),
             SettingsRowView(title: "pandoc PDF Engine", detail: "--pdf-engine", control: pandoc),
+            SettingsRowView(title: "Default YAML Header", detail: "For .md and .qmd files without one", control: headerControls),
             folder,
             tools,
         ]
@@ -327,6 +333,14 @@ final class GeneralSettingsViewController: NSViewController {
     @objc private func markdownCompilerChanged(_ button: NSPopUpButton) {
         let raw = button.selectedItem?.representedObject as? String ?? ""
         Preferences.markdownCompiler = MarkdownCompilerChoice(rawValue: raw) ?? .automatic
+    }
+
+    @objc private func markdownHeaderToggled(_ toggle: NSSwitch) {
+        Preferences.usesMarkdownDefaultHeader = toggle.state == .on
+    }
+
+    @objc private func editMarkdownHeader() {
+        presentAsSheet(MarkdownHeaderEditorViewController())
     }
 
     @objc private func pandocEngineChanged(_ button: NSPopUpButton) {

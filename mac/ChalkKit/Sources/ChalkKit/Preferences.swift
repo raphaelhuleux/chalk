@@ -128,6 +128,8 @@ public enum Preferences {
     private static let pandocPdfEngineKey = "chalk.pandocPdfEngine"
     private static let extraToolDirectoryKey = "chalk.extraToolDirectory"
     private static let markdownCompilerKey = "chalk.markdownCompiler"
+    private static let markdownDefaultHeaderKey = "chalk.markdownDefaultHeader"
+    private static let usesMarkdownDefaultHeaderKey = "chalk.usesMarkdownDefaultHeader"
 
     /// Posted when `autoHideChrome` changes. Settings runs in its own window, so every open window
     /// re-applies from this notification.
@@ -280,6 +282,28 @@ public enum Preferences {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: markdownCompilerKey) }
     }
 
+    /// The header Settings starts from: Quarto's spelling, which the pandoc route also reads
+    /// for `number-sections`.
+    public static let suggestedMarkdownHeader = """
+    format:
+      pdf:
+        number-sections: true
+        colorlinks: true
+        geometry: margin=1in
+    """
+
+    /// YAML a .md/.qmd file without a header compiles with (Settings > Compile).
+    public static var markdownDefaultHeader: String {
+        get { UserDefaults.standard.string(forKey: markdownDefaultHeaderKey) ?? suggestedMarkdownHeader }
+        set { UserDefaults.standard.set(newValue, forKey: markdownDefaultHeaderKey) }
+    }
+
+    /// Whether `markdownDefaultHeader` applies. Default on.
+    public static var usesMarkdownDefaultHeader: Bool {
+        get { UserDefaults.standard.object(forKey: usesMarkdownDefaultHeaderKey) == nil || UserDefaults.standard.bool(forKey: usesMarkdownDefaultHeaderKey) }
+        set { UserDefaults.standard.set(newValue, forKey: usesMarkdownDefaultHeaderKey) }
+    }
+
     /// A folder searched before the standard ones, for tools installed
     /// somewhere unusual. Empty when unset.
     public static var extraToolDirectory: String {
@@ -288,7 +312,8 @@ public enum Preferences {
     }
 
     public static var compileSettings: CompileSettings {
-        CompileSettings(latexEngine: latexEngine, pandocPdfEngine: pandocPdfEngine, markdownCompiler: markdownCompiler)
+        CompileSettings(latexEngine: latexEngine, pandocPdfEngine: pandocPdfEngine, markdownCompiler: markdownCompiler,
+                        defaultMarkdownHeader: usesMarkdownDefaultHeader ? markdownDefaultHeader : nil)
     }
 
     // MARK: - Clamped numbers

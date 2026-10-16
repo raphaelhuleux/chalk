@@ -68,6 +68,42 @@ final class CompilePlannerTests: XCTestCase {
         XCTAssertTrue(fallback.notes.first?.contains("cross-references") == true)
     }
 
+    private func plan(_ file: URL, _ source: String, header: String?, markdown: MarkdownCompilerChoice = .automatic,
+                      tools: Set<String>) throws -> CompileJob {
+        try CompilePlanner.job(for: file, source: source,
+                               settings: CompileSettings(markdownCompiler: markdown, defaultMarkdownHeader: header),
+                               available: tools.contains).get()
+    }
+
+    func testAHeaderlessFileCompilesAStagedCopyWithTheDefaultHeader() throws {
+        let job = try plan(md, "# A\n", header: "format:\n  pdf:\n    number-sections: true", tools: ["quarto"])
+        XCTAssertEqual(job.staged, StagedSource(fileName: "note.chalk-render.md",
+                                                contents: "---\nformat:\n  pdf:\n    number-sections: true\n---\n\n# A\n"))
+        XCTAssertEqual(job.plan, .steps([CompileStep("quarto", ["render", "note.chalk-render.md", "--to", "pdf", "--output", "note.pdf"])]))
+        XCTAssertEqual(job.pdf.lastPathComponent, "note.pdf")
+
+        let pandoc = try plan(qmd, "# A\n", header: "number-sections: true", markdown: .pandoc, tools: ["pandoc", "xelatex"])
+        guard case let .steps(steps) = pandoc.plan else { return XCTFail() }
+        XCTAssertEqual(steps[0].arguments.first, "report.chalk-render.qmd")
+        XCTAssertEqual(steps[0].arguments[3], "report.pdf")
+        XCTAssertTrue(steps[0].arguments.contains("--number-sections"), "the default header's numbering reaches pandoc")
+    }
+
+    func testAFileWithItsOwnHeaderOrNoDefaultIsCompiledAsIs() throws {
+        let own = try plan(md, "---\ntitle: x\n---\n# A\n", header: "number-sections: true", tools: ["quarto"])
+        XCTAssertNil(own.staged)
+        XCTAssertEqual(own.plan, quartoRender("note.md"))
+        XCTAssertNil(try plan(md, "# A\n", header: nil, tools: ["quarto"]).staged)
+        XCTAssertNil(try plan(md, "# A\n", header: "  \n", tools: ["quarto"]).staged, "a blank default is off")
+        XCTAssertNil(try plan(tex, "x", header: "number-sections: true", tools: ["latexmk"]).staged, "LaTeX never")
+    }
+
+    func testFencing() {
+        XCTAssertEqual(MarkdownFrontMatter.fenced("title: x\n"), "---\ntitle: x\n---\n")
+        XCTAssertEqual(MarkdownFrontMatter.fenced("---\ntitle: x\n---"), "---\ntitle: x\n---\n")
+        XCTAssertEqual(MarkdownFrontMatter.fenced(" \n"), "")
+    }
+
     func testTheUserCanForceEitherCompiler() throws {
         guard case let .steps(steps) = try plan(qmd, markdown: .pandoc, tools: ["quarto", "pandoc", "xelatex"]).get().plan else { return XCTFail() }
         XCTAssertEqual(steps[0].tool, "pandoc")
@@ -183,6 +219,25 @@ final class CompileCoalescerTests: XCTestCase {
         XCTAssertTrue(c.isRunning("/p/main.tex"))
         XCTAssertFalse(c.finished("/p/main.tex"))
         XCTAssertFalse(c.isRunning("/p/main.tex"))
+    }
+}
+
+final class StagedSourceRunnerTests: XCTestCase {
+    /// `cat` stands in for the compiler: it proves the staged copy exists while the steps run,
+    /// and the copy must be gone afterwards.
+    func testTheStagedCopyExistsDuringTheRunAndNotAfter() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("chalk-stage-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let job = CompileJob(
+            source: dir.appendingPathComponent("note.md"), workingDirectory: dir,
+            pdf: dir.appendingPathComponent("note.pdf"),
+            plan: .steps([CompileStep("cat", ["note.chalk-render.md"])]), notes: [],
+            staged: StagedSource(fileName: "note.chalk-render.md", contents: "---\ntitle: staged\n---\n# A\n"))
+        let outcome = CompileProcessRunner(locator: ToolLocator(searchPath: ["/bin", "/usr/bin"])).run(job)
+        XCTAssertTrue(outcome.succeeded, outcome.log)
+        XCTAssertTrue(outcome.log.contains("title: staged"), outcome.log)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("note.chalk-render.md").path))
     }
 }
 

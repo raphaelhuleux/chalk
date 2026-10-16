@@ -69,6 +69,14 @@ public enum MarkdownFrontMatter {
         return lines[1..<end].joined(separator: "\n")
     }
 
+    /// `yaml` as a front-matter block: trimmed, fenced with `---` unless it already is, empty
+    /// when there is nothing in it.
+    public static func fenced(_ yaml: String) -> String {
+        let body = yaml.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return "" }
+        return body.hasPrefix("---") ? body + "\n" : "---\n\(body)\n---\n"
+    }
+
     /// `number-sections: true` (Quarto's spelling, at any depth) or pandoc's `numbersections: true`.
     public static func wantsNumberedSections(_ source: String) -> Bool {
         guard let header = header(of: source) else { return false }
@@ -126,6 +134,16 @@ public struct CompileJob: Equatable, Sendable {
     public var plan: CompilePlan
     /// Shown in the compile log before the output (a fallback that was taken).
     public var notes: [String]
+    /// A copy of the source the runner writes beside it before the steps and removes after:
+    /// a Markdown file without a YAML header, with the default header prepended. The user's
+    /// file is never touched.
+    public var staged: StagedSource?
+}
+
+public struct StagedSource: Equatable, Sendable {
+    /// In the working directory, so relative images and bibliographies still resolve.
+    public var fileName: String
+    public var contents: String
 }
 
 public struct CompileSettings: Equatable, Sendable {
@@ -133,12 +151,15 @@ public struct CompileSettings: Equatable, Sendable {
     /// pandoc's `--pdf-engine`.
     public var pandocPdfEngine: String
     public var markdownCompiler: MarkdownCompilerChoice
+    /// YAML given to a .md/.qmd file that has no header of its own; nil when off.
+    public var defaultMarkdownHeader: String?
 
     public init(latexEngine: LatexEngineChoice = .automatic, pandocPdfEngine: String = "xelatex",
-                markdownCompiler: MarkdownCompilerChoice = .automatic) {
+                markdownCompiler: MarkdownCompilerChoice = .automatic, defaultMarkdownHeader: String? = nil) {
         self.latexEngine = latexEngine
         self.pandocPdfEngine = pandocPdfEngine
         self.markdownCompiler = markdownCompiler
+        self.defaultMarkdownHeader = defaultMarkdownHeader
     }
 }
 
@@ -174,8 +195,8 @@ public enum CompilePlanner {
         let dir = file.deletingLastPathComponent()
         let name = file.lastPathComponent
         let pdf = file.deletingPathExtension().appendingPathExtension("pdf")
-        func job(_ plan: CompilePlan, _ notes: [String] = []) -> Result<CompileJob, CompilePlanError> {
-            .success(CompileJob(source: file, workingDirectory: dir, pdf: pdf, plan: plan, notes: notes))
+        func job(_ plan: CompilePlan, _ notes: [String] = [], staged: StagedSource? = nil) -> Result<CompileJob, CompilePlanError> {
+            .success(CompileJob(source: file, workingDirectory: dir, pdf: pdf, plan: plan, notes: notes, staged: staged))
         }
 
         switch kind {
@@ -205,12 +226,27 @@ public enum CompilePlanner {
 
         case .markdown, .quarto:
             var notes: [String] = []
+            // A file without a header compiles from a staged copy that carries the default one.
+            var input = name
+            var source = source
+            var staged: StagedSource?
+            if MarkdownFrontMatter.header(of: source) == nil,
+               let header = settings.defaultMarkdownHeader.map(MarkdownFrontMatter.fenced), !header.isEmpty {
+                let stem = file.deletingPathExtension().lastPathComponent
+                input = "\(stem).chalk-render.\(file.pathExtension)"
+                source = header + "\n" + source
+                staged = StagedSource(fileName: input, contents: source)
+                notes.append("No YAML header: compiled with the default header from Settings > Compile.")
+            }
+            // Quarto names the PDF after its input; a staged copy must still produce the file's own.
+            let quarto = CompileStep("quarto", ["render", input, "--to", "pdf"]
+                + (staged == nil ? [] : ["--output", pdf.lastPathComponent]))
             switch settings.markdownCompiler {
             case .quarto:
                 guard available("quarto") else { return .failure(.missingTool("quarto", hint: quartoHint)) }
-                return job(.steps([CompileStep("quarto", ["render", name, "--to", "pdf"])]))
+                return job(.steps([quarto]), notes, staged: staged)
             case .automatic where available("quarto"):
-                return job(.steps([CompileStep("quarto", ["render", name, "--to", "pdf"])]))
+                return job(.steps([quarto]), notes, staged: staged)
             case .automatic:
                 if kind == .quarto { notes.append("quarto not found: compiled with pandoc, so Quarto cross-references and code cells were not processed.") }
             case .pandoc:
@@ -223,9 +259,9 @@ public enum CompilePlanner {
             if engine != settings.pandocPdfEngine { notes.append("\(settings.pandocPdfEngine) not found: pandoc uses \(engine).") }
             // citeproc resolves [@key] against the header's `bibliography:`. pandoc ignores
             // Quarto's nested `number-sections`, so it goes in as a flag.
-            var args = [name, "-s", "-o", pdf.lastPathComponent, "--pdf-engine=\(engine)", "--citeproc"]
+            var args = [input, "-s", "-o", pdf.lastPathComponent, "--pdf-engine=\(engine)", "--citeproc"]
             if MarkdownFrontMatter.wantsNumberedSections(source) { args.append("--number-sections") }
-            return job(.steps([CompileStep("pandoc", args)]), notes)
+            return job(.steps([CompileStep("pandoc", args)]), notes, staged: staged)
         }
     }
 }
