@@ -59,7 +59,7 @@ final class HeaderTabStrip: FlippedView {
     private let newTabButton = StripGlyphButton(symbol: "plus", pointSize: ChalkMetrics.newTabGlyphSize,
                                                 weight: .light, label: "New File")
     private let overflowButton = StripGlyphButton(symbol: "chevron.down",
-                                                  pointSize: TabStripMetrics.overflowGlyph,
+                                                  pointSize: ChalkMetrics.overflowGlyphSize,
                                                   weight: .medium, label: "More Tabs")
     private let fadeMask = CAGradientLayer()
     /// The active name's accent underline, owned by the row so it can slide
@@ -259,13 +259,6 @@ final class HeaderTabStrip: FlippedView {
     /// The tab ids currently rendered, in row order (for the stale close-fade tests).
     var renderedTabIDsForTesting: [UUID] {
         names.map(\.itemID)
-    }
-
-    /// The ACTIVE name's live frame in the row's own coordinates, nil when no
-    /// tab is active. `chromeLayout(for:)` converts it into root coordinates.
-    var activeTabFrameForTesting: CGRect? {
-        layoutSubtreeIfNeeded()
-        return activeName.map { convert($0.bounds, from: $0) }
     }
 
     /// The accent underline's live frame in the row's own coordinates, nil
@@ -745,7 +738,7 @@ private final class HeaderTabName: FlippedView {
 
     /// One × for every chip: the row is rebuilt on each model change.
     private static let closeGlyph = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab")?
-        .withSymbolConfiguration(.init(pointSize: TabStripMetrics.closeGlyph, weight: .semibold))
+        .withSymbolConfiguration(.init(pointSize: ChalkMetrics.closeGlyphSize, weight: .semibold))
 
     /// The slot: dot OR × per TabStripPolicy.slotContent, cross-faded on slot
     /// hover for dirty tabs (that swap is how an unsaved tab is closed).

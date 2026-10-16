@@ -37,7 +37,7 @@ public final class RecoveryStore {
     }
 
     /// One id per process. The drain treats a matching record as live dirty
-    /// state some window owns, which a mid-session scene connect must not
+    /// state some window owns, which a window opened mid-session must not
     /// "recover".
     public static let currentLaunchID = UUID().uuidString
 

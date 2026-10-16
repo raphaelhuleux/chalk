@@ -141,7 +141,7 @@ final class RootSplitViewController: NSViewController {
     private static let log = Logger(subsystem: "com.huleux.chalk", category: "root")
 
     /// `locationStore` is this window's own folder list.
-    init(locationStore: LocationStore = .detached(), initialContent: SceneConnectContent = .openWelcome) {
+    init(locationStore: LocationStore = .detached(), initialContent: WindowContent = .openWelcome) {
         self.locationStore = locationStore
         // Seed before anything enumerates the sample folder. Idempotent.
         let welcome = SampleContent.ensureSeeded()
@@ -430,12 +430,9 @@ final class RootSplitViewController: NSViewController {
     /// The band's one layout pass: measure the divider off the live columns,
     /// ask `BandLayout` for the numbers, write them. Every trigger goes through
     /// here so no two triggers write disagreeing subsets of the same picture.
-    /// `glueAvailable: true` is the overlay-chrome branch: the editor runs
-    /// full-bleed under the band and rests below web-side padding.
     private func applyBandLayout(measured: BandInputs? = nil) {
         let measured = measured ?? measuredBandInputs()
         let layout = BandLayout.resolve(
-            glueAvailable: true,
             fullscreen: isMacFullscreen, zen: isZen,
             safeAreaTop: systemTitlebarHeight,
             lastRealBandHeight: lastRealBandHeight,
@@ -455,8 +452,7 @@ final class RootSplitViewController: NSViewController {
         }
         headerBar.setLibraryHole(measured.libraryColumn.map { libraryHole(upTo: $0) })
         headerBar.setOutlineHole(outlineHole())
-        editor.setTopClearance(layout.editorTopClearance)
-        if let inset = layout.editorChromeTopInset { editor.setChromeTopInset(Double(inset)) }
+        editor.setChromeTopInset(Double(layout.editorChromeTopInset))
     }
 
     /// Where the chrome that reserves space above the text ENDS, in this
@@ -572,16 +568,12 @@ final class RootSplitViewController: NSViewController {
         applyChromeAutoHideState()
     }
 
-    /// Write the auto-hide state to the chrome. The band owns the tab row in
-    /// every window mode here (there is no titlebar strip), so
-    /// `TabChromeOwnership` reduces to "zen stands down".
+    /// Write the auto-hide state to the chrome. Zen hides the band on its own
+    /// terms, so auto-hide never slides it there.
     private func applyChromeAutoHideState(animated: Bool = true) {
         let hidden = isChromeAutoHidden
-        let owner = TabChromeOwnership.owner(
-            isMacFullScreen: isMacFullscreen, isZen: isZen, glueAvailable: false)
-        let applied = TabChromeOwnership.autoHideApplication(owner: owner, autoHidden: hidden)
         let write = {
-            self.applyBandHidden(applied.bandHidden)
+            self.applyBandHidden(hidden && !self.isZen)
             self.applyPillHidden(hidden)
         }
         if animated {
@@ -612,7 +604,7 @@ final class RootSplitViewController: NSViewController {
             return
         }
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = ChromeMotion.autoHide
+            context.duration = ChalkMetrics.motionAutoHide
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             context.allowsImplicitAnimation = true
             apply()
@@ -1618,10 +1610,7 @@ final class RootSplitViewController: NSViewController {
             cover.layer?.backgroundColor = NSColor.chalkEditorBackground.cgColor
         }
         cover.clipsToBounds = true
-        var finalRect = editorView.bounds
-        finalRect.origin.y = editor.topClearance
-        finalRect.size.height -= editor.topClearance
-        cover.frame = finalRect
+        cover.frame = editorView.bounds
         if let image, let bitmapSource {
             let bitmap = NSImageView(image: image)
             bitmap.imageScaling = .scaleAxesIndependently
@@ -1634,7 +1623,7 @@ final class RootSplitViewController: NSViewController {
             let shift = Self.presentedTranslation(of: bitmapSource, upTo: editorView)
             bitmap.frame = editorView
                 .convert(bitmapSource.bounds, from: bitmapSource)
-                .offsetBy(dx: shift.dx - finalRect.origin.x, dy: shift.dy - finalRect.origin.y)
+                .offsetBy(dx: shift.dx - cover.frame.origin.x, dy: shift.dy - cover.frame.origin.y)
             cover.addSubview(bitmap)
         }
         editorView.addSubview(cover)
@@ -1774,10 +1763,6 @@ extension RootSplitViewController {
         let firstHeaderTop: CGFloat? = panel == nil ? nil
             : sidebar.firstHeaderFrameForTesting.map { view.convert($0, from: sidebar.view).minY }
         let scrollOffset: CGFloat? = panel == nil ? nil : sidebar.libraryScrollOffsetForTesting
-        let activeChip: CGRect? = headerBar.isHidden
-            ? nil
-            : headerBar.tabStrip.activeTabFrameForTesting
-                .map { view.convert($0, from: headerBar.tabStrip) }
         let pill = footerBar.isHidden ? CGRect.zero : footerBar.frame
         let pillCorner = CGPoint(x: ChalkMetrics.footerPillMargin,
                                  y: ChalkMetrics.footerPillMargin)
@@ -1807,11 +1792,9 @@ extension RootSplitViewController {
             pillCorner: pillCorner,
             editorContent: editorContent,
             reserveTop: chromeReserve,
-            safeLeading: 0,
             libraryFirstRowTop: firstRowTop,
             libraryFirstHeaderTop: firstHeaderTop,
             libraryScrollOffset: scrollOffset,
-            activeChip: activeChip,
             activeTabLabel: activeLabel,
             activeTabUnderline: activeUnderline,
             outlinePanel: editor.isViewLoaded

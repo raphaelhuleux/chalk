@@ -1,7 +1,7 @@
 import Foundation
 
-/// One window configuration the chrome must be correct in. Shared vocabulary
-/// for the invariant tests, the screenshot renderer, and contact sheets.
+/// One window configuration the chrome must be correct in: the invariant
+/// and transition matrices' vocabulary.
 public struct UIState: Equatable, Hashable, Sendable {
     public enum WindowMode: String, CaseIterable, Sendable { case windowed, fullscreen }
     /// Raw values carry the id vocabulary ("sidebar"/"nosidebar"), which
@@ -30,26 +30,10 @@ public struct UIState: Equatable, Hashable, Sendable {
         self.appearance = appearance
     }
 
-    /// Stable, readable, and the label used everywhere: test failures and
-    /// contact-sheet cells.
+    /// Stable and readable: the label every test failure names a state by.
     public var id: String {
         [window.rawValue, sidebar.rawValue, outline.rawValue,
          mode.rawValue, appearance.rawValue].joined(separator: "-")
-    }
-
-    public init?(id: String) {
-        // `omittingEmptySubsequences: false` so a stray hyphen yields an
-        // empty part and fails, instead of a typo parsing as a different,
-        // valid state.
-        let parts = id.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
-        guard parts.count == 5,
-              let window = WindowMode(rawValue: parts[0]),
-              let sidebar = SidebarState(rawValue: parts[1]),
-              let outline = OutlineState(rawValue: parts[2]),
-              let mode = ChromeMode(rawValue: parts[3]),
-              let appearance = Appearance(rawValue: parts[4]) else { return nil }
-        self.init(window: window, sidebar: sidebar,
-                  outline: outline, mode: mode, appearance: appearance)
     }
 
     /// The full cross product of every dimension. Exhaustive on purpose: an

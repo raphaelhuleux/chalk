@@ -26,10 +26,6 @@ final class ChromeLayoutReportingTests: XCTestCase {
 
     func testLayoutReportsTheRealBandFrame() throws {
         let root = loadedRoot()
-        // Mac Catalyst windowed mode: the tab row lives in the AppKit
-        // NSToolbar, not the UIKit headerBar, so the band is legitimately
-        // .zero there — nothing for chromeLayout to report.
-        try XCTSkipIf(root.isHeaderHiddenForTesting)
         let layout = root.chromeLayout(for: anyState)
         XCTAssertEqual(layout.band.height, root.headerBandHeightForTesting, accuracy: 0.5,
                        "the band rect must come from the live band, not a constant")

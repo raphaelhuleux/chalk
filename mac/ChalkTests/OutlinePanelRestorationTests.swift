@@ -5,7 +5,7 @@ import ChalkKit
 /// The panel restores per window, like the Library.
 @MainActor
 final class OutlinePanelRestorationTests: XCTestCase {
-    private static let widthKey = "chalk.outlinePanelWidth.appkit"
+    private static let widthKey = Preferences.outlinePanelWidthKey
     private var savedWidth: Any?
     private var scratch: URL?
     private var windows: [NSWindow] = []

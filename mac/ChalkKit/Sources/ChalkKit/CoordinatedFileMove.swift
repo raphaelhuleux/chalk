@@ -16,7 +16,7 @@ public enum CoordinatedFileMove {
         label: "com.huleux.chalk.file-move", qos: .userInitiated)
 
     /// Run the move on `queue` and report on `completionQueue` (main by
-    /// default: callers follow up with UIKit work).
+    /// default: callers follow up with view work).
     public static func perform(
         from source: URL,
         to destination: URL,

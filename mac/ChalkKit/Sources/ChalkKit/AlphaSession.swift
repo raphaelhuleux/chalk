@@ -33,12 +33,10 @@ public final class AlphaSession {
 
     // MARK: - Lifecycle
 
-    /// A window is on screen. From `sceneWillEnterForeground` and
-    /// `sceneDidBecomeActive`.
+    /// A window is on screen. From `applicationDidBecomeActive`.
     public func markForeground() { integrity.markForeground() }
 
-    /// An orderly exit from the foreground. From `sceneDidEnterBackground` and
-    /// `applicationWillTerminate`.
+    /// An orderly exit. From `applicationWillTerminate`.
     public func markClean() { integrity.markClean() }
 
     // MARK: - The crash prompt

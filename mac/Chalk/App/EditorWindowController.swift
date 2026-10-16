@@ -28,7 +28,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     ///   - frame: the restored frame in screen coordinates, else the default
     ///     size centred.
     init(windowID: String = UUID().uuidString,
-         initialContent: SceneConnectContent = .openWelcome,
+         initialContent: WindowContent = .openWelcome,
          locationStore: LocationStore = .detached(),
          frame: NSRect? = nil) {
         self.windowID = windowID
@@ -80,9 +80,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         return WindowRecord(id: windowID, session: root.captureSession(), frame: frame)
     }
 
-    /// The red close button is the user's "done with this": it saves, like a
-    /// Catalyst scene disconnect did, or the window's edits would drain into
-    /// another window at the next launch. The scopes release only after the
+    /// The red close button is the user's "done with this": it saves, or the
+    /// window's edits would drain into another window at the next launch. The scopes release only after the
     /// async writes land: revoking a sandbox extension mid-write fails the save.
     func windowWillClose(_ notification: Notification) {
         let root = self.root

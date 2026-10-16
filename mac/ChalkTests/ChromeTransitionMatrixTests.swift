@@ -115,7 +115,6 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         rect("footerPill", reached.footerPill, fresh.footerPill)
         rect("editorContent", reached.editorContent, fresh.editorContent)
         value("reserveTop", reached.reserveTop, fresh.reserveTop)
-        value("safeLeading", reached.safeLeading, fresh.safeLeading)
         if optionalValuesDiffer(reached.libraryFirstRowTop, fresh.libraryFirstRowTop, by: t) {
             out.append("libraryFirstRowTop: reached=\(String(describing: reached.libraryFirstRowTop)) "
                        + "fresh=\(String(describing: fresh.libraryFirstRowTop))")
@@ -124,7 +123,6 @@ final class ChromeTransitionMatrixTests: XCTestCase {
             out.append("libraryScrollOffset: reached=\(String(describing: reached.libraryScrollOffset)) "
                        + "fresh=\(String(describing: fresh.libraryScrollOffset))")
         }
-        optRect("activeChip", reached.activeChip, fresh.activeChip)
         optRect("outlinePanel", reached.outlinePanel, fresh.outlinePanel)
         optRect("bandPaintTrailingHole", reached.bandPaintTrailingHole, fresh.bandPaintTrailingHole)
         if reached.outlinePanelIsOverlay != fresh.outlinePanelIsOverlay {
@@ -148,7 +146,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         if case .window = step {
             // A window-mode change is a window-size change plus the
             // full-screen chrome flag the window would flip.
-            host.window.frame = CGRect(origin: .zero, size: ChromeMatrixHost.size(for: expected))
+            host.window.setContentSize(ChromeMatrixHost.size(for: expected))
         }
         root.applyTransitionForTesting(step)
         state = expected
@@ -308,9 +306,9 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         // construction (the fresh root has no Library content, this one has
         // the seeded one), so drop those complaints and assert the round
         // trip directly instead.
-        complaints = complaints.filter { !$0.contains("libraryFirstRowTop") && !$0.contains("libraryScrollOffset") && !$0.contains("activeChip") }
+        complaints = complaints.filter { !$0.contains("libraryFirstRowTop") && !$0.contains("libraryScrollOffset") }
 
-        host.window.frame = CGRect(origin: .zero, size: ChromeMatrixHost.size(for: start))
+        host.window.setContentSize(ChromeMatrixHost.size(for: start))
         root.applyTransitionForTesting(.window(.windowed))
         host.settle(root, state: start)
 
@@ -369,11 +367,10 @@ final class ChromeTransitionMatrixTests: XCTestCase {
                             mode: .normal, appearance: .light)
         let root = makeStartRoot(start)
         let original = ChromeMatrixHost.size(for: start)
-        host.window.frame = CGRect(origin: .zero,
-                                   size: CGSize(width: original.width - 300,
+        host.window.setContentSize(CGSize(width: original.width - 300,
                                                 height: original.height - 100))
         host.settle(root, state: start)
-        host.window.frame = CGRect(origin: .zero, size: original)
+        host.window.setContentSize(original)
         host.settle(root, state: start)
         let found = mismatches(root.chromeLayout(for: start), freshLayout(for: start))
         XCTAssertTrue(found.isEmpty,

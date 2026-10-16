@@ -40,10 +40,8 @@ final class ChromeInvariantTests: XCTestCase {
             pillCorner: CGPoint(x: 18, y: 12),
             editorContent: content,
             reserveTop: band.maxY,
-            safeLeading: 0,
             // The first area header sits just below the chrome floor.
             libraryFirstHeaderTop: sidebar ? band.maxY + 4 : nil,
-            activeChip: CGRect(x: 350, y: 20, width: 140, height: 40),
             activeTabLabel: label,
             activeTabUnderline: CGRect(x: label.minX, y: label.maxY + 5,
                                        width: label.width, height: 2),
@@ -72,13 +70,13 @@ final class ChromeInvariantTests: XCTestCase {
             editorContent: CGRect(x: panel?.maxX ?? 0, y: 0,
                                   width: 1000 - (panel?.maxX ?? 0), height: 800),
             reserveTop: 52,
-            safeLeading: 0,
             libraryFirstHeaderTop: sidebar ? 56 : nil)
     }
 
+    /// Fails on an unknown name, so a retired rule cannot leave a test that
+    /// passes while asserting nothing.
     private func check(_ name: String, _ layout: ChromeLayout) -> Bool {
-        let invariant = ChromeInvariant.catalogue.first { $0.name == name }
-        return invariant.map { $0.holds(layout) } ?? false
+        rule(name).holds(layout)
     }
 
     private func rule(_ name: String) -> ChromeInvariant {
@@ -121,10 +119,10 @@ final class ChromeInvariantTests: XCTestCase {
         XCTAssertFalse(check("bandPaintStaysInsideTheBand", layout))
     }
 
-    func testChipsStartAtTheEditorColumnFailsWhenTheyOverlapTheLibrary() {
+    func testNameRowClearsTheLibraryFailsWhenTheNamesOverlapIt() {
         var layout = healthy()
         layout.tabStrip = CGRect(x: 100, y: 20, width: 400, height: 40)
-        XCTAssertFalse(check("chipsClearTheLibrary", layout))
+        XCTAssertFalse(check("nameRowClearsTheLibrary", layout))
     }
 
     func testRestingLineFailsWhenItDoesNotClearTheReserve() {
@@ -164,12 +162,6 @@ final class ChromeInvariantTests: XCTestCase {
         layout = healthy()
         layout.editorContent.size.width -= 30 // short of the trailing edge
         XCTAssertFalse(check("editorContentFillsTheColumn", layout))
-    }
-
-    func testActiveChipRuleFailsWhenTheChipMissesThePanelTop() {
-        var layout = healthy()
-        layout.activeChip?.origin.y += 5
-        XCTAssertFalse(check("activeChipTopMeetsThePanelTop", layout))
     }
 
     /// A header above the titlebar floor is a header sliding under the chrome.

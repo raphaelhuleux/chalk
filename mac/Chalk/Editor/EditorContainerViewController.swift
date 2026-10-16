@@ -58,8 +58,6 @@ final class EditorContainerViewController: NSViewController {
     /// slide; see `freezeContentWidth()`.
     private var contentLeading: NSLayoutConstraint?
     private var frozenContentWidth: NSLayoutConstraint?
-    /// Top clearance under the host's tab band; see `setTopClearance`.
-    private var contentTop: NSLayoutConstraint?
 
     // MARK: Outline panel
 
@@ -83,15 +81,6 @@ final class EditorContainerViewController: NSViewController {
     private var outlinePanelTrailing: NSLayoutConstraint?
     private var contentTrailingToEdge: NSLayoutConstraint?
     private var contentTrailingToPanel: NSLayoutConstraint?
-
-    /// The host names the exact band height to clear.
-    func setTopClearance(_ clearance: CGFloat) {
-        guard let contentTop, abs(contentTop.constant - clearance) > 0.5 else { return }
-        contentTop.constant = clearance
-    }
-
-    /// The content's real top edge. Overlay covers must use it.
-    var topClearance: CGFloat { contentTop?.constant ?? 0 }
 
     /// Fired when the open tabs change so the host can redraw the strip.
     var onTabsChanged: (([TabItem]) -> Void)?
@@ -187,14 +176,12 @@ final class EditorContainerViewController: NSViewController {
 
         let leading = contentView.leadingAnchor.constraint(equalTo: view.leadingAnchor)
         contentLeading = leading
-        // Top pins to the raw top plus the host's clearance (`setTopClearance`): the editor runs
-        // full-bleed under the transparent titlebar with the resting offset done web-side.
-        let top = contentView.topAnchor.constraint(equalTo: view.topAnchor)
-        contentTop = top
+        // The editor runs full-bleed under the transparent titlebar; the resting offset is done
+        // web-side (`setChromeTopInset`).
         let trailingToEdge = contentView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         contentTrailingToEdge = trailingToEdge
         NSLayoutConstraint.activate([
-            top,
+            contentView.topAnchor.constraint(equalTo: view.topAnchor),
             leading,
             trailingToEdge,
             contentView.bottomAnchor.constraint(equalTo: view.bottomAnchor),

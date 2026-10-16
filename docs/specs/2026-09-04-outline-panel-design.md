@@ -50,7 +50,7 @@ The palette stays as it is: ⌘P, the footer pill and the iPad swipe are unchang
 ## 1. Layout and geometry
 
 `OutlinePanelViewController` is a child of `EditorContainerViewController`.
-It is pinned to the container's trailing safe-area edge and runs the full height of the column below the band, using the same top clearance the content view gets from `setTopClearance`.
+It is pinned to the container's trailing safe-area edge and runs the full height of the column below the band, full-bleed to the top like the content view.
 
 Two modes, chosen from the container width at layout time:
 

@@ -49,8 +49,8 @@ public struct BuildInfo {
         return "macOS \(number)"
     }
 
-    /// The device class, never the device name: `UIDevice.name` is the user's
-    /// own words and has no place in a report.
+    /// The device class, never the computer's name: that is the user's own
+    /// words and has no place in a report.
     private static var model: String {
         return "Mac"
     }

@@ -110,9 +110,7 @@ final class ChromeInvariantMatrixTests: XCTestCase {
                         panel=\(String(describing: layout.libraryPanel)) \
                         chips=\(layout.tabStrip) resting=\(layout.editorRestingTop)
                           pill=\(layout.footerPill) corner=\(layout.pillCorner) \
-                        content=\(layout.editorContent) reserve=\(layout.reserveTop) \
-                        safeLeading=\(layout.safeLeading)
-                          chip=\(String(describing: layout.activeChip))
+                        content=\(layout.editorContent) reserve=\(layout.reserveTop)
                         """)
                 }
             }

@@ -51,7 +51,7 @@ final class SidebarTreeTopTests: XCTestCase {
     /// the same pass. The resize is what makes a scroll view re-anchor.
     private func apply(treeTop: CGFloat, height: CGFloat,
                        to sidebar: SidebarViewController, _ window: NSWindow) {
-        window.frame = CGRect(x: 0, y: 0, width: window.frame.width, height: height)
+        window.setContentSize(CGSize(width: window.contentView!.frame.width, height: height))
         hostTreeTop(treeTop, on: sidebar)
         settleSidebar(sidebar, window)
     }

@@ -4,9 +4,8 @@ import CoreGraphics
 /// which one shows.
 ///
 /// The raw value is the persisted preference and the page's `data-palette` attribute, whose blocks
-/// in web/src/chalk-theme.css must agree with `palette` (`PaletteParityTests`). This file is
-/// compiled into the AppKit glue as well (mac/project.yml), so the titlebar paints from the same
-/// definition. Keep it Foundation/CoreGraphics only.
+/// in web/src/chalk-theme.css must agree with `palette` (`PaletteParityTests`). Keep it
+/// Foundation/CoreGraphics only so `swift test` reaches it.
 public enum ChalkTheme: String, CaseIterable, Sendable {
     case ink, atom, catppuccin, latex
 
@@ -95,7 +94,7 @@ public struct ThemePalette: Equatable, Sendable {
     /// The tertiary and quaternary chrome tiers' base.
     public var chromeFgDim: HexPair
 
-    // The tab row, painted by both the UIKit strip and the AppKit titlebar.
+    // The tab row.
     public var tabLabelActive: HexPair
     public var tabLabelInactive: HexPair
     /// Folder-prefix run, shown only when two open tabs share a filename.

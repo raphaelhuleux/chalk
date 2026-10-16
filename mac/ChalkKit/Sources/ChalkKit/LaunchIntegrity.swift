@@ -21,8 +21,9 @@ public enum LaunchVerdict: Equatable, Sendable {
 ///
 /// - `UserDefaults` flushes asynchronously. Do **not** add `synchronize()`:
 ///   deprecated, blocks the main thread, on every foreground.
-/// - One of several windows closing calls `markClean`. A counter would leak
-///   positive on any unbalanced disconnect and cry crash forever.
+/// - A force quit between the last `markForeground` and the flush reads as
+///   clean. A counter of live windows would leak positive on any unbalanced
+///   close and cry crash forever, so one marker it stays.
 ///
 /// `RecoveryStore` residue corroborates but cannot trigger: a crash with no
 /// dirty buffers leaves none.
@@ -40,7 +41,7 @@ public final class LaunchIntegrity {
     }
 
     /// Read the previous session's verdict and clear the marker. Call once,
-    /// from `didFinishLaunching`, before any scene connects. Clearing (not
+    /// from `applicationDidFinishLaunching`, before any window opens. Clearing (not
     /// arming) stops a windowless quit reading as a crash, and one crash being
     /// reported at every later launch.
     public func beginSession() -> LaunchVerdict {
@@ -54,14 +55,12 @@ public final class LaunchIntegrity {
         return verdict
     }
 
-    /// A window is on screen. Call from `sceneWillEnterForeground` and
-    /// `sceneDidBecomeActive`; both, because either can be the one that runs.
+    /// A window is on screen. Call from `applicationDidBecomeActive`.
     public func markForeground() {
         defaults.set(build, forKey: key)
     }
 
-    /// An orderly exit from the foreground. Call from `sceneDidEnterBackground`
-    /// and `applicationWillTerminate`.
+    /// An orderly exit. Call from `applicationWillTerminate`.
     public func markClean() {
         defaults.set("", forKey: key)
     }

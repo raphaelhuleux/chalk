@@ -14,8 +14,8 @@
 # signs with a real identity and keeps the dSYMs.
 #
 # Three things here are not decoration. Each one has cost a day:
-#   - never `codesign --deep` over an already-signed bundle (learned on the
-#     Catalyst build's nested glue bundle; a Debug build still nests ChalkTests)
+#   - never `codesign --deep` over an already-signed bundle (a Debug build
+#     nests ChalkTests)
 #   - never sign this with entitlements
 #   - never ditto over a bundle that is still there
 # The comments at each step say why.

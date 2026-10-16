@@ -16,16 +16,16 @@ extension ThemePreference {
 /// widths in iPad-idiom points (1/0.77 of a Mac point) under the original keys; a first read with
 /// no AppKit value converts the Catalyst one, so an upgrade keeps the column where it was.
 extension Preferences {
-    private static let sidebarWidthKey = "chalk.sidebarWidth.appkit"
-    private static let outlinePanelWidthKey = "chalk.outlinePanelWidth.appkit"
+    /// Internal so the test hosts snapshot and restore the real keys.
+    static let sidebarWidthKey = "chalk.sidebarWidth.appkit"
+    static let outlinePanelWidthKey = "chalk.outlinePanelWidth.appkit"
     private static let catalystSidebarWidthKey = "chalk.sidebarWidth"
     private static let catalystOutlinePanelWidthKey = "chalk.outlinePanelWidth"
     /// The Catalyst shell's idiom scale, for the one-time conversion.
     private static let catalystDisplayScale = 1 / 0.77
 
     /// Bounds for the resizable Library column and the outline panel.
-    static let sidebarWidthRange: ClosedRange<CGFloat> =
-        CGFloat(ChromeMetrics.sidebarWidthRange.lowerBound)...CGFloat(ChromeMetrics.sidebarWidthRange.upperBound)
+    static let sidebarWidthRange = ChalkMetrics.sidebarWidthRange
 
     /// Last-used Library column width. Clamped on read and write so a stale value can never wedge
     /// the column.
@@ -51,6 +51,6 @@ extension Preferences {
             let catalyst = UserDefaults.standard.double(forKey: catalystKey)
             if catalyst > 0 { setStoredDouble(catalyst / catalystDisplayScale, key, in: widthRange) }
         }
-        return CGFloat(storedDouble(key, default: ChromeMetrics.sidebarWidth, in: widthRange))
+        return CGFloat(storedDouble(key, default: Double(ChalkMetrics.sidebarWidth), in: widthRange))
     }
 }

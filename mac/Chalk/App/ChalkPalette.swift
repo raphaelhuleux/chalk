@@ -171,9 +171,9 @@ extension NSColor {
 extension NSFont {
     /// Synthetic oblique for the preview-tab cue. No IBM Plex Mono italic face is bundled (three
     /// weights, no slant), and swapping to the system italic mono would change family mid-strip,
-    /// so slant the upright face by `TabStripMetrics.obliqueSlant` instead.
+    /// so slant the upright face by `ChalkMetrics.obliqueSlant` instead.
     static func chalkObliqueTransform() -> AffineTransform {
-        AffineTransform(m11: 1, m12: 0, m21: TabStripMetrics.obliqueSlant, m22: 1, tX: 0, tY: 0)
+        AffineTransform(m11: 1, m12: 0, m21: ChalkMetrics.obliqueSlant, m22: 1, tX: 0, tY: 0)
     }
 
     /// IBM Plex Mono (spec: --font-editor) with a system-mono fallback so a missing font never
@@ -206,7 +206,7 @@ extension NSFont {
         // 1pt font for a bundled face under a unit shear and squares the size
         // under a sized one, while a descriptor `.matrix` beside a size
         // reports 1pt too (TabLabelFontTests pins the size and the shear).
-        var shear = CGAffineTransform(a: 1, b: 0, c: TabStripMetrics.obliqueSlant, d: 1, tx: 0, ty: 0)
+        var shear = CGAffineTransform(a: 1, b: 0, c: ChalkMetrics.obliqueSlant, d: 1, tx: 0, ty: 0)
         return CTFontCreateCopyWithAttributes(upright as CTFont, size, &shear, nil) as NSFont
     }
 }

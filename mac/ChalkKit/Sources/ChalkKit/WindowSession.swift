@@ -1,6 +1,6 @@
 import Foundation
 
-/// A window's restorable state, carried in the scene's `NSUserActivity`.
+/// A window's restorable state, carried in the `WindowSessionJournal`.
 /// The caller excludes drafts: they die with the window (no autosave).
 public struct WindowSession: Codable, Equatable {
     public struct TabRecord: Codable, Equatable {

@@ -72,7 +72,7 @@ final class EditorContainerRecoveryDrainTests: XCTestCase {
         XCTAssertEqual(pending.first?.text, "draft text\n")
     }
 
-    /// M-4: a per-scene drain claims only records matching its own tabs; a
+    /// M-4: a per-window drain claims only records matching its own tabs; a
     /// record belonging to no tab of this window stays put for its owning
     /// window (or the deferred leftover drain, which then picks it up).
     func testOwnTabsOnlyDrainLeavesUnclaimedRecordsForLeftoverPass() throws {
@@ -114,7 +114,7 @@ final class EditorContainerRecoveryDrainTests: XCTestCase {
 
     /// M-5: a record stamped by the RUNNING launch is a live window's timer
     /// snapshot of currently-dirty state, not crash residue. A mid-session
-    /// drain (a new scene connecting via "Open in New Window") must leave it
+    /// drain (a new window opened via "Open in New Window") must leave it
     /// alone — layering it would resurrect seconds-old text as phantom edits.
     func testDrainSkipsRecordsStampedByTheCurrentLaunch() throws {
         let url = try writeTempFile(name: "live.md", contents: "disk\n")

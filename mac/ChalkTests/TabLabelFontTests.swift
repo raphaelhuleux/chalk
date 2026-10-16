@@ -16,9 +16,7 @@ import XCTest
 /// Nothing caught it, because a font matrix produces no error — just a wrong
 /// number that only shows up on screen. These assertions are the cheap check
 /// that was missing: the slanted font is still the size we asked for, and it
-/// still measures text. The AppKit half cannot be reached from here (it is a
-/// macOS bundle); it shears the same `TabStripMetrics.obliqueSlant` through
-/// AppKit's `.obliqueness` and is pinned by the ChalkKit `TabStripFitTests`.
+/// still measures text.
 @MainActor
 final class TabLabelFontTests: XCTestCase {
     private let size = ChalkMetrics.tabFontSize

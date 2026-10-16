@@ -6,7 +6,7 @@ import ChalkKit
 /// spare the width, overlay once the text would fall below the floor.
 @MainActor
 final class OutlinePanelLayoutTests: XCTestCase {
-    private static let widthKey = "chalk.outlinePanelWidth.appkit"
+    private static let widthKey = Preferences.outlinePanelWidthKey
     private var savedWidth: Any?
     private var windows: [NSWindow] = []
 
@@ -69,7 +69,7 @@ final class OutlinePanelLayoutTests: XCTestCase {
         container.setOutlinePanelVisible(true, animated: false)
         container.view.layoutSubtreeIfNeeded()
         XCTAssertFalse(container.outlinePanelIsOverlay)
-        window.frame = CGRect(x: 0, y: 0, width: 600, height: 800)
+        window.setContentSize(CGSize(width: 600, height: 800))
         window.layoutIfNeeded()
         container.view.layoutSubtreeIfNeeded()
         XCTAssertTrue(container.outlinePanelIsOverlay)
@@ -107,7 +107,7 @@ final class OutlinePanelLayoutTests: XCTestCase {
         container.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(container.activeContentTrailingPinForTesting, "panel", "wide column pushes")
 
-        window.frame = CGRect(x: 0, y: 0, width: 600, height: 800)
+        window.setContentSize(CGSize(width: 600, height: 800))
         window.layoutIfNeeded()
         container.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(container.activeContentTrailingPinForTesting, "edge", "narrowed past the floor")
@@ -129,7 +129,7 @@ final class OutlinePanelLayoutTests: XCTestCase {
         XCTAssertEqual(container.activeContentTrailingPinForTesting, "panel")
 
         container.freezeContentWidth()
-        window.frame = CGRect(x: 0, y: 0, width: 600, height: 800)
+        window.setContentSize(CGSize(width: 600, height: 800))
         window.layoutIfNeeded()
         container.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(container.activeContentTrailingPinForTesting, "panel",

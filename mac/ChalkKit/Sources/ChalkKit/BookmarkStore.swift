@@ -34,7 +34,7 @@ public final class BookmarkStore {
         key = ""
     }
 
-    /// A store that never touches UserDefaults: for windows built outside a scene (tests), which must
+    /// A store that never touches UserDefaults: for windows built outside the app (tests), which must
     /// not write the installed app's bookmarks.
     public static func inMemory() -> BookmarkStore { BookmarkStore() }
 

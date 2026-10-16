@@ -18,8 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   log show --last 5m --predicate 'subsystem == "com.huleux.chalk"'
     private static let log = Logger(subsystem: "com.huleux.chalk", category: "app")
 
-    /// Per-window state lines (what each window holds), on the category the
-    /// Catalyst scene delegate used so the log queries stay the same.
+    /// Per-window state lines (what each window holds). The category predates
+    /// this shell; kept so `log show` queries stay the same.
     private static let stateLog = Logger(subsystem: "com.huleux.chalk", category: "scene")
 
     /// The app's one Settings window, made on first use and kept.
@@ -56,7 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a previous run would break it.
     static var isRestorationDisabled: Bool {
         let env = ProcessInfo.processInfo.environment
-        return env["CHALK_DISABLE_RESTORATION"] != nil || env["CHALK_AUDIT_STATE"] != nil
+        #if DEBUG
+        if env["CHALK_AUDIT_STATE"] != nil { return true }
+        #endif
+        return env["CHALK_DISABLE_RESTORATION"] != nil
     }
 
     // MARK: - Launch
@@ -86,16 +89,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         restoreWindows()
         if editorWindows.isEmpty {
-            // The priorities live in `SceneLaunchPolicy` (ChalkKit, unit-tested):
-            // the first window gets Welcome, a cold Finder open gets an empty
-            // window for its file rather than Welcome-plus-file.
-            let content = SceneLaunchPolicy.initialContent(
-                restoredSession: nil,
-                isNewWindowRequest: false,
-                hasURLContexts: !pendingExternalURLs.isEmpty,
-                isFirstApplicationScene: true,
-                isRestorationDisabled: Self.isRestorationDisabled)
-            openNewWindow(initialContent: content)
+            // A cold Finder open gets an empty window for its file rather than
+            // Welcome-plus-file; the audit harness assumes Welcome.
+            let coldOpen = !pendingExternalURLs.isEmpty && !Self.isRestorationDisabled
+            openNewWindow(initialContent: coldOpen ? .openEmpty : .openWelcome)
         }
         didFinishLaunching = true
         if !pendingExternalURLs.isEmpty {
@@ -207,13 +204,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Windows
 
-    /// This shell's window ids, so its Locations sweep never reaches the
-    /// Catalyst shell's scene-keyed lists once the two share a defaults domain.
+    /// This shell's window ids. The Locations sweep stays off the Catalyst
+    /// shell's scene-keyed lists, which shared this defaults domain and are
+    /// read once by the seed below.
     static let windowIDPrefix = "mac-"
 
     @discardableResult
     func openNewWindow(windowID: String = AppDelegate.windowIDPrefix + UUID().uuidString,
-                       initialContent: SceneConnectContent = .openWelcome,
+                       initialContent: WindowContent = .openWelcome,
                        frame: NSRect? = nil,
                        isRestored: Bool = false) -> EditorWindowController {
         // The first window of this shell over a Catalyst install: the Library

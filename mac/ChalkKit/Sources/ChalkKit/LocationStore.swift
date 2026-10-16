@@ -32,7 +32,7 @@ public final class LocationStore {
         self.bookmarks = bookmarks
     }
 
-    /// For a window built outside a scene (tests): nothing is read from or written to UserDefaults.
+    /// For a window built outside the app (tests): nothing is read from or written to UserDefaults.
     public static func detached() -> LocationStore { LocationStore(bookmarks: .inMemory()) }
 
     /// Records that fail to resolve or grant no access are flagged `needsReauthorization` and never

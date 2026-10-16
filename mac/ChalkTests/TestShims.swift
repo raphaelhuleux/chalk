@@ -1,11 +1,10 @@
 import AppKit
 import ChalkKit
 
-/// The hosted-test window, and the handful of UIKit-named conveniences the
-/// ported suites read (`isHidden`, `rootViewController`, `layoutIfNeeded`),
-/// so a test reads the same on both shells. The window is a real titled,
-/// full-size-content window like the app's; `isReleasedWhenClosed` is off
-/// because the tests hold the reference.
+/// The hosted-test window, and the short names the suites read it through
+/// (`isHidden`, `rootViewController`, `layoutIfNeeded`). The window is a real
+/// titled, full-size-content window like the app's; `isReleasedWhenClosed`
+/// is off because the tests hold the reference.
 extension NSWindow {
     static func hostedForTesting(frame: CGRect) -> NSWindow {
         let window = NSWindow(
@@ -47,12 +46,6 @@ extension NSWindow {
 
     func setNeedsLayout() {
         contentView?.needsLayout = true
-    }
-
-    /// Resize the content, the way the Catalyst tests set `window.frame`.
-    var frame: CGRect {
-        get { contentView?.frame ?? .zero }
-        set { setContentSize(newValue.size) }
     }
 }
 

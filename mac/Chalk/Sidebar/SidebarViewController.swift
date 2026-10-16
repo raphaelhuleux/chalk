@@ -1567,8 +1567,7 @@ extension SidebarViewController {
     }
 
     /// The rows of one Location, in display order, including rows under
-    /// expanded folders. Index paths read `(item, section)` like the Catalyst
-    /// suites did, so a ported test keeps its shape.
+    /// expanded folders, addressed as `(item, section)`.
     func rowsForTesting(inSection section: Int) -> [FileNode] {
         guard section < sections.count else { return [] }
         var rows: [FileNode] = []

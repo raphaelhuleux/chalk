@@ -26,7 +26,7 @@ final class HeaderBarView: FlippedView {
     private var measuredRestingStart: CGFloat = ChalkMetrics.tabStripLeading
 
     /// Where the names start with no Library tiled: the traffic lights'
-    /// trailing edge plus `TabStripMetrics.trafficLightGap`, read off the
+    /// trailing edge plus `ChalkMetrics.trafficLightGap`, read off the
     /// window's own zoom button rather than the spec constant, which was
     /// measured on a short titlebar and sits 16pt short under the unified
     /// one. Measured only while the button shows: full screen hides the
@@ -35,7 +35,7 @@ final class HeaderBarView: FlippedView {
         if let zoom = window?.standardWindowButton(.zoomButton), !zoom.isHidden,
            let container = zoom.superview {
             let edge = convert(zoom.frame, from: container).maxX
-            if edge > 0 { measuredRestingStart = edge + TabStripMetrics.trafficLightGap }
+            if edge > 0 { measuredRestingStart = edge + ChalkMetrics.trafficLightGap }
         }
         return measuredRestingStart
     }
@@ -76,8 +76,7 @@ final class HeaderBarView: FlippedView {
             stripLeading,
             stripTrailing,
             // The row is centred on the band: the traffic lights sit on the
-            // titlebar's centre line and the names must share it, which is
-            // where the Catalyst glue placed its strip too. Bottom-anchoring
+            // titlebar's centre line and the names must share it. Bottom-anchoring
             // read 3pt low under the 52pt unified titlebar. Whatever the band
             // gains above and below the row stays backdrop-only; where the
             // band is the row's own height (full screen) the two coincide.

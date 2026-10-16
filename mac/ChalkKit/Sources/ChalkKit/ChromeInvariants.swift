@@ -35,9 +35,9 @@ public struct ChromeInvariant: Sendable {
     }
 
     private static let epsilon: CGFloat = 0.5
-    /// For comparisons across measurement sources (live frame vs constant, or
-    /// lengths through the Catalyst 1/0.77 scale): residuals are ~0.6pt
-    /// (FooterPillPlacementTests), real defects 5pt and worse.
+    /// For comparisons across measurement sources (live frame vs constant):
+    /// residuals are under 1pt (FooterPillPlacementTests), real defects 5pt
+    /// and worse.
     private static let crossSourceEpsilon: CGFloat = 1.0
 
     private static func hasLibrary(_ layout: ChromeLayout) -> Bool {
@@ -48,10 +48,10 @@ public struct ChromeInvariant: Sendable {
         layout.outlinePanel != nil
     }
 
-    /// The UIKit tab band is actually hosted in this state.
+    /// The tab band is actually hosted in this state.
     ///
-    /// A hidden band (windowed, zen) reports `.zero` for `band`,
-    /// `bandPaint` and `tabStrip`, so band-shape rules would fail spuriously.
+    /// A hidden band (zen) reports `.zero` for `band`, `bandPaint` and
+    /// `tabStrip`, so band-shape rules would fail spuriously.
     private static func bandIsHosted(_ layout: ChromeLayout) -> Bool {
         !layout.band.isEmpty
     }
@@ -187,7 +187,7 @@ public struct ChromeInvariant: Sendable {
                     let gap = layout.editorContent.minX - panel.maxX
                     leading = gap > -crossSourceEpsilon && gap < 2 + epsilon
                 } else {
-                    leading = abs(layout.editorContent.minX - layout.root.minX - layout.safeLeading) < crossSourceEpsilon
+                    leading = abs(layout.editorContent.minX - layout.root.minX) < crossSourceEpsilon
                 }
                 return trailing && leading
             }),
@@ -214,11 +214,7 @@ public struct ChromeInvariant: Sendable {
             isFalsifiable: { ($0.libraryPanel.map { !$0.isEmpty }) ?? false },
             holds: { layout in
                 guard let panel = layout.libraryPanel else { return true }
-                // Leading: the window edge, or the safe inset where the system
-                // reserves one (Catalyst's column overhang).
-                let leadingGap = panel.minX - layout.root.minX
-                return leadingGap > -crossSourceEpsilon
-                    && leadingGap < layout.safeLeading + crossSourceEpsilon
+                return abs(panel.minX - layout.root.minX) < crossSourceEpsilon
                     && abs(panel.minY - layout.root.minY) < crossSourceEpsilon
                     && abs(panel.maxY - layout.root.maxY) < crossSourceEpsilon
             }),

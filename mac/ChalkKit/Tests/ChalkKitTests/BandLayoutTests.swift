@@ -12,10 +12,10 @@ final class BandLayoutTests: XCTestCase {
         editorRestingPad: 27)
 
     private func resolve(
-        glue: Bool = true, fullscreen: Bool = false,
+        fullscreen: Bool = false,
         zen: Bool = false, safeAreaTop: CGFloat, lastReal: CGFloat = 44, dividerX: CGFloat = 0
     ) -> BandLayout.Result {
-        BandLayout.resolve(glueAvailable: glue, fullscreen: fullscreen,
+        BandLayout.resolve(fullscreen: fullscreen,
                            zen: zen, safeAreaTop: safeAreaTop, lastRealBandHeight: lastReal,
                            dividerX: dividerX, metrics: metrics)
     }
@@ -24,8 +24,8 @@ final class BandLayoutTests: XCTestCase {
     /// alone, because the band it used to clear is no longer on screen.
     func testZenReclaimsTheBand() {
         XCTAssertEqual(resolve(zen: true, safeAreaTop: 52).editorChromeTopInset, 79)
-        // Full screen: the glue hid the system chrome too, so nothing at all
-        // reserves and the text rests on the breathing pad alone.
+        // Full screen: no system chrome either, so nothing at all reserves
+        // and the text rests on the breathing pad alone.
         XCTAssertEqual(
             resolve(fullscreen: true, zen: true, safeAreaTop: 0).editorChromeTopInset, 27)
     }
@@ -49,10 +49,6 @@ final class BandLayoutTests: XCTestCase {
         XCTAssertEqual(resolve(safeAreaTop: 0, lastReal: 44).recordedBandHeight, 44)
         XCTAssertEqual(
             resolve(fullscreen: true, safeAreaTop: 99, lastReal: 44).recordedBandHeight, 44)
-        // No glue: the app's own band is folded into the safe area, so reading
-        // it back would feed the band into itself.
-        XCTAssertEqual(resolve(glue: false, safeAreaTop: 52, lastReal: 44)
-            .recordedBandHeight, 44)
     }
 
     /// The band never moves: it spans the whole window so its paint can run
@@ -65,24 +61,5 @@ final class BandLayoutTests: XCTestCase {
             300 + 14 - 78)
         // No tiled Library: the chips return to their own gutter.
         XCTAssertEqual(resolve(fullscreen: true, safeAreaTop: 0).chipLeadingInset, 0)
-    }
-
-    /// Which chrome is the tab UI: the UIKit band only in full screen, where
-    /// the glue hides the system toolbar. The windowed row is the AppKit
-    /// titlebar strip, so the band owns nothing.
-    func testTheBandOwnsTheTabRowOnlyInFullScreen() {
-        XCTAssertFalse(resolve(safeAreaTop: 52).bandOwnsTabRow)
-        XCTAssertTrue(resolve(fullscreen: true, safeAreaTop: 0).bandOwnsTabRow)
-    }
-
-    /// H-6: with the AppKit bundle missing there is no titlebar strip at all,
-    /// so the opaque UIKit band is the tab UI — the editor keeps the old
-    /// below-the-band clearance and the stylesheet's own resting padding.
-    func testTheNoGlueFallbackClearsTheBandInsteadOfRunningUnderIt() {
-        let fallback = resolve(glue: false, safeAreaTop: 52)
-        XCTAssertEqual(fallback.editorTopClearance, 52)
-        XCTAssertNil(fallback.editorChromeTopInset)
-        // Everywhere else the editor runs full-bleed under the chrome.
-        XCTAssertEqual(resolve(safeAreaTop: 52).editorTopClearance, 0)
     }
 }

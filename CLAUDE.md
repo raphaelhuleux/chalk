@@ -7,7 +7,7 @@ VS Code extension in [vscode/](vscode/), shared engine in
 Mac Catalyst to AppKit in October 2026
 ([docs/specs/2026-10-15-appkit-shell-rewrite-plan.md](docs/specs/2026-10-15-appkit-shell-rewrite-plan.md));
 anything UIKit-free lives in ChalkKit, and the shell's spec chrome tokens are
-`ChromeMetrics` in Mac points.
+`ChalkMetrics` in Mac points.
 
 ## Architecture: one engine, two hosts, two seams
 

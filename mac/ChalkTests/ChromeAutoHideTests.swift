@@ -126,7 +126,7 @@ final class ChromeAutoHideTests: XCTestCase {
         }
     }
 
-    /// Settings lives in its own scene: flipping the switch must reach every
+    /// Settings lives in its own window: flipping the switch must reach every
     /// open window, and a window whose chrome is currently hidden must get it
     /// back rather than wait for the reader to scroll up.
     func testTurningPreferenceOffRevealsHiddenChromeLive() {

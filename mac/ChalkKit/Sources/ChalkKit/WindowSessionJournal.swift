@@ -31,11 +31,10 @@ public struct WindowRecord: Codable, Equatable {
     }
 }
 
-/// The AppKit shell's own window restoration. AppKit's `NSWindowRestoration`
-/// only runs when the user's "Close windows when quitting an application"
-/// setting is off, which it is not by default, while the Catalyst shell
-/// brought every window back on relaunch; this journal keeps that promise.
-/// Written whenever the set of windows or the app's activity changes, read
+/// The app's own window restoration. AppKit's `NSWindowRestoration` only runs
+/// when the user's "Close windows when quitting an application" setting is
+/// off, which it is not by default; this journal brings every window back
+/// regardless. Written whenever the set of windows or the app's activity changes, read
 /// once at launch. A window the user closes leaves it; a quit keeps every
 /// window in it.
 public final class WindowSessionJournal {

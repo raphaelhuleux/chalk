@@ -38,12 +38,8 @@ final class FooterPillPlacementTests: XCTestCase {
     /// does (Y-17).
     func testPillRestsInTheWindowsCornerNotAboveTheSafeArea() {
         let margin = ChalkMetrics.footerPillMargin
-        // 1.0, not 0.5. Every length is a spec value multiplied by 1/0.77
-        // and then aligned to the pixel grid, so a constant of 15.584 lands at
-        // 15.0 and the exact arithmetic can never be met. Measured, not
-        // guessed: the residual is 0.58pt. The failures this file exists to
-        // catch were 7pt and worse, so 1.0 still falsifies a real misplacement.
-        let tolerance: CGFloat = ChalkMetrics.displayScale > 1 ? 1.0 : 0.5
+        // The failures this file exists to catch were 7pt and worse.
+        let tolerance: CGFloat = 0.5
         let pill = root.footerPillFrameForTesting
 
         XCTAssertEqual(pill.maxY, root.view.bounds.height - margin, accuracy: tolerance,

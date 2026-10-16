@@ -3,8 +3,8 @@ import AppKit
 import ChalkKit
 
 /// Debug-only fixtures and named UI states, picked with CHALK_AUDIT_STATE
-/// (usage in docs/ui-correctness.md). The fixtures match the Catalyst
-/// shell's `AuditMode` byte for byte, so the two shells' shots compare.
+/// (usage in docs/ui-correctness.md). The fixtures are fixed text so shots
+/// taken on different days compare.
 enum AuditMode {
     static var requestedState: String? {
         ProcessInfo.processInfo.environment["CHALK_AUDIT_STATE"]

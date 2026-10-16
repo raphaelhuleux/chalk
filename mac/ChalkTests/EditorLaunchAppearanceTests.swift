@@ -44,8 +44,7 @@ final class EditorLaunchAppearanceTests: XCTestCase {
         let detached = try XCTUnwrap(container.activeSurfaceDesiredDarkForTesting)
 
         // Host it under the OPPOSITE style. What the detached read produces is
-        // the system's business (Catalyst answers with the Mac's own
-        // appearance); what matters is that the window disagrees
+        // the system's business; what matters is that the window disagrees
         // with it, so the assertion below can fail.
         window.appearance = NSAppearance(named: detached ? .aqua : .darkAqua)
         window.rootViewController = container

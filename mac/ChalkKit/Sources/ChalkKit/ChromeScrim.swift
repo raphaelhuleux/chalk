@@ -1,9 +1,7 @@
 import CoreGraphics
 
-/// The wash a palette lays over the window behind it.
-///
-/// A UIKit scrim cannot reach the AppKit titlebar, so the windowed Mac strip
-/// dims itself with this same definition, compiled into the glue.
+/// The wash a palette lays over the window behind it, including the tab
+/// strip, which dims itself from this same definition.
 ///
 /// Warm, because a grey wash over the warm paper reads as dirty; dark needs
 /// more alpha to separate two dark surfaces.

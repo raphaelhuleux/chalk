@@ -44,9 +44,6 @@ public struct ChromeLayout: Equatable, Sendable {
     /// computed from the same expression as `editorRestingTop`, or the
     /// resting-line rule collapses into a tautology.
     public var reserveTop: CGFloat
-    /// The root's left safe-area inset: where content may begin when no
-    /// Library column pushes it further in.
-    public var safeLeading: CGFloat
     /// The top of the Library's first row, in root coordinates. Nil when the
     /// Library is closed or empty.
     public var libraryFirstRowTop: CGFloat?
@@ -55,8 +52,6 @@ public struct ChromeLayout: Equatable, Sendable {
     public var libraryFirstHeaderTop: CGFloat?
     /// The Library list's scroll offset. Nil when the Library is closed.
     public var libraryScrollOffset: CGFloat?
-    /// The ACTIVE tab's frame, nil when no tab is active (or no row hosted).
-    public var activeChip: CGRect?
     /// The active tab's label and its accent underline, in root coordinates.
     public var activeTabLabel: CGRect?
     public var activeTabUnderline: CGRect?
@@ -80,11 +75,9 @@ public struct ChromeLayout: Equatable, Sendable {
                 pillCorner: CGPoint = .zero,
                 editorContent: CGRect = .zero,
                 reserveTop: CGFloat = 0,
-                safeLeading: CGFloat = 0,
                 libraryFirstRowTop: CGFloat? = nil,
                 libraryFirstHeaderTop: CGFloat? = nil,
                 libraryScrollOffset: CGFloat? = nil,
-                activeChip: CGRect? = nil,
                 activeTabLabel: CGRect? = nil,
                 activeTabUnderline: CGRect? = nil,
                 outlinePanel: CGRect? = nil,
@@ -106,11 +99,9 @@ public struct ChromeLayout: Equatable, Sendable {
         self.pillCorner = pillCorner
         self.editorContent = editorContent
         self.reserveTop = reserveTop
-        self.safeLeading = safeLeading
         self.libraryFirstRowTop = libraryFirstRowTop
         self.libraryFirstHeaderTop = libraryFirstHeaderTop
         self.libraryScrollOffset = libraryScrollOffset
-        self.activeChip = activeChip
         self.activeTabLabel = activeTabLabel
         self.activeTabUnderline = activeTabUnderline
         self.outlinePanel = outlinePanel

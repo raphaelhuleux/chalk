@@ -1,8 +1,8 @@
 import Foundation
 
-/// Each window keeps its own Location list, stored under a key derived from its scene session's
-/// persistent identifier. UserDefaults rather than the restoration activity: the OS captures that only
-/// when the scene backgrounds, so a folder added just before a crash would be lost.
+/// Each window keeps its own Location list, stored under a key derived from its window id.
+/// UserDefaults rather than the window journal: written on every change, so a folder added just
+/// before a crash is kept.
 public enum WindowLocations {
     /// The app-wide list from before Locations were per window. Read for migration, never written or
     /// deleted: an older build reading the same domain still finds it.

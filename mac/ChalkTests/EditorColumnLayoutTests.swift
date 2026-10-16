@@ -2,8 +2,8 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// The editor column's content geometry: the text spans the column, and its
-/// top obeys the host's explicit band clearance and nothing else.
+/// The editor column's content geometry: the text spans the column and runs
+/// full-bleed to its top.
 final class EditorColumnLayoutTests: XCTestCase {
     private var window: NSWindow!
     private var editor: EditorContainerViewController!
@@ -25,15 +25,9 @@ final class EditorColumnLayoutTests: XCTestCase {
         super.tearDown()
     }
 
-    func testContentTopFollowsTheBandClearance() {
-        editor.setTopClearance(47)
-        window.layoutIfNeeded()
-        XCTAssertEqual(editor.contentViewFrameForTesting.minY, 47, accuracy: 0.5,
-                       "content clears exactly the tab band")
-    }
-
-    func testContentKeepsFullWidth() {
+    func testContentFillsTheColumn() {
         let frame = editor.contentViewFrameForTesting
+        XCTAssertEqual(frame.minY, 0, accuracy: 0.5, "content runs full-bleed under the chrome")
         XCTAssertEqual(frame.minX, 0, accuracy: 0.5)
         XCTAssertEqual(frame.maxX, editor.view.bounds.maxX, accuracy: 0.5)
     }

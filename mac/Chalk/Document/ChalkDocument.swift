@@ -1,9 +1,9 @@
 import Foundation
 import ChalkKit
 
-/// A text file as a file presenter with coordinated reads and writes: what `UIDocument` did for the
-/// Catalyst shell, without its window and change-count machinery (plan decision 2). The in-memory
-/// text is the source of truth while open; `DocumentController` decides when to write it.
+/// A text file as a file presenter with coordinated reads and writes, without `NSDocument`'s window
+/// and change-count machinery (plan decision 2). The in-memory text is the source of truth while
+/// open; `DocumentController` decides when to write it.
 ///
 /// Reads and writes run off the main thread and complete on it. `text` is read and written on the
 /// main thread only.

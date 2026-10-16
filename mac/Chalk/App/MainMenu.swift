@@ -1,7 +1,6 @@
 import AppKit
 
-/// The main menu, built in code: the Catalyst shell's menu (plan "Menu bar")
-/// as `NSMenu`. Every shell command is a nil-target action, so it reaches the
+/// The main menu, built in code. Every shell command is a nil-target action, so it reaches the
 /// key window's root through the responder chain and greys out when no
 /// editor window is key; New Window and Settings also live on the app
 /// delegate, so they stay enabled with no window open. No Format menu (⌘B is

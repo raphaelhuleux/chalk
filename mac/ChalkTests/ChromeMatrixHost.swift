@@ -40,12 +40,12 @@ final class ChromeMatrixHost {
     /// fixed value; this snapshot is what makes that pin safe on the owner's
     /// machine.
     private let incomingSidebarWidthRaw: Any?
-    private static let sidebarWidthKey = "chalk.sidebarWidth.appkit"
+    private static let sidebarWidthKey = Preferences.sidebarWidthKey
 
     /// Same reasoning as `incomingSidebarWidthRaw`, for the outline panel's
     /// pinned width.
     private let incomingOutlinePanelWidthRaw: Any?
-    private static let outlinePanelWidthKey = "chalk.outlinePanelWidth.appkit"
+    private static let outlinePanelWidthKey = Preferences.outlinePanelWidthKey
 
     /// One folder with one file, so every Library-open cell has a first area
     /// header to measure: `libraryListStartsAtTheChromeFloor` is evidence only
@@ -127,7 +127,7 @@ final class ChromeMatrixHost {
         root.view.appearance = NSAppearance(named: state.appearance == .dark ? .darkAqua : .aqua)
         root.setLibraryLocationsForTesting([libraryFolder])
         root.setSidebarVisible(state.sidebar == .shown)
-        window.frame = CGRect(origin: .zero, size: Self.size(for: state))
+        window.setContentSize(Self.size(for: state))
         window.layoutIfNeeded()
         root.view.layoutIfNeeded()
         // Full screen is a chrome MODE, not a window size: the band keeps

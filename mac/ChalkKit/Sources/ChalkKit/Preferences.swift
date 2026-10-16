@@ -109,9 +109,8 @@ public enum EditorTextAlignment: String, CaseIterable, Sendable {
 /// App preferences (UserDefaults-backed), edited by the Settings screen. Shared by both shells, so
 /// an upgrade between them keeps every setting: the keys here never change.
 ///
-/// Column widths (`chalk.sidebarWidth`, `chalk.outlinePanelWidth`) are NOT here: each shell stores
-/// them in its own points (the Catalyst shell's are iPad-idiom points, 1/0.77 of a Mac point), so
-/// each shell owns those two accessors and the conversion between them.
+/// Column widths are NOT here: the shell owns them (`Preferences+AppKit.swift`), with the one-time
+/// conversion from the Catalyst install's iPad-idiom points.
 public enum Preferences {
     private static let fontScaleKey = "chalk.editorFontScale"
     private static let themeKey = "chalk.themePreference"
