@@ -46,10 +46,19 @@ final class CompilePlannerTests: XCTestCase {
     private let qmd = URL(fileURLWithPath: "/n/report.qmd")
     private let quartoRender = { (name: String) in CompilePlan.steps([CompileStep("quarto", ["render", name, "--to", "pdf"])]) }
 
-    func testPandocRunsCiteprocWithAnAvailablePdfEngine() throws {
+    func testPandocFallsBackToAnAvailablePdfEngine() throws {
         let job = try plan(md, tools: ["pandoc", "pdflatex"]).get()
-        XCTAssertEqual(job.plan, .steps([CompileStep("pandoc", ["note.md", "-s", "-o", "note.pdf", "--pdf-engine=pdflatex", "--citeproc"])]))
+        XCTAssertEqual(job.plan, .steps([CompileStep("pandoc", ["note.md", "-s", "-o", "note.pdf", "--pdf-engine=pdflatex"])]))
         XCTAssertEqual(job.notes, ["xelatex not found: pandoc uses pdflatex."])
+    }
+
+    func testCiteprocOnlyWithABibliography() throws {
+        func args(_ source: String) throws -> [String] {
+            guard case let .steps(steps) = try plan(md, source, tools: ["pandoc", "xelatex"]).get().plan else { return [] }
+            return steps[0].arguments
+        }
+        XCTAssertTrue(try args("---\nbibliography: refs.bib\n---\n[@a]\n").contains("--citeproc"))
+        XCTAssertFalse(try args("See @eq-budget.\n").contains("--citeproc"), "a Quarto reference is not a citation")
     }
 
     func testPandocNumbersSectionsWhenTheHeaderAsks() throws {
@@ -96,6 +105,16 @@ final class CompilePlannerTests: XCTestCase {
         XCTAssertNil(try plan(md, "# A\n", header: nil, tools: ["quarto"]).staged)
         XCTAssertNil(try plan(md, "# A\n", header: "  \n", tools: ["quarto"]).staged, "a blank default is off")
         XCTAssertNil(try plan(tex, "x", header: "number-sections: true", tools: ["latexmk"]).staged, "LaTeX never")
+    }
+
+    func testPandocTakesThePdfEngineFromTheHeader() throws {
+        let job = try plan(md, "---\npdf-engine: pdflatex\n---\n# A\n", header: nil, markdown: .pandoc, tools: ["pandoc", "xelatex", "pdflatex"])
+        guard case let .steps(steps) = job.plan else { return XCTFail() }
+        XCTAssertTrue(steps[0].arguments.contains("--pdf-engine=pdflatex"), "\(steps[0].arguments)")
+        // The default header counts too, once staged.
+        let staged = try plan(md, "# A\n", header: "pdf-engine: lualatex", markdown: .pandoc, tools: ["pandoc", "xelatex", "lualatex"])
+        guard case let .steps(stagedSteps) = staged.plan else { return XCTFail() }
+        XCTAssertTrue(stagedSteps[0].arguments.contains("--pdf-engine=lualatex"))
     }
 
     func testFencing() {

@@ -77,6 +77,26 @@ public enum MarkdownFrontMatter {
         return body.hasPrefix("---") ? body + "\n" : "---\n\(body)\n---\n"
     }
 
+    private static let pdfEngineKey = LatexRoot.regex(
+        #"^\s*pdf-engine\s*:\s*([A-Za-z]+)\s*$"#, [.anchorsMatchLines])
+
+    private static let bibliographyKey = LatexRoot.regex(
+        #"^\s*(?:bibliography|references)\s*:"#, [.anchorsMatchLines])
+
+    /// The header names a bibliography (or inline references) for citeproc to resolve.
+    public static func hasBibliography(_ source: String) -> Bool {
+        guard let header = header(of: source) else { return false }
+        return bibliographyKey.firstMatch(in: header, range: NSRange(location: 0, length: (header as NSString).length)) != nil
+    }
+
+    /// `pdf-engine:` from the header (Quarto reads it; pandoc only takes it as a flag), or nil.
+    public static func pdfEngine(_ source: String) -> String? {
+        guard let header = header(of: source) else { return nil }
+        let ns = header as NSString
+        guard let m = pdfEngineKey.firstMatch(in: header, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return ns.substring(with: m.range(at: 1))
+    }
+
     /// `number-sections: true` (Quarto's spelling, at any depth) or pandoc's `numbersections: true`.
     public static func wantsNumberedSections(_ source: String) -> Bool {
         guard let header = header(of: source) else { return false }
@@ -253,13 +273,17 @@ public enum CompilePlanner {
                 if kind == .quarto { notes.append("Compiled with pandoc (Settings > Compile): Quarto cross-references and code cells are not processed.") }
             }
             guard available("pandoc") else { return .failure(.missingTool("pandoc", hint: pandocHint)) }
-            // pandoc's PDF path needs a TeX engine of its own.
-            let engine = ([settings.pandocPdfEngine] + ["xelatex", "lualatex", "pdflatex", "tectonic"]).first(where: available)
-            guard let engine else { return .failure(.missingTool(settings.pandocPdfEngine, hint: texHint)) }
-            if engine != settings.pandocPdfEngine { notes.append("\(settings.pandocPdfEngine) not found: pandoc uses \(engine).") }
-            // citeproc resolves [@key] against the header's `bibliography:`. pandoc ignores
-            // Quarto's nested `number-sections`, so it goes in as a flag.
-            var args = [input, "-s", "-o", pdf.lastPathComponent, "--pdf-engine=\(engine)", "--citeproc"]
+            // pandoc's PDF path needs a TeX engine of its own: the header's `pdf-engine:` first
+            // (a header built on a pdflatex font package breaks under xelatex), then Settings.
+            let wanted = MarkdownFrontMatter.pdfEngine(source) ?? settings.pandocPdfEngine
+            let engine = ([wanted] + ["xelatex", "lualatex", "pdflatex", "tectonic"]).first(where: available)
+            guard let engine else { return .failure(.missingTool(wanted, hint: texHint)) }
+            if engine != wanted { notes.append("\(wanted) not found: pandoc uses \(engine).") }
+            // citeproc only with a bibliography: without one it takes Quarto's `@eq-…` references
+            // for citations, and with `link-citations` emits LaTeX that does not compile. pandoc
+            // ignores Quarto's nested `number-sections`, so it goes in as a flag.
+            var args = [input, "-s", "-o", pdf.lastPathComponent, "--pdf-engine=\(engine)"]
+            if MarkdownFrontMatter.hasBibliography(source) { args.append("--citeproc") }
             if MarkdownFrontMatter.wantsNumberedSections(source) { args.append("--number-sections") }
             return job(.steps([CompileStep("pandoc", args)]), notes, staged: staged)
         }
