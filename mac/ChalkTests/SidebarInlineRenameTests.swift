@@ -205,4 +205,34 @@ final class SidebarInlineRenameTests: XCTestCase {
         XCTAssertTrue(window.firstResponder === hosted.outlineViewForTesting,
                       "the tree takes the keyboard back")
     }
+
+    /// Focus leaving the field (not by a click in the tree) commits the typed
+    /// name: the check must compare it with the file's name, not with itself.
+    func testLosingFocusCommitsAValidName() throws {
+        let (hosted, window) = makeHostedSidebar(locations: [Location(id: "test", name: "Root", url: root)])
+        defer { dismantleHostedSidebar(window) }
+        let node = try XCTUnwrap(hosted.rowsForTesting(inSection: 0).first { $0.name == "draft.tex" })
+        hosted.beginRename(node)
+        settleSidebar(hosted, window)
+        let cell = try XCTUnwrap(hosted.cellForTesting(node))
+        try XCTUnwrap(cell.label.currentEditor()).string = "notes.tex"
+        awaitFileWork(on: hosted) { window.makeFirstResponder(nil) }
+        XCTAssertTrue(exists("notes.tex"))
+        XCTAssertFalse(exists("draft.tex"))
+    }
+
+    /// Esc puts the file's name back in the row, not the text that was typed.
+    func testCancelRestoresTheRowsName() throws {
+        let (hosted, window) = makeHostedSidebar(locations: [Location(id: "test", name: "Root", url: root)])
+        defer { dismantleHostedSidebar(window) }
+        let node = try XCTUnwrap(hosted.rowsForTesting(inSection: 0).first { $0.name == "draft.tex" })
+        hosted.beginRename(node)
+        settleSidebar(hosted, window)
+        let cell = try XCTUnwrap(hosted.cellForTesting(node))
+        try XCTUnwrap(cell.label.currentEditor()).string = "xyz"
+        hosted.cancelRename()
+        settleSidebar(hosted, window)
+        XCTAssertEqual(cell.label.stringValue, "draft.tex")
+        XCTAssertTrue(exists("draft.tex"))
+    }
 }

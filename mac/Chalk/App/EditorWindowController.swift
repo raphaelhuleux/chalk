@@ -115,6 +115,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func windowDidResignKey(_ notification: Notification) {
         // No autosave: the window losing focus is the one automatic flush.
+        // Not to its own sheet: a save failure's alert would retry the save
+        // and stack a second alert on the first.
+        guard window?.attachedSheet == nil else { return }
         root.saveAllDocuments()
         root.snapshotDirtyBuffers()
     }

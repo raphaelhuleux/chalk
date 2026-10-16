@@ -202,6 +202,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The app outlives its last window, like every Mac document app.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// A Dock click with no editor window open makes one: this is not an
+    /// NSDocument app, so AppKit's default reopen would show nothing.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard editorWindows.isEmpty else { return true }
+        openNewWindow(initialContent: .openEmpty)
+        return false
+    }
+
     // MARK: - Windows
 
     /// This shell's window ids. The Locations sweep stays off the Catalyst
@@ -217,11 +225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The first window of this shell over a Catalyst install: the Library
         // those windows showed, keyed by scene sessions this shell cannot bring
         // back, becomes this window's. Once; later windows start empty.
-        if !isRestored, !WindowLocations.hasAnyList(withIDPrefix: Self.windowIDPrefix, defaults: defaults) {
-            WindowLocations.seedIfAbsent(
-                window: windowID,
-                with: WindowLocations.records(ofWindowsNotPrefixed: Self.windowIDPrefix, defaults: defaults),
-                defaults: defaults)
+        if !isRestored {
+            WindowLocations.seedFromOtherShellOnce(window: windowID, idPrefix: Self.windowIDPrefix, defaults: defaults)
         }
         let locations = LocationStore(
             bookmarks: WindowLocations.store(forWindow: windowID, isRestoredWindow: isRestored, defaults: defaults))
@@ -251,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         writeJournal()
     }
 
-    /// Journal order is front to back, so the frontmost window restores last
+    /// Journal order is back to front, so the frontmost window restores last
     /// and ends up on top.
     private func writeJournal() {
         guard !Self.isRestorationDisabled else { return }

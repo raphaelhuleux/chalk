@@ -57,6 +57,10 @@ enum MainMenu {
         view.addItem(submenu(viewModeMenu(), title: "View Mode"))
         view.addItem(.separator())
         view.addItem(withTitle: "Zoom In", action: #selector(RootSplitViewController.cmdZoomIn(_:)), keyEquivalent: "=")
+        // ⌘+ (Shift held) is the other common zoom-in chord; it carries "+", which the "=" item never matches.
+        let zoomInPlus = view.addItem(withTitle: "Zoom In", action: #selector(RootSplitViewController.cmdZoomIn(_:)), keyEquivalent: "+")
+        zoomInPlus.isHidden = true
+        zoomInPlus.allowsKeyEquivalentWhenHidden = true
         view.addItem(withTitle: "Zoom Out", action: #selector(RootSplitViewController.cmdZoomOut(_:)), keyEquivalent: "-")
         view.addItem(withTitle: "Actual Size", action: #selector(RootSplitViewController.cmdZoomReset(_:)), keyEquivalent: "0")
         view.addItem(.separator())
@@ -66,12 +70,12 @@ enum MainMenu {
         previousTab.keyEquivalentModifierMask = [.control, .shift]
         main.addItem(submenu(view, title: "View"))
 
+        main.addItem(submenu(typesetMenu(), title: "Typeset"))
+
         let window = NSMenu(title: "Window")
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         window.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         window.addItem(.separator())
-        main.addItem(submenu(typesetMenu(), title: "Typeset"))
-
         window.addItem(withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         main.addItem(submenu(window, title: "Window"))
         NSApp.windowsMenu = window
@@ -84,10 +88,6 @@ enum MainMenu {
         return main
     }
 
-    /// Editing modes: the submenu picks directly (the active one is checked
-    /// by `RootSplitViewController.validateMenuItem`); one shortcut cycles.
-    static func editingModeMenu() -> NSMenu {
-        let menu = NSMenu(title: "Editing Mode")
     /// Compile and the PDF. ⌘R and the ⌥⌘ chords are free in editor-core's keymap, so the
     /// menu sees them without a `ShellCommand` lane.
     static func typesetMenu() -> NSMenu {
@@ -100,6 +100,10 @@ enum MainMenu {
         return menu
     }
 
+    /// Editing modes: the submenu picks directly (the active one is checked
+    /// by `RootSplitViewController.validateMenuItem`); one shortcut cycles.
+    static func editingModeMenu() -> NSMenu {
+        let menu = NSMenu(title: "Editing Mode")
         menu.addItem(withTitle: "Normal", action: #selector(RootSplitViewController.cmdEditingModeNormal(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Zen", action: #selector(RootSplitViewController.cmdEditingModeZen(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Typewriter", action: #selector(RootSplitViewController.cmdEditingModeTypewriter(_:)), keyEquivalent: "")

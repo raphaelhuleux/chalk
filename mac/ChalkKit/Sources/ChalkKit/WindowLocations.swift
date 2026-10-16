@@ -8,6 +8,8 @@ public enum WindowLocations {
     /// deleted: an older build reading the same domain still finds it.
     public static let legacyKey = "chalk.locations"
     static let migratedFlagKey = "chalk.locations.migratedToWindows"
+    /// Outside `keyPrefix`, so no per-window sweep or scan ever sees it.
+    static let otherShellSeededFlagKey = "chalk.locations.seededFromOtherShell"
     static let keyPrefix = "chalk.window-locations."
 
     public static func key(forWindow windowID: String) -> String { keyPrefix + windowID }
@@ -62,6 +64,19 @@ public enum WindowLocations {
         guard defaults.object(forKey: key) == nil, !records.isEmpty,
               let data = try? JSONEncoder().encode(records) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    /// Seed `windowID` from the other shell's lists (`records(ofWindowsNotPrefixed:)`), once per
+    /// install. A flag, not the absence of `idPrefix` lists, marks it done: closing every window
+    /// deletes those lists, and the other shell's lists are never deleted.
+    public static func seedFromOtherShellOnce(window windowID: String, idPrefix: String,
+                                              defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: otherShellSeededFlagKey) else { return }
+        defaults.set(true, forKey: otherShellSeededFlagKey)
+        // An install that already has this shell's windows predates the flag and was seeded then.
+        guard !hasAnyList(withIDPrefix: idPrefix, defaults: defaults) else { return }
+        seedIfAbsent(window: windowID, with: records(ofWindowsNotPrefixed: idPrefix, defaults: defaults),
+                     defaults: defaults)
     }
 
     /// Forget the lists of windows the OS discarded (closed for good).

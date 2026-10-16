@@ -926,6 +926,9 @@ final class SidebarViewController: NSViewController {
         let isOpen = openDocumentURL == node.url
         let row = outlineView.row(forItem: item)
         let prominent = isOpen || (row >= 0 && outlineView.isRowSelected(row)) || renamingNode == node
+        // End a finished rename before `configure`, which leaves an editing
+        // row's text alone: a cancelled field must show the file's name again.
+        if renamingNode != node { cell.endEditing(focusReturningTo: outlineView) }
         cell.configure(
             name: node.name,
             symbol: Self.symbol(for: node),
@@ -938,8 +941,6 @@ final class SidebarViewController: NSViewController {
                 name: node.url.lastPathComponent,
                 onCommit: { [weak self] name in self?.commitRename(name) ?? true },
                 onCancel: { [weak self] in self?.cancelRename() })
-        } else {
-            cell.endEditing(focusReturningTo: outlineView)
         }
     }
 

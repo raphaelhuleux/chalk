@@ -92,6 +92,10 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     /// save from the in-flight completion; overlapping writes (resign-active and didEnterBackground both run
     /// saveAll) would read our own fresh mtime as an external conflict.
     private var saveInFlight = false
+    /// One external reload at a time. The file watcher and a focus pass can both fire on one write; a
+    /// second read started before the first lands would push the same text twice.
+    private var reloadInFlight = false
+    private var reloadPending = false
     private var queuedSaveCompletions: [((Bool) -> Void)?] = []
     /// Watches `document` for a gained conflict version (iCloud picked a winner; the loser is invisible in
     /// the version store). Re-armed for every new `document`, removed in `close()`.
@@ -230,6 +234,8 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         // Our own write in flight looks external until its completion records the new (date, size).
         // Mid-open, `syncedModDate` still describes the previous file.
         guard let doc = document, isLoaded, !saveInFlight else { return }
+        // Re-checked once the read in flight has recorded its (date, size).
+        guard !reloadInFlight else { reloadPending = true; return }
         // An undownloaded iCloud placeholder has no local bytes; a later foreground pass retries.
         if let values = try? doc.fileURL.resourceValues(
             forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]),
@@ -256,6 +262,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         // Coordinating on its behalf skips self-notification but still serializes against other processes.
         //
         // Off the main thread: the read can block for seconds behind other writers (iCloud mid-sync).
+        reloadInFlight = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var newText: String?
             var coordinatedDate: Date?
@@ -267,11 +274,19 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
                 guard let data = try? Data(contentsOf: url) else { return }
                 newText = String(data: data, encoding: .utf8)
                 coordinatedSize = data.count
-                coordinatedDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                    .contentModificationDate
+                // A stat, not `resourceValues`: off the main thread a URL's cached values are never
+                // flushed, so an earlier reader of the same URL (the conflict check) leaves a stale date.
+                coordinatedDate = Self.fileState(of: url).modDate
             }
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.reloadInFlight = false
+                defer {
+                    if self.reloadPending {
+                        self.reloadPending = false
+                        self.reloadIfChangedExternally()
+                    }
+                }
                 // The user may have typed (local edits win) or the tab moved to another file meanwhile.
                 guard self.document === doc, !self.buffer.isDirty else { return }
                 guard coordError == nil, let text = newText else {
@@ -311,6 +326,15 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     func save(explicit: Bool = false, completion: ((Bool) -> Void)? = nil) {
         // Before every early return: a no-op save is exactly the case this exists for.
         if explicit { delegate?.documentControllerDidRequestExplicitSave(self) }
+        var completion = completion
+        if explicit, !isDraft {
+            let caller = completion
+            completion = { [weak self] ok in
+                caller?(ok)
+                guard let self else { return }
+                self.delegate?.documentController(self, didFinishExplicitSave: ok)
+            }
+        }
         if isDraft {
             guard let delegate else { completion?(false); return }
             delegate.documentController(self, needsSaveDestination: { ok in completion?(ok) })
@@ -326,15 +350,6 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         // After the no-op return above, so a clean mismatched tab doesn't report a failed save.
         if let source = bufferSourceURL, source != doc.fileURL {
             log.error("refusing to save: buffer came from a different file than the open document")
-        var completion = completion
-        if explicit, !isDraft {
-            let caller = completion
-            completion = { [weak self] ok in
-                caller?(ok)
-                guard let self else { return }
-                self.delegate?.documentController(self, didFinishExplicitSave: ok)
-            }
-        }
             delegate?.documentController(self, didFailSaveTo: doc.fileURL)
             completion?(false)
             return
@@ -446,8 +461,8 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         }
     }
 
-    /// Arm the iCloud-conflict watch. The notification is per-document, and the conflict bit can already
-    /// be set before the observer registers, hence the immediate check.
+    /// Arm the iCloud-conflict watch. The notification is per-document, and a conflict can already
+    /// exist before the observer registers, hence the immediate check.
     private func observeConflictState(of doc: ChalkDocument) {
         if let documentStateObserver {
             NotificationCenter.default.removeObserver(documentStateObserver)
@@ -458,20 +473,21 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         ) { [weak self] _ in
             self?.resolveConflictVersionsIfNeeded()
         }
-        if doc.hasUnresolvedConflicts {
-            resolveConflictVersionsIfNeeded()
-        }
+        resolveConflictVersionsIfNeeded()
     }
 
+    /// Serial, so a second notification queries only after the first run discarded what it copied.
+    private static let conflictQueue = DispatchQueue(label: "com.huleux.chalk.conflict-versions", qos: .utility)
+
     /// iCloud resolved a conflict by last-writer-wins; the losers sit invisible in the version store. Copy
-    /// each aside, tell the host, and discard the copied ones. Copies run off-main (they can touch the
-    /// ubiquity store).
+    /// each aside, tell the host, and discard the copied ones. The query and the copies run off-main:
+    /// both can block on the ubiquity store.
     private func resolveConflictVersionsIfNeeded() {
-        guard let doc = document, doc.hasUnresolvedConflicts else { return }
+        guard let doc = document else { return }
         let url = doc.fileURL
-        guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
-              !versions.isEmpty else { return }
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        Self.conflictQueue.async { [weak self] in
+            guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
+                  !versions.isEmpty else { return }
             let backup = Self.settleConflictVersions(versions) {
                 Self.makeConflictBackup(of: url, copying: $0)
             }

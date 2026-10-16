@@ -31,7 +31,7 @@ final class MenuRoutingTests: XCTestCase {
     }
 
     private func itemTitles(_ menu: NSMenu) -> [String] {
-        menu.items.filter { !$0.isSeparatorItem }.map(\.title)
+        menu.items.filter { !$0.isSeparatorItem && !$0.isHidden }.map(\.title)
     }
 
     // MARK: - The menu itself
@@ -79,23 +79,28 @@ final class MenuRoutingTests: XCTestCase {
         XCTAssertEqual(try item("Cycle Editing Mode").keyEquivalent, "m")
         XCTAssertEqual(try item("Cycle Editing Mode").keyEquivalentModifierMask, [.command, .shift])
         XCTAssertEqual(try item("Zoom In").keyEquivalent, "=")
+        let view = try submenu(titled: "View", in: main)
+        let zoomInPlus = try XCTUnwrap(view.items.first { $0.isHidden && $0.title == "Zoom In" }, "no hidden ⌘+ item")
+        XCTAssertEqual(zoomInPlus.keyEquivalent, "+")
+        XCTAssertEqual(zoomInPlus.action, #selector(RootSplitViewController.cmdZoomIn(_:)))
+        XCTAssertTrue(zoomInPlus.allowsKeyEquivalentWhenHidden, "a hidden item's chord is dead without this")
         XCTAssertEqual(try item("Zoom Out").keyEquivalent, "-")
         XCTAssertEqual(try item("Actual Size").keyEquivalent, "0")
         XCTAssertEqual(try item("Next Tab").keyEquivalent, "\t")
         XCTAssertEqual(try item("Next Tab").keyEquivalentModifierMask, [.control])
         XCTAssertEqual(try item("Previous Tab").keyEquivalentModifierMask, [.control, .shift])
         XCTAssertEqual(try item("Settings\u{2026}").keyEquivalent, ",")
-    }
-
-    /// A target would pin an item to one window; nil lets the responder chain
-    /// pick the key window, and greys the item out when no editor is key.
-    func testShellItemsHaveNoTarget() {
         XCTAssertEqual(try item("Compile").keyEquivalent, "r")
         XCTAssertEqual(try item("Compile").keyEquivalentModifierMask, [.command])
         XCTAssertEqual(try item("PDF Panel").keyEquivalent, "p")
         XCTAssertEqual(try item("PDF Panel").keyEquivalentModifierMask, [.command, .option])
         XCTAssertEqual(try item("Show in PDF").keyEquivalent, "j")
         XCTAssertEqual(try item("Show in PDF").keyEquivalentModifierMask, [.command, .option])
+    }
+
+    /// A target would pin an item to one window; nil lets the responder chain
+    /// pick the key window, and greys the item out when no editor is key.
+    func testShellItemsHaveNoTarget() {
         func walk(_ menu: NSMenu) {
             for item in menu.items {
                 // AppKit points a submenu item's target at the submenu itself.

@@ -66,8 +66,10 @@ DEST_RE="$(printf '%s' "$DEST" | sed 's/[][\\.^$*+?(){}|]/\\&/g')"
 RUNNING="^$DEST_RE/Contents/MacOS/"
 if pgrep -qf "$RUNNING"; then
   # `tell application id ... to quit` would LAUNCH it if it were not running,
-  # which is why this is inside the pgrep guard.
-  osascript -e 'tell application id "com.huleux.chalk" to quit' >/dev/null 2>&1 || true
+  # which is why this is inside the pgrep guard. The id is the running copy's
+  # own: it may be the other config than this build's $BUNDLE_ID.
+  RUNNING_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$DEST/Contents/Info.plist" 2>/dev/null || echo "$BUNDLE_ID")"
+  osascript -e "tell application id \"$RUNNING_ID\" to quit" >/dev/null 2>&1 || true
   for _ in $(seq 1 20); do
     pgrep -qf "$RUNNING" || break
     sleep 0.5

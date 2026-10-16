@@ -49,7 +49,7 @@ public final class WindowSessionJournal {
     }
 
     /// Every window of the last session, in the order they were written
-    /// (front to back). Empty on the first launch, after the last window was
+    /// (back to front: the frontmost window is last). Empty on the first launch, after the last window was
     /// closed, or when the stored bytes no longer decode.
     public func load() -> [WindowRecord] {
         guard let data = defaults.data(forKey: key) else { return [] }

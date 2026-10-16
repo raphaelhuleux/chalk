@@ -21,8 +21,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.delegate = self
         window.contentViewController = container
         window.setContentSize(ChalkMetrics.settingsDefaultSize)
+        // Centre only on first use: a saved frame wins.
+        if !window.setFrameUsingName("chalk.settings") { window.center() }
         window.setFrameAutosaveName("chalk.settings")
-        window.center()
         pinAppearance()
 
         // The broadcast reaches the editor windows; this window re-pins

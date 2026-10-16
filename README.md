@@ -10,7 +10,7 @@ It comes in two forms, built on one editor engine:
 - **Chalk for Mac** ([mac/](mac/)): a native app with tabs, a folder sidebar and an outline panel.
 - **Chalk for VS Code** ([vscode/](vscode/)): the same editor as a custom editor for `.tex`, `.md` and `.qmd` files.
 
-## What it does
+## Features
 
 ![Typing in Chalk: each formula renders as soon as the cursor leaves it](docs/images/live-preview.gif)
 
@@ -71,24 +71,6 @@ The engine, [`@chalk/editor-core`](packages/editor-core/), is CodeMirror 6 plus 
 It knows nothing about its host. Each host talks to it through the same small `HostPort` protocol.
 The Mac app is native AppKit and hosts the editor in a `WKWebView`; the VS Code extension hosts it in a webview.
 
-## Repository layout
-
-```
-├─ mac/                  the Mac app (Swift, AppKit)
-│   ├─ project.yml       XcodeGen spec; mac/Chalk.xcodeproj is generated from it
-│   ├─ Chalk/            app shell: window, tabs, Library sidebar, documents, settings
-│   ├─ ChalkKit/         pure-Foundation Swift package (protocol types, buffers, bookmarks, chrome rules)
-│   └─ ChalkTests/       XCTest bundle for the app
-├─ packages/editor-core/ the shared editor engine (TypeScript)
-├─ web/                  builds editor-core into the bundle the Mac app loads
-│   └─ src/native-host.ts   HostPort over the WKWebView message bridge
-├─ vscode/               the VS Code extension
-├─ Tests/                browser test harnesses (Playwright), fixtures and snapshots
-├─ scripts/              check, install, release and generator scripts
-├─ test-docs/            sample documents for trying the editor by hand
-└─ docs/                 design specs, issue notes, test and release notes
-```
-
 ## Build from source
 
 Prerequisites:
@@ -128,37 +110,6 @@ pnpm -C vscode package    # a .vsix you can install with "Install from VSIX..."
 ```
 
 To debug it, open the repo in VS Code and run the "Run Chalk Extension" launch configuration.
-
-## Tests
-
-| Command             | What it runs                                                                                                    |
-| ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `scripts/check.sh`  | everything below plus the Xcode suites and benchmarks; `--fast` skips the slow parts, `--list` names every step |
-| `pnpm test`         | the editor-core and extension unit tests (vitest, jsdom)                                                        |
-| `pnpm typecheck`    | TypeScript across the workspace                                                                                 |
-| `pnpm test:swift`   | the ChalkKit Swift package tests, from the command line                                                         |
-| `pnpm test:browser` | browser scenarios over the built editor (Playwright, Chromium)                                                  |
-| `pnpm test:caret`   | caret and mouse fixtures in `Tests/fixtures`                                                                    |
-
-The browser runners need Playwright's browsers once: `npx playwright install chromium webkit`.
-
-## How the engine is shared
-
-`@chalk/editor-core` has one entry point, `mountEditor(opts)`, and one contract, `HostPort`.
-`HostPort` is a frozen 9-message protocol.
-Host to editor: `init`, `update`, `theme-colors`, `heading-colors`, `editor-config`, `hsnips`.
-Editor to host: `ready`, `edit`, `open-external`.
-
-```
-Mac app (Swift, UIKit)                   VS Code extension host (Node)
-  ↕ WKWebView message bridge               ↕ webview postMessage
-web/src/native-host.ts                     vscode/src/webview-entry.ts
-        └────────── mountEditor(HostPort) ──────────┘
-                @chalk/editor-core (CodeMirror 6 + KaTeX + hsnips)
-```
-
-The Swift `Codable` mirrors of the protocol live in `mac/ChalkKit/Sources/ChalkKit/HostProtocol.swift`.
-Edits are buffered by the host and written on save; there is no autosave.
 
 ## Contributing
 

@@ -83,6 +83,29 @@ final class WindowLocationsTests: XCTestCase {
         WindowLocations.seedIfAbsent(window: "mac-first", with: [], defaults: defaults)
         XCTAssertEqual(store.records().map(\.id), ["one", "two"])
     }
+
+    /// Closing every window deletes this shell's lists but never the other shell's: the
+    /// next new window must still start empty.
+    func testOtherShellSeedDoesNotRerunAfterEveryWindowClosed() throws {
+        let a = [LocationRecord(id: "one", name: "One", bookmark: Data([1]))]
+        defaults.set(try JSONEncoder().encode(a), forKey: WindowLocations.key(forWindow: "scene-A"))
+        WindowLocations.seedFromOtherShellOnce(window: "mac-first", idPrefix: "mac-", defaults: defaults)
+        XCTAssertEqual(WindowLocations.store(forWindow: "mac-first", isRestoredWindow: false, defaults: defaults)
+            .records().map(\.id), ["one"])
+        WindowLocations.discard(windows: ["mac-first"], defaults: defaults)
+        XCTAssertFalse(WindowLocations.hasAnyList(withIDPrefix: "mac-", defaults: defaults))
+        WindowLocations.seedFromOtherShellOnce(window: "mac-second", idPrefix: "mac-", defaults: defaults)
+        XCTAssertNil(defaults.object(forKey: WindowLocations.key(forWindow: "mac-second")))
+    }
+
+    /// An install whose AppKit windows were seeded before the flag existed is not seeded again.
+    func testOtherShellSeedSkipsAnInstallThatAlreadyHasThisShellsLists() throws {
+        let a = [LocationRecord(id: "one", name: "One", bookmark: Data([1]))]
+        defaults.set(try JSONEncoder().encode(a), forKey: WindowLocations.key(forWindow: "scene-A"))
+        defaults.set(Data("[]".utf8), forKey: WindowLocations.key(forWindow: "mac-old"))
+        WindowLocations.seedFromOtherShellOnce(window: "mac-new", idPrefix: "mac-", defaults: defaults)
+        XCTAssertNil(defaults.object(forKey: WindowLocations.key(forWindow: "mac-new")))
+    }
 }
 
 final class ExternalOpenRoutingTests: XCTestCase {

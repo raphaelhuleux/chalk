@@ -59,11 +59,6 @@ final class ChalkDocument: NSObject, NSFilePresenter {
         NSFileCoordinator.addFilePresenter(self)
     }
 
-    /// Whether the version store holds a conflict version of this file (iCloud picked a winner).
-    var hasUnresolvedConflicts: Bool {
-        NSFileVersion.unresolvedConflictVersionsOfItem(at: fileURL)?.isEmpty == false
-    }
-
     // MARK: - Decoding
 
     /// The one gate between a file's bytes and the buffer a later save writes back.

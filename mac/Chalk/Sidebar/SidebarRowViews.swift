@@ -144,6 +144,8 @@ final class LibraryCellView: NSView, NSTextFieldDelegate {
     private var onCommit: ((String) -> Bool)?
     private var onCancel: (() -> Void)?
     private(set) var isEditing = false
+    /// The name when editing began: the field's own text is what the user typed.
+    private var originalName = ""
     /// Set while a commit or cancel runs, so the end-editing callback that the
     /// focus change raises does not commit a second time.
     private var isFinishing = false
@@ -258,6 +260,7 @@ final class LibraryCellView: NSView, NSTextFieldDelegate {
         self.onCancel = onCancel
         if !isEditing {
             isEditing = true
+            originalName = name
             label.stringValue = name
             label.isEditable = true
             label.isSelectable = true
@@ -309,7 +312,8 @@ final class LibraryCellView: NSView, NSTextFieldDelegate {
     }
 
     /// Return commits; a refused name keeps the field. Losing focus commits a
-    /// valid name and cancels an invalid one, so the user is never trapped.
+    /// valid name and cancels an invalid one, so the user is never trapped. A
+    /// click in the Library tree cancels: picking another row discards the rename.
     func controlTextDidEndEditing(_ notification: Notification) {
         guard isEditing, !isFinishing else { return }
         let movement = (notification.userInfo?["NSTextMovement"] as? Int) ?? NSOtherTextMovement
@@ -325,12 +329,23 @@ final class LibraryCellView: NSView, NSTextFieldDelegate {
             return
         }
         finish {
-            if FileNaming.validateRename(name, current: label.stringValue) == nil,
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !isClickInTree,
+               FileNaming.validateRename(trimmed, current: originalName) == nil,
                onCommit?(name) == true {
                 return
             }
             onCancel?()
         }
+    }
+
+    /// Whether the event ending the edit is a click inside this row's table.
+    /// The table takes focus on mouse-down, before its row action runs.
+    private var isClickInTree: Bool {
+        guard let event = NSApp.currentEvent, event.window === window,
+              [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type),
+              let tree = enclosingScrollView else { return false }
+        return tree.bounds.contains(tree.convert(event.locationInWindow, from: nil))
     }
 
     private func finish(_ body: () -> Void) {
