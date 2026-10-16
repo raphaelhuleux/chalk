@@ -36,6 +36,9 @@ final class Tab {
     /// file-backed tab is a transient "preview" (iA Writer): shown slanted, and
     /// a sidebar browse-click reuses it in place. Committing it stops both.
     var isCommitted = false
+    /// The trailing slot shows this tab's compiled PDF while it is active (⌥⌘P, Compile).
+    /// Per tab, unlike the outline, which the window keeps.
+    var showsPDF = false
     let surface: EditorSurface
     let controller: DocumentController
 

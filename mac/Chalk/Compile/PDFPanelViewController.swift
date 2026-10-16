@@ -7,6 +7,24 @@ final class SyncPDFView: PDFView {
     /// 1-based page and a point from the page's top-left corner, in PDF points.
     var onSyncClick: ((Int, CGPoint) -> Void)?
 
+    /// The slot's resize handle overhangs this edge; PDFView's own cursor (an I-beam over text)
+    /// would fight it there on every move.
+    static let handleOverhang: CGFloat = 8
+
+    private func isUnderHandle(_ event: NSEvent) -> Bool {
+        convert(event.locationInWindow, from: nil).x < Self.handleOverhang
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard !isUnderHandle(event) else { return }
+        super.mouseMoved(with: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        guard !isUnderHandle(event) else { return }
+        super.cursorUpdate(with: event)
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard event.modifierFlags.contains(.command), let document else {
             super.mouseDown(with: event)

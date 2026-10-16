@@ -242,6 +242,7 @@ final class EditorContainerViewController: NSViewController {
         // The grip straddles the border so a drag on the visible edge catches it from either
         // side. It hides with the panel so the parked panel leaves no phantom strip.
         let grip = outlineResizeGrip
+        grip.showsHoverLine = true
         grip.translatesAutoresizingMaskIntoConstraints = false
         grip.isHidden = !isOutlinePanelVisible
         view.addSubview(grip)
@@ -296,9 +297,17 @@ final class EditorContainerViewController: NSViewController {
 
     private var outlineResizeStartWidth: CGFloat = 0
 
-    /// Show or hide the panel. The webview reflows inside the container rather than sliding under
-    /// chrome, so a plain constraint animation is enough (no WebPaintGate).
+    /// Open or close the slot: ⌘K's outline, the zen close, session restore. Opening puts the
+    /// outline in it; closing also takes the active tab's PDF down.
     func setOutlinePanelVisible(_ visible: Bool, animated: Bool) {
+        isOutlineWanted = visible
+        activeTab?.showsPDF = false
+        applySlot(animated: animated)
+    }
+
+    /// Show or hide the slot as it stands. The webview reflows inside the container rather than
+    /// sliding under chrome, so a plain constraint animation is enough (no WebPaintGate).
+    private func setSlotVisible(_ visible: Bool, animated: Bool) {
         guard visible != isOutlinePanelVisible else { return }
         isOutlinePanelVisible = visible
         let panelView: NSView = outlinePanel.view
@@ -374,10 +383,46 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
-    /// Show the slot with `content`: slides it in when hidden, swaps the content in place when
-    /// the slot already shows the other one.
+    /// The window wants the outline (⌘K); it shows whenever the active tab is not showing its PDF.
+    private(set) var isOutlineWanted = false
+
+    /// What the slot should show for the active tab: its PDF when it asked for one, else the
+    /// outline when the window wants it. Zen keeps it closed, even on a tab switch.
+    private var desiredSlot: TrailingPanelContent? {
+        if currentEditingMode() == .zen { return nil }
+        if activeTab?.showsPDF == true { return .pdf }
+        return isOutlineWanted ? .outline : nil
+    }
+
+    /// Bring the slot in line with `desiredSlot`.
+    private func applySlot(animated: Bool) {
+        if let content = desiredSlot {
+            presentSlot(content, animated: animated)
+        } else {
+            setSlotVisible(false, animated: animated)
+        }
+    }
+
+    /// Show `content`: ⌥⌘P and Compile mark the active tab as showing its PDF, ⌘K takes the
+    /// tab's PDF down and puts the window's outline up.
     func showTrailingPanel(_ content: TrailingPanelContent, animated: Bool) {
-        if isOutlinePanelVisible, trailingPanelContent == content { return }
+        switch content {
+        case .pdf:
+            activeTab?.showsPDF = true
+        case .outline:
+            isOutlineWanted = true
+            activeTab?.showsPDF = false
+        }
+        applySlot(animated: animated)
+    }
+
+    /// Slide the slot in with `content`, or swap the content in place when it shows the other
+    /// one.
+    private func presentSlot(_ content: TrailingPanelContent, animated: Bool) {
+        if isOutlinePanelVisible, trailingPanelContent == content {
+            seedTrailingPanel()
+            return
+        }
         if trailingPanelContent != content {
             if isOutlineShowing { activeTab?.surface.setOutlineSubscription(false) }
             trailingPanelContent = content
@@ -388,17 +433,21 @@ final class EditorContainerViewController: NSViewController {
             seedTrailingPanel()
             onOutlinePanelLayoutChanged?()
         } else {
-            setOutlinePanelVisible(true, animated: animated)
+            setSlotVisible(true, animated: animated)
         }
     }
 
-    /// ⌘K / ⌥⌘P: hide the slot when it shows `content`, else show `content`.
+    /// ⌘K / ⌥⌘P: take `content` down when the slot shows it, else show it. Taking a PDF down
+    /// uncovers the outline when the window wants one.
     func toggleTrailingPanel(_ content: TrailingPanelContent, animated: Bool) {
-        if isOutlinePanelVisible, trailingPanelContent == content {
-            setOutlinePanelVisible(false, animated: animated)
-        } else {
-            showTrailingPanel(content, animated: animated)
+        guard isOutlinePanelVisible, trailingPanelContent == content else {
+            return showTrailingPanel(content, animated: animated)
         }
+        switch content {
+        case .pdf: activeTab?.showsPDF = false
+        case .outline: isOutlineWanted = false
+        }
+        applySlot(animated: animated)
     }
 
     private static func preferredWidth(for content: TrailingPanelContent) -> CGFloat {
@@ -1050,7 +1099,8 @@ final class EditorContainerViewController: NSViewController {
             #if DEBUG
             activateEventTrailForTesting.append("install")
             #endif
-            if isOutlinePanelVisible { seedTrailingPanel() }
+            // Each tab keeps its own PDF; the outline follows the window.
+            applySlot(animated: false)
             if let outgoingSurface, outgoingSurface.view !== tab.surface.view {
                 crossFade(from: outgoingSurface, to: tab.surface)
             }
@@ -1183,7 +1233,7 @@ final class EditorContainerViewController: NSViewController {
                 let neighbor = tabs[min(index ?? 0, tabs.count - 1)]
                 activate(neighbor)
             } else {
-                if isOutlinePanelVisible { seedTrailingPanel() }
+                applySlot(animated: false)
                 refreshEmptyState()
                 refreshTabBar()
             }
@@ -1517,28 +1567,109 @@ extension EditorContainerViewController: DocumentControllerDelegate {
     }
 }
 
-/// The outline panel's resize handle: a horizontal-resize cursor and a drag
-/// that reports its x travel.
+/// A column's resize handle: a horizontal-resize cursor and a drag that reports its x travel.
+///
+/// A cursor rect alone loses: the views under the handle (the editor's web view, a PDFView)
+/// set their own cursor on every mouse move, the web view asynchronously, so the arrows
+/// flickered away. While hovered the handle re-asserts its cursor until the mouse leaves.
 final class ColumnResizeGrip: FlippedView {
     var onDragBegan: (() -> Void)?
     var onDragged: ((CGFloat) -> Void)?
     var onDragEnded: (() -> Void)?
+    /// Draw a thin accent line down the middle while hovered or dragged.
+    var showsHoverLine = false {
+        didSet {
+            if showsHoverLine { wantsLayer = true }
+            needsLayout = true
+        }
+    }
     private var startX: CGFloat = 0
+    private var trackingArea: NSTrackingArea?
+    private var hovering = false
+    private var dragging = false
+    private var cursorTimer: Timer?
+    private let hoverLine = CALayer()
+
+    #if DEBUG
+    var isHoverLineVisibleForTesting: Bool { hoverLine.opacity > 0 }
+    #endif
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .resizeLeftRight)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate,
+                                            .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func layout() {
+        super.layout()
+        if hoverLine.superlayer == nil, let layer {
+            hoverLine.opacity = 0
+            layer.addSublayer(hoverLine)
+        }
+        hoverLine.frame = CGRect(x: bounds.midX - 1, y: 0, width: 2, height: bounds.height)
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        setHovering(false)
+    }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseEntered(with event: NSEvent) { setHovering(true) }
+    override func mouseExited(with event: NSEvent) { setHovering(false) }
+    override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+
+    private func setHovering(_ on: Bool) {
+        hovering = on
+        refreshHoverState()
+    }
+
+    private func refreshHoverState() {
+        let active = (hovering || dragging) && !isHidden
+        if active {
+            NSCursor.resizeLeftRight.set()
+            if cursorTimer == nil {
+                let timer = Timer(timeInterval: 0.03, repeats: true) { _ in NSCursor.resizeLeftRight.set() }
+                RunLoop.main.add(timer, forMode: .common)
+                cursorTimer = timer
+            }
+        } else {
+            cursorTimer?.invalidate()
+            cursorTimer = nil
+        }
+        guard showsHoverLine else { return }
+        hoverLine.backgroundColor = NSColor.chalkAccent.withAlphaComponent(dragging ? 0.9 : 0.6).cgColor
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.duration = ChalkMetrics.motionFast
+        hoverLine.add(fade, forKey: "fade")
+        hoverLine.opacity = active ? 1 : 0
+    }
+
     override func mouseDown(with event: NSEvent) {
         startX = event.locationInWindow.x
+        dragging = true
+        refreshHoverState()
         onDragBegan?()
     }
 
     override func mouseDragged(with event: NSEvent) {
+        NSCursor.resizeLeftRight.set()
         onDragged?(event.locationInWindow.x - startX)
     }
 
     override func mouseUp(with event: NSEvent) {
+        dragging = false
+        hovering = bounds.contains(convert(event.locationInWindow, from: nil))
+        refreshHoverState()
         onDragEnded?()
     }
 }

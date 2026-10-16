@@ -58,8 +58,9 @@ public struct ToolLocator {
         process.executableURL = URL(fileURLWithPath: shell)
         // -l reads the login profile (.zprofile, .bash_profile), -i the rc
         // file where conda and nvm put their PATH edits. The markers fence off
-        // anything the profile prints.
-        process.arguments = ["-l", "-i", "-c", "echo __CHALK_PATH__$PATH__CHALK_PATH__"]
+        // anything the profile prints; the braces matter, since `$PATH__CHALK…`
+        // is one (empty) variable name.
+        process.arguments = ["-l", "-i", "-c", "echo __CHALK_PATH__${PATH}__CHALK_PATH__"]
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice

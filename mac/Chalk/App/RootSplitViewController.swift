@@ -715,8 +715,8 @@ final class RootSplitViewController: NSViewController {
         return WindowSession(
             tabs: editor.sessionTabRecords(), activeIndex: editor.sessionSnapshot().activeIndex,
             isSidebarVisible: isSidebarVisible,
-            // The slot restores as the outline; a PDF slot reopens on the next compile.
-            isOutlineVisible: editor.isOutlinePanelVisible && editor.trailingPanelContent == .outline)
+            // The window's outline intent; a tab's PDF reopens on its next compile.
+            isOutlineVisible: editor.isOutlineWanted)
     }
 
     /// Reopen a restored window's tabs. Unresolvable or unreadable files (moved

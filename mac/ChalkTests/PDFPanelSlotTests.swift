@@ -84,6 +84,35 @@ final class PDFPanelSlotTests: XCTestCase {
         XCTAssertEqual(root.trailingPanelStateForTesting, .hidden)
     }
 
+    /// The PDF is per tab; the outline is the window's.
+    func testEachTabKeepsItsOwnPDF() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("chalk-slot-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appendingPathComponent("a.tex"), b = dir.appendingPathComponent("b.md")
+        try "\\documentclass{article}\n".write(to: a, atomically: true, encoding: .utf8)
+        try "# b\n".write(to: b, atomically: true, encoding: .utf8)
+        let root = makeRoot(.openEmpty)
+        let editor = root.editorForTesting
+        editor.open(url: a)
+        root.cmdTogglePDFPanel()
+        XCTAssertEqual(root.trailingPanelStateForTesting, .pdf)
+        editor.open(url: b)
+        XCTAssertEqual(root.trailingPanelStateForTesting, .hidden, "b never asked for its PDF")
+        editor.open(url: a)
+        XCTAssertEqual(root.trailingPanelStateForTesting, .pdf, "a kept its PDF")
+
+        // With the window's outline on, a tab without a PDF shows the outline.
+        editor.open(url: b)
+        root.cmdToggleOutlinePanel()
+        XCTAssertEqual(root.trailingPanelStateForTesting, .shown)
+        editor.open(url: a)
+        XCTAssertEqual(root.trailingPanelStateForTesting, .pdf)
+        outlastAdmitWindow()
+        root.cmdTogglePDFPanel()
+        XCTAssertEqual(root.trailingPanelStateForTesting, .shown, "taking the PDF down uncovers the outline")
+    }
+
     func testAPDFSlotDoesNotRestoreAsTheOutline() {
         let root = makeRoot()
         root.cmdTogglePDFPanel()

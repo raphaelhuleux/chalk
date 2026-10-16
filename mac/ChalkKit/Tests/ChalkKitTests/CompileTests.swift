@@ -132,6 +132,13 @@ final class ToolLocatorTests: XCTestCase {
         XCTAssertEqual(path.filter { $0 == "/usr/bin" }.count, 1)
     }
 
+    /// Runs the real login shell: a quoting slip here returned nil on every
+    /// Mac, and pandoc in a conda folder was never found.
+    func testReadsTheLoginShellPath() throws {
+        let path = try XCTUnwrap(ToolLocator.readLoginShellPath(timeout: 10))
+        XCTAssertTrue(path.split(separator: ":").contains("/usr/bin"), path)
+    }
+
     func testLocatePrefersAnExecutableOverride() {
         let locator = ToolLocator(searchPath: ["/a", "/b"], isExecutable: { ["/b/pandoc", "/custom/pandoc"].contains($0) })
         XCTAssertEqual(locator.locate("pandoc"), "/b/pandoc")
