@@ -22,7 +22,8 @@ if (!process.argv.includes('--no-build')) {
   execFileSync(process.execPath, [resolve(root, 'web/build.mjs')], { stdio: 'inherit' });
 }
 
-/** A script is a list of steps: text to type, `{Tab}`-style keys, or `{pause N}` in ms. */
+/** A script is a list of steps: text to type, `{Tab}`-style keys, `{pause N}` in ms,
+ *  or `{ caret: s }` to put the caret just after the first `s` in the document. */
 const scenarios = [
   {
     out: 'live-preview.gif',
@@ -32,7 +33,11 @@ const scenarios = [
     steps: [
       'For $a > 0$, completing the square gives\n\n$$\n',
       '\\int_{-\\infty}^{\\infty} e^{-a x^2} \\, dx = \\sqrt{\\frac{\\pi}{a}}',
-      '\n$$\n\nso the density $\\sqrt{a/\\pi}\\, e^{-a x^2}$ integrates to $1$.',
+      '\n$$\n\nso the density $\\sqrt{a/\\pi}\\, e^{-a x^2}$ integrates to $1$.', '{pause 600}',
+      // Back into the equation: its live preview tracks the edit below the source.
+      { caret: 'e^{-a x^2' }, ' + b x', '{pause 300}',
+      { caret: '\\sqrt{\\frac{\\pi}{a}}' }, ' \\, e^{b^2/4a}', '{pause 600}',
+      { caret: 'integrates to $1$.' },
     ],
   },
   {
@@ -100,8 +105,18 @@ for (const sc of scenarios) {
   };
   await frame(1.0);
   for (const step of sc.steps) {
-    const key = /^\{(\w+)(?: (\d+))?\}$/.exec(step);
-    if (key?.[1] === 'pause') {
+    const key = typeof step === 'string' && /^\{(\w+)(?: (\d+))?\}$/.exec(step);
+    if (typeof step === 'object') {
+      await page.evaluate((s) => {
+        const v = window.__chalkDebugView;
+        const i = v.state.doc.toString().indexOf(s);
+        if (i < 0) throw new Error(`caret target not found: ${s}`);
+        v.dispatch({ selection: { anchor: i + s.length } });
+        v.focus();
+      }, step.caret);
+      await page.waitForTimeout(300);
+      await frame(0.6);
+    } else if (key?.[1] === 'pause') {
       await page.waitForTimeout(Number(key[2]));
       await frame(Number(key[2]) / 1000);
     } else if (key) {
