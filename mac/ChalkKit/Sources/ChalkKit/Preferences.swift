@@ -127,6 +127,7 @@ public enum Preferences {
     private static let latexEngineKey = "chalk.latexEngine"
     private static let pandocPdfEngineKey = "chalk.pandocPdfEngine"
     private static let extraToolDirectoryKey = "chalk.extraToolDirectory"
+    private static let markdownCompilerKey = "chalk.markdownCompiler"
 
     /// Posted when `autoHideChrome` changes. Settings runs in its own window, so every open window
     /// re-applies from this notification.
@@ -274,6 +275,11 @@ public enum Preferences {
         set { UserDefaults.standard.set(newValue, forKey: pandocPdfEngineKey) }
     }
 
+    public static var markdownCompiler: MarkdownCompilerChoice {
+        get { MarkdownCompilerChoice(rawValue: UserDefaults.standard.string(forKey: markdownCompilerKey) ?? "") ?? .automatic }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: markdownCompilerKey) }
+    }
+
     /// A folder searched before the standard ones, for tools installed
     /// somewhere unusual. Empty when unset.
     public static var extraToolDirectory: String {
@@ -282,7 +288,7 @@ public enum Preferences {
     }
 
     public static var compileSettings: CompileSettings {
-        CompileSettings(latexEngine: latexEngine, pandocPdfEngine: pandocPdfEngine)
+        CompileSettings(latexEngine: latexEngine, pandocPdfEngine: pandocPdfEngine, markdownCompiler: markdownCompiler)
     }
 
     // MARK: - Clamped numbers

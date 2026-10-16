@@ -268,6 +268,14 @@ final class GeneralSettingsViewController: NSViewController {
         engine.selectItem(at: LatexEngineChoice.allCases.firstIndex(of: Preferences.latexEngine) ?? 0)
         engine.target = self
         engine.action = #selector(latexEngineChanged)
+        let markdown = NSPopUpButton(frame: .zero, pullsDown: false)
+        for choice in MarkdownCompilerChoice.allCases {
+            markdown.addItem(withTitle: choice.title)
+            markdown.lastItem?.representedObject = choice.rawValue
+        }
+        markdown.selectItem(at: MarkdownCompilerChoice.allCases.firstIndex(of: Preferences.markdownCompiler) ?? 0)
+        markdown.target = self
+        markdown.action = #selector(markdownCompilerChanged)
         let pandoc = NSPopUpButton(frame: .zero, pullsDown: false)
         pandoc.addItems(withTitles: Self.pandocEngines)
         pandoc.selectItem(withTitle: Preferences.pandocPdfEngine)
@@ -283,7 +291,8 @@ final class GeneralSettingsViewController: NSViewController {
         return [
             SettingsRowView(title: "Compile on Save", detail: ".tex always, .md once its PDF is open", control: onSave),
             SettingsRowView(title: "LaTeX Engine", control: engine),
-            SettingsRowView(title: "Markdown PDF Engine", detail: "pandoc --pdf-engine", control: pandoc),
+            SettingsRowView(title: "Markdown Compiler", detail: "Automatic uses Quarto when installed", control: markdown),
+            SettingsRowView(title: "pandoc PDF Engine", detail: "--pdf-engine", control: pandoc),
             folder,
             tools,
         ]
@@ -313,6 +322,11 @@ final class GeneralSettingsViewController: NSViewController {
     @objc private func latexEngineChanged(_ button: NSPopUpButton) {
         let raw = button.selectedItem?.representedObject as? String ?? ""
         Preferences.latexEngine = LatexEngineChoice(rawValue: raw) ?? .automatic
+    }
+
+    @objc private func markdownCompilerChanged(_ button: NSPopUpButton) {
+        let raw = button.selectedItem?.representedObject as? String ?? ""
+        Preferences.markdownCompiler = MarkdownCompilerChoice(rawValue: raw) ?? .automatic
     }
 
     @objc private func pandocEngineChanged(_ button: NSPopUpButton) {

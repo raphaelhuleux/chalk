@@ -4,8 +4,11 @@ import XCTest
 final class CompilePlannerTests: XCTestCase {
     private let tex = URL(fileURLWithPath: "/p/main.tex")
 
-    private func plan(_ file: URL, _ source: String = "", engine: LatexEngineChoice = .automatic, tools: Set<String>) -> Result<CompileJob, CompilePlanError> {
-        CompilePlanner.job(for: file, source: source, settings: CompileSettings(latexEngine: engine), available: tools.contains)
+    private func plan(_ file: URL, _ source: String = "", engine: LatexEngineChoice = .automatic,
+                      markdown: MarkdownCompilerChoice = .automatic, tools: Set<String>) -> Result<CompileJob, CompilePlanError> {
+        CompilePlanner.job(for: file, source: source,
+                           settings: CompileSettings(latexEngine: engine, markdownCompiler: markdown),
+                           available: tools.contains)
     }
 
     func testAutomaticPrefersLatexmkWithSynctex() throws {
@@ -39,17 +42,38 @@ final class CompilePlannerTests: XCTestCase {
         if case .success = plan(tex, tools: []) { XCTFail("no TeX at all must fail") }
     }
 
-    func testMarkdownUsesPandocWithAnAvailablePdfEngine() throws {
-        let job = try plan(URL(fileURLWithPath: "/n/note.md"), tools: ["pandoc", "pdflatex"]).get()
-        XCTAssertEqual(job.plan, .steps([CompileStep("pandoc", ["note.md", "-s", "-o", "note.pdf", "--pdf-engine=pdflatex"])]))
+    private let md = URL(fileURLWithPath: "/n/note.md")
+    private let qmd = URL(fileURLWithPath: "/n/report.qmd")
+    private let quartoRender = { (name: String) in CompilePlan.steps([CompileStep("quarto", ["render", name, "--to", "pdf"])]) }
+
+    func testPandocRunsCiteprocWithAnAvailablePdfEngine() throws {
+        let job = try plan(md, tools: ["pandoc", "pdflatex"]).get()
+        XCTAssertEqual(job.plan, .steps([CompileStep("pandoc", ["note.md", "-s", "-o", "note.pdf", "--pdf-engine=pdflatex", "--citeproc"])]))
         XCTAssertEqual(job.notes, ["xelatex not found: pandoc uses pdflatex."])
     }
 
-    func testQuartoRendersWithQuartoElsePandocWithANote() throws {
-        let qmd = URL(fileURLWithPath: "/n/report.qmd")
-        XCTAssertEqual(try plan(qmd, tools: ["quarto"]).get().plan, .steps([CompileStep("quarto", ["render", "report.qmd", "--to", "pdf"])]))
+    func testPandocNumbersSectionsWhenTheHeaderAsks() throws {
+        let source = "---\ntitle: x\nformat:\n  pdf:\n    number-sections: true\n---\n# A\n"
+        guard case let .steps(steps) = try plan(md, source, tools: ["pandoc", "xelatex"]).get().plan else { return XCTFail() }
+        XCTAssertEqual(steps[0].arguments.last, "--number-sections")
+        // Only the header counts.
+        guard case let .steps(body) = try plan(md, "# A\nnumber-sections: true\n", tools: ["pandoc", "xelatex"]).get().plan else { return XCTFail() }
+        XCTAssertFalse(body[0].arguments.contains("--number-sections"))
+    }
+
+    func testAutomaticUsesQuartoForMarkdownWhenInstalled() throws {
+        XCTAssertEqual(try plan(md, tools: ["quarto", "pandoc"]).get().plan, quartoRender("note.md"))
+        XCTAssertEqual(try plan(qmd, tools: ["quarto"]).get().plan, quartoRender("report.qmd"))
         let fallback = try plan(qmd, tools: ["pandoc", "xelatex"]).get()
-        XCTAssertTrue(fallback.notes.first?.contains("code cells") == true)
+        XCTAssertTrue(fallback.notes.first?.contains("cross-references") == true)
+    }
+
+    func testTheUserCanForceEitherCompiler() throws {
+        guard case let .steps(steps) = try plan(qmd, markdown: .pandoc, tools: ["quarto", "pandoc", "xelatex"]).get().plan else { return XCTFail() }
+        XCTAssertEqual(steps[0].tool, "pandoc")
+        XCTAssertEqual(try plan(md, markdown: .quarto, tools: ["quarto"]).get().plan, quartoRender("note.md"))
+        XCTAssertEqual(plan(md, markdown: .quarto, tools: ["pandoc", "xelatex"]),
+                       .failure(.missingTool("quarto", hint: CompilePlanner.quartoHint)))
     }
 
     func testUnsupportedExtension() {

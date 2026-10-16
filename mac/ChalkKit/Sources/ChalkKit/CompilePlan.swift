@@ -34,6 +34,48 @@ public enum LatexEngineChoice: String, CaseIterable, Sendable {
     }
 }
 
+/// What compiles .md and .qmd files (Settings > Compile).
+public enum MarkdownCompilerChoice: String, CaseIterable, Sendable {
+    /// Quarto when installed: its cross-references, theorem blocks and
+    /// numbering match what the editor previews. pandoc otherwise.
+    case automatic
+    case quarto
+    /// Plain pandoc with citeproc: citations and numbered sections, but no
+    /// Quarto cross-references.
+    case pandoc
+
+    public var title: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .quarto: return "Quarto"
+        case .pandoc: return "pandoc"
+        }
+    }
+}
+
+/// The YAML header of a Markdown file, read only for what pandoc needs as flags.
+public enum MarkdownFrontMatter {
+    private static let numberSections = LatexRoot.regex(
+        #"^\s*(?:number-sections|numbersections)\s*:\s*true\s*$"#, [.anchorsMatchLines])
+
+    /// The text between a leading `---` line and the next `---` or `...` line, or nil.
+    public static func header(of source: String) -> String? {
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return nil }
+        guard let end = lines.dropFirst().firstIndex(where: {
+            let t = $0.trimmingCharacters(in: .whitespaces)
+            return t == "---" || t == "..."
+        }) else { return nil }
+        return lines[1..<end].joined(separator: "\n")
+    }
+
+    /// `number-sections: true` (Quarto's spelling, at any depth) or pandoc's `numbersections: true`.
+    public static func wantsNumberedSections(_ source: String) -> Bool {
+        guard let header = header(of: source) else { return false }
+        return numberSections.firstMatch(in: header, range: NSRange(location: 0, length: (header as NSString).length)) != nil
+    }
+}
+
 /// The TeX program, from a `% !TEX program = …` magic comment; pdflatex
 /// otherwise.
 public enum TexProgram: String, CaseIterable, Sendable {
@@ -90,10 +132,13 @@ public struct CompileSettings: Equatable, Sendable {
     public var latexEngine: LatexEngineChoice
     /// pandoc's `--pdf-engine`.
     public var pandocPdfEngine: String
+    public var markdownCompiler: MarkdownCompilerChoice
 
-    public init(latexEngine: LatexEngineChoice = .automatic, pandocPdfEngine: String = "xelatex") {
+    public init(latexEngine: LatexEngineChoice = .automatic, pandocPdfEngine: String = "xelatex",
+                markdownCompiler: MarkdownCompilerChoice = .automatic) {
         self.latexEngine = latexEngine
         self.pandocPdfEngine = pandocPdfEngine
+        self.markdownCompiler = markdownCompiler
     }
 }
 
@@ -112,6 +157,7 @@ public enum CompilePlanError: Error, Equatable, CustomStringConvertible {
 public enum CompilePlanner {
     static let texHint = "Install MacTeX (tug.org/mactex) or set the tool's path in Settings > Compile."
     static let pandocHint = "Install pandoc (pandoc.org) or set its path in Settings > Compile."
+    static let quartoHint = "Install Quarto (quarto.org), or choose pandoc as the Markdown compiler in Settings > Compile."
 
     /// The job for `file` (for LaTeX, the root already resolved by
     /// `LatexRoot`). `source` is the file's text, read for magic comments.
@@ -158,17 +204,28 @@ public enum CompilePlanner {
             }
 
         case .markdown, .quarto:
-            if kind == .quarto, available("quarto") {
+            var notes: [String] = []
+            switch settings.markdownCompiler {
+            case .quarto:
+                guard available("quarto") else { return .failure(.missingTool("quarto", hint: quartoHint)) }
                 return job(.steps([CompileStep("quarto", ["render", name, "--to", "pdf"])]))
+            case .automatic where available("quarto"):
+                return job(.steps([CompileStep("quarto", ["render", name, "--to", "pdf"])]))
+            case .automatic:
+                if kind == .quarto { notes.append("quarto not found: compiled with pandoc, so Quarto cross-references and code cells were not processed.") }
+            case .pandoc:
+                if kind == .quarto { notes.append("Compiled with pandoc (Settings > Compile): Quarto cross-references and code cells are not processed.") }
             }
             guard available("pandoc") else { return .failure(.missingTool("pandoc", hint: pandocHint)) }
             // pandoc's PDF path needs a TeX engine of its own.
             let engine = ([settings.pandocPdfEngine] + ["xelatex", "lualatex", "pdflatex", "tectonic"]).first(where: available)
             guard let engine else { return .failure(.missingTool(settings.pandocPdfEngine, hint: texHint)) }
-            var notes: [String] = []
-            if kind == .quarto { notes.append("quarto not found: compiled with pandoc, so code cells were not run.") }
             if engine != settings.pandocPdfEngine { notes.append("\(settings.pandocPdfEngine) not found: pandoc uses \(engine).") }
-            return job(.steps([CompileStep("pandoc", [name, "-s", "-o", pdf.lastPathComponent, "--pdf-engine=\(engine)"])]), notes)
+            // citeproc resolves [@key] against the header's `bibliography:`. pandoc ignores
+            // Quarto's nested `number-sections`, so it goes in as a flag.
+            var args = [name, "-s", "-o", pdf.lastPathComponent, "--pdf-engine=\(engine)", "--citeproc"]
+            if MarkdownFrontMatter.wantsNumberedSections(source) { args.append("--number-sections") }
+            return job(.steps([CompileStep("pandoc", args)]), notes)
         }
     }
 }

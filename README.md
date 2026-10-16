@@ -20,7 +20,7 @@ It comes in two forms, built on one editor engine:
 - **Beamer.** Each frame shows as a slide card, with blocks and theorems inside.
 - **Markdown and Quarto.** Headings, lists, tables, callouts, theorem blocks, images and Mermaid diagrams.
 - **Snippets.** HyperSnips-style snippets for fast math typing, with a default set included.
-- **PDF on demand (Mac).** Cmd+R compiles with your own TeX (latexmk, or pdflatex/xelatex/lualatex directly, or tectonic), pandoc or Quarto and shows the PDF beside the text, with SyncTeX both ways. Cmd+S compiles too, and a chapter finds its root file on its own.
+- **PDF on demand (Mac).** Cmd+R compiles with your own TeX (latexmk, or pdflatex/xelatex/lualatex directly, or tectonic), pandoc or Quarto (Settings picks which compiles Markdown; Automatic prefers Quarto, whose cross-references match the editor) and shows the PDF beside the text, with SyncTeX both ways. Cmd+S compiles too, and a chapter finds its root file on its own.
 - **Three view modes.** Preview, mixed, or plain source.
 - **Writing modes.** Zen, typewriter and focus.
 - **Colour themes.** Atom (the default), Ink, Catppuccin and LaTeX, each in light and dark.
