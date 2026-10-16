@@ -323,6 +323,12 @@ final class WebEditorSurface: NSObject, EditorSurface {
         #if DEBUG
         appearancePushCountForTesting += 1
         #endif
+        // The colour WebKit shows wherever the page has not painted yet: a
+        // strip exposed when the view grows (a tab reinstalled after the
+        // column widened behind it) wore the construction-time default for
+        // the frames before the repaint, a block in the wrong tone.
+        let (red, green, blue) = theme.palette.editorBackground.components(dark: dark)
+        webView.underPageBackgroundColor = NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
         applyAppearance()
     }
 
@@ -536,6 +542,11 @@ final class WebEditorSurface: NSObject, EditorSurface {
     }
 
     /// Jump to a 1-based line.
+    func captureSnapshot(_ completion: @escaping (NSImage?) -> Void) {
+        guard isReady, !host.isCovering, webView.window != nil else { return completion(nil) }
+        webView.takeSnapshot(with: nil) { image, _ in completion(image) }
+    }
+
     func revealLine(_ line: Int) {
         webView.evaluateJavaScript(
             "window.__chalkEditor?.gotoLine(\(line))", completionHandler: nil)

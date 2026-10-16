@@ -233,6 +233,10 @@ final class EditorContainerViewController: NSViewController {
         addChild(outlinePanel)
         let panelView: NSView = outlinePanel.view
         panelView.translatesAutoresizingMaskIntoConstraints = false
+        // Layer-backed, so the slide moves the panel as one unit: without a
+        // layer the panel's own frame snapped to its final place while its
+        // layer-backed subviews slid in, a dark block one frame ahead of them.
+        panelView.wantsLayer = true
         // Honour a visibility the host set before the view loaded (session restore calls
         // `setOutlinePanelVisible` from the host's `init`). Hiding unconditionally left the flag
         // true over an invisible panel.
@@ -295,6 +299,11 @@ final class EditorContainerViewController: NSViewController {
             panelView.isHidden = false
             outlineResizeGrip.isHidden = false
             updateOutlinePanelMode()
+            // Place the panel at its off-screen start before the slide: a
+            // hidden view keeps a stale frame, and un-hiding it inside the
+            // animated pass showed that frame for one frame at the top
+            // trailing corner before the slide began.
+            view.layoutSubtreeIfNeeded()
             seedOutlinePanel()
             activeTab?.surface.setOutlineSubscription(true)
         } else {
@@ -453,10 +462,15 @@ final class EditorContainerViewController: NSViewController {
     var activeSurfaceHeadingColorsForTesting: HeadingColors? {
         activeWebSurfaceForTesting?.headingColorsForTesting
     }
+    private var lastTracedLayout = ""
     #endif
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        #if DEBUG
+        let line = "layout content=\(contentView.frame) active=\(activeTab?.surface.view.frame ?? .zero) panelHidden=\(outlinePanel.isViewLoaded ? outlinePanel.view.isHidden : true) panel=\(outlinePanel.isViewLoaded ? outlinePanel.view.frame : .zero) frozen=\(frozenContentWidth != nil)"
+        if line != lastTracedLayout { lastTracedLayout = line; DebugTrace.log(line) }
+        #endif
         syncActiveSurfaceAppearance()
         updateOutlinePanelMode()
         let panelFrame = outlinePanelFrame
@@ -962,7 +976,7 @@ final class EditorContainerViewController: NSViewController {
 
     private func activate(_ tab: Tab) {
         if activeTab !== tab {
-            let outgoing = activeTab?.surface.view
+            let outgoingSurface = activeTab?.surface
             if isOutlinePanelVisible { activeTab?.surface.setOutlineSubscription(false) }
             activeTab = tab
             // Dress the incoming surface (appearance, chrome-top) BEFORE install, so it never
@@ -987,8 +1001,8 @@ final class EditorContainerViewController: NSViewController {
                 seedOutlinePanel()
                 tab.surface.setOutlineSubscription(true)
             }
-            if let outgoing, outgoing !== tab.surface.view {
-                crossFade(from: outgoing, to: tab.surface.view)
+            if let outgoingSurface, outgoingSurface.view !== tab.surface.view {
+                crossFade(from: outgoingSurface, to: tab.surface)
             }
         } else {
             // Re-activating the active tab still installs, so a detached surface is repaired.
@@ -1004,35 +1018,59 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
-    /// docs/motion.md "Tab switch": an alpha cross-fade with both surfaces hosted and geometry
-    /// untouched. Reduce Motion, the instant test policy and an unhosted container swap instantly.
-    private func crossFade(from outgoing: NSView, to incoming: NSView) {
+    /// docs/motion.md "Tab switch": a cross-fade with both surfaces hosted and geometry untouched.
+    /// On AppKit the fade is on a BITMAP of the outgoing page: a web view's content is a remote
+    /// layer that ignores an ancestor's alpha, so an alpha cross-fade cut in one frame. The
+    /// incoming goes in under the outgoing, which keeps the screen until its snapshot lands (or
+    /// the backstop gives up on it); then the bitmap replaces it on top and fades out.
+    /// Reduce Motion, the instant test policy and an unhosted container swap instantly.
+    private func crossFade(from outgoingSurface: EditorSurface, to incomingSurface: EditorSurface) {
+        let outgoing = outgoingSurface.view
+        let incoming = incomingSurface.view
+        incoming.alphaValue = 1
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, !motionIsInstant,
               incoming.window != nil else {
+            #if DEBUG
+            DebugTrace.log("tab cross-fade: instant swap")
+            #endif
             outgoing.removeFromSuperview()
-            incoming.alphaValue = 1
             return
         }
-        // Incoming on top: AppKit draws later siblings above earlier ones.
-        contentView.addSubview(incoming, positioned: .above, relativeTo: nil)
-        // Start a freshly installed view transparent; one rejoining mid-fade keeps its state.
-        if incoming.layer?.animationKeys()?.isEmpty != false, incoming.alphaValue == 1 {
-            incoming.alphaValue = 0
-        }
-        #if DEBUG
-        activateEventTrailForTesting.append("fade-begin")
-        #endif
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = ChalkMetrics.motionFast
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            incoming.animator().alphaValue = 1
-            outgoing.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            // A rapid switch can make `outgoing` active again mid-fade: never remove it then.
-            guard outgoing !== self?.activeTab?.surface.view else { return }
+        contentView.addSubview(incoming, positioned: .below, relativeTo: outgoing)
+        var swapped = false
+        let swap: (NSImage?) -> Void = { [weak self] image in
+            guard !swapped, let self else { return }
+            swapped = true
+            // A rapid switch can make `outgoing` active again before its bitmap lands: never
+            // remove it then, and never paint a stale bitmap over it.
+            guard outgoing !== self.activeTab?.surface.view else { return }
+            guard let image else {
+                outgoing.removeFromSuperview()
+                return
+            }
+            let bitmap = NSImageView(image: image)
+            bitmap.imageScaling = .scaleAxesIndependently
+            bitmap.wantsLayer = true
+            bitmap.frame = outgoing.frame
+            self.contentView.addSubview(bitmap, positioned: .above, relativeTo: nil)
             outgoing.removeFromSuperview()
-            outgoing.alphaValue = 1 // ready for its next hosting
-        })
+            #if DEBUG
+            self.activateEventTrailForTesting.append("fade-begin")
+            DebugTrace.log("tab cross-fade: bitmap fade over \(ChalkMetrics.motionFast)")
+            #endif
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = ChalkMetrics.motionFast
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                bitmap.animator().alphaValue = 0
+            }, completionHandler: {
+                bitmap.removeFromSuperview()
+            })
+        }
+        // Always a turn later, even for a surface that answers at once: the contract is both
+        // surfaces hosted through the switch's turn (TabSwitchContractTests).
+        outgoingSurface.captureSnapshot { image in DispatchQueue.main.async { swap(image) } }
+        // A snapshot that never lands (a page that is not up) must not hold the old page.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { swap(nil) }
     }
 
     #if DEBUG

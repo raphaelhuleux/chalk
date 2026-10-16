@@ -60,6 +60,8 @@ Implemented 2026-08-24 (C2); what building it taught:
 
 - A rapid A→B→A switch brings the fading-out view back as the ACTIVE surface while the A→B fade's completion is still pending — the completion must never remove the view the active tab currently owns (`TabSwitchContractTests` pins it by switching back mid-fade).
 - AppKit (2026-10-16): a new tab's `WKWebView` composites one WHITE frame when its page process first paints, and alpha 0 on the web view did not stop it (the content is a remote layer). The surface keeps an opaque editor-toned cover over the web view until the page reports `ready` and has painted two frames (`PrePaintCoverView`, lifted on a double rAF with a 0.5 s backstop).
+- AppKit (2026-10-16): for the same reason an alpha cross-fade between two surfaces cut in one frame. The fade is on a BITMAP of the outgoing page (`EditorSurface.captureSnapshot`): the incoming goes in under the outgoing, which keeps the screen until its snapshot lands (a 0.1 s backstop gives up on a page that is not up), then the bitmap replaces it on top and fades out over `motionFast`. A rapid switch back keeps the outgoing, as before.
+- AppKit (2026-10-16): a tab reinstalled after the column widened behind it (a zen round trip hid the Library) showed WebKit's unpainted strip in the construction-time under-page colour for three frames. `underPageBackgroundColor` now follows every appearance push, in the theme's editor tone, so an exposed strip is invisible.
 - Tab CLOSE keeps its instant surface swap: `performClose` tears the closing surface down before the neighbor activates, so there is no outgoing view to fade — the close's motion is the chip fade (`motionTab`/`motionFast`), as the tokens table always said.
 - The ordering rule is pinned by a DEBUG event trail on the activate path (appearance, chrome-top, install), not by intercepting the webview — install is the moment a surface can first become visible, so "dressed before install" is the testable form of "dressed before visible".
 
@@ -77,6 +79,7 @@ Implemented 2026-08-24 (C3); what building it taught:
 - On the fade lane, windowed-Mac zen does not move the resting offset at all: the transparent titlebar keeps its height and stays the reserving chrome, so `restingLineSitsOneLineBelowTheReserve` holds with no glide. The glide shows where a band is actually reclaimed: full screen (band → 0).
 - The FLIP is really two mechanisms: a SCROLLED document absorbs the whole delta in `scrollTop` (the text under the caret does not move — pinned by a Playwright check that `coordsAtPos` is identical before and after), and only the residual a resting document cannot absorb is transform-glided. The transform rides `#root` (the host shell's mount element, an ancestor CM6 does not own); the padding itself never transitions (CM6 reflows per animated frame and the caret layer lags). Reduce Motion / `.instant` take the plain var set — placement, not motion — which also means a scrolled document keeps its (pre-C3) caret jump there; recorded, not fixed.
 - Construction is placement: `ChromeMatrixHost.makeRoot` drives configuration under `.instant` and restores the caller's policy, because a zen cell built on `.system` returns mid-fade and poisons the fresh-layout cache.
+- AppKit (2026-10-16): the band's fade-IN is an explicit opacity animation on its layer over a final model (visible, alpha 1): un-hiding and fading through the animator in the same turn popped the band in one frame. The presentation pass also writes the auto-hide state before the fade, since that write sets the alpha outright.
 - The band presence has one seam (`setBandHidden(_:fadeOver:)`): zen passes a duration, every other presentation pass stays instant, and both lanes land `isHidden` set + alpha 1; a stale fade-out completion is epoch-discarded so a rapid re-toggle cannot hide the band it just re-showed. The H-6 no-glue Mac fallback keeps its snap outright — hiding that band resizes the columns through the safe area, a webview bounds change no fade can mask.
 - Test: `ZenTransitionContractTests` (t=0 facts on the animated lane, fresh-layout equality for enter and round trip, instant-lane end-state identity, the strip decision against the oracle, the glide request with its clock).
 
@@ -100,6 +103,10 @@ Implemented 2026-08-24 (C4); what building it taught:
 
 The ownership swap (AppKit strip <-> UIKit band) happens at the will-transition edge so the system animation carries the final chrome; the incoming band fades in over `motionFast`.
 Test: transition matrix equality windowed<->fullscreen; the screenshot diff lane for the visual half.
+
+### Outline panel
+
+Slides from the trailing edge over `motionSidebar`, the content column pushing or the panel overlaying per `outlinePanelPushMinimumEditorWidth`. AppKit (2026-10-16): the panel's view is layer-backed and laid out at its off-screen start before the animated pass; without the layer its own frame snapped to the final place while its layer-backed children slid in, a dark block one frame ahead of them.
 
 ### Palettes (Quick Open, outline)
 

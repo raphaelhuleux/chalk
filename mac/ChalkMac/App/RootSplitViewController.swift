@@ -393,9 +393,12 @@ final class RootSplitViewController: NSViewController {
     /// follows every ownership or window-mode change, so a band hidden by
     /// scroll never carries a stale offset into its next turn.
     private func applyMacChromePresentation() {
-        setBandHidden(isZen, fadeOver: pendingZenBandFade)
-        applyBandLayout()
+        // The auto-hide write sets the band's alpha outright, so it goes
+        // first: after the fade it cancelled zen's exit, and the band popped
+        // back in one frame instead of fading over `motionStandard`.
         applyChromeAutoHideState(animated: false)
+        applyBandLayout()
+        setBandHidden(isZen, fadeOver: pendingZenBandFade)
     }
 
     /// The system titlebar's height under the content: with
@@ -1502,13 +1505,18 @@ final class RootSplitViewController: NSViewController {
                 self.headerBar.alphaValue = 1
             })
         } else {
+            // Un-hidden and faded in the same turn through the animator, the
+            // band popped: the model is final (alpha 1, visible) and the fade
+            // is an explicit opacity animation on its layer, which runs from
+            // the un-hide regardless of what else writes the alpha this turn.
             headerBar.isHidden = false
-            headerBar.alphaValue = 0
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = duration
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                headerBar.animator().alphaValue = 1
-            }
+            headerBar.alphaValue = 1
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            fade.toValue = 1
+            fade.duration = duration
+            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            headerBar.layer?.add(fade, forKey: "chalk.zen.bandFadeIn")
         }
     }
 

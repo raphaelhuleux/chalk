@@ -80,6 +80,7 @@ final class FakeEditorSurface: EditorSurface {
     func setFontScale(_ scale: Double) {}
     func focusEditor() {}
     func blurEditor() {}
+    func captureSnapshot(_ completion: @escaping (NSImage?) -> Void) { completion(nil) }
     func teardown() {}
 
     // Shell-owned presentation: the container pushes these, and nothing in

@@ -334,9 +334,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Debug launch switches for screenshots and manual checks:
     /// `CHALK_AUDIT_STATE` (the audit harness, `AuditMode`), `CHALK_DEBUG_LIBRARY=<folder>`,
     /// `CHALK_DEBUG_PALETTE=quick-open|outline|outline-panel|settings|settings-shortcuts` and
-    /// `CHALK_DEBUG_SCRIPT=<seconds>:<action>,...` (actions: new-tab, close-tab,
-    /// toggle-sidebar, toggle-outline-panel, quick-open), which drives the shell on a clock so
-    /// a screen recording can catch a flicker no screenshot shows.
+    /// `CHALK_DEBUG_SCRIPT=<seconds>:<action>,...` (actions: new-tab, close-tab, next-tab,
+    /// toggle-sidebar, toggle-outline-panel, quick-open, zen, normal, dark, light, fullscreen),
+    /// which drives the shell on a clock so a window recording (`scripts/screenshots/winrec.swift`)
+    /// can catch a flicker no screenshot shows.
     private func applyDebugLaunchEnvironment() {
         guard let controller = frontmostEditorWindow else { return }
         controller.root.applyAuditStateIfRequested()
@@ -347,12 +348,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard parts.count == 2, let delay = Double(parts[0]) else { continue }
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak controller] in
                     guard let root = controller?.root else { return }
+                    DebugTrace.log("script \(parts[1])")
+                    if parts[1].hasPrefix("open:") {
+                        root.openExternalDocument(URL(fileURLWithPath: String(parts[1].dropFirst(5))))
+                        return
+                    }
                     switch parts[1] {
                     case "new-tab": root.cmdNewFile(nil)
                     case "close-tab": root.cmdCloseTab(nil)
+                    case "next-tab": root.cmdNextTab(nil)
                     case "toggle-sidebar": root.cmdToggleSidebar(nil)
                     case "toggle-outline-panel": root.cmdToggleOutlinePanel(nil)
                     case "quick-open": root.cmdQuickOpen(nil)
+                    case "zen": root.cmdEditingModeZen(nil)
+                    case "normal": root.cmdEditingModeNormal(nil)
+                    case "dark": Preferences.themePreference = .dark; SettingsBroadcast.applyGeneralSettings(roots: RootSplitViewController.everyLiveRoot())
+                    case "light": Preferences.themePreference = .light; SettingsBroadcast.applyGeneralSettings(roots: RootSplitViewController.everyLiveRoot())
+                    case "fullscreen": root.view.window?.toggleFullScreen(nil)
                     default: break
                     }
                 }

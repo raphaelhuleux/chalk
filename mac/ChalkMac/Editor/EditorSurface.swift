@@ -36,6 +36,9 @@ protocol EditorSurface: AnyObject {
 
     /// Move the cursor to a 1-based line, scroll it toward the viewport top, and focus the editor.
     func revealLine(_ line: Int)
+    /// A bitmap of what the surface shows right now, for the tab switch's cross-fade; nil when
+    /// nothing is up. Not a HostPort message.
+    func captureSnapshot(_ completion: @escaping (NSImage?) -> Void)
 
     /// Live, debounced outline pushes to `onOutline` for the persistent panel. Off installs no
     /// listener, so keystrokes pay nothing.

@@ -17,13 +17,27 @@ final class Sink: NSObject, SCStreamOutput {
     private let context = CIContext()
     private(set) var index = 0
     private(set) var times: [String] = []
-    private let start = Date()
 
     init(outDir: URL) { self.outDir = outDir }
 
+    private var firstPTS: Double?
+    private(set) var firstWallTime: Double?
+
+    /// Each frame's time is the stream's own presentation timestamp, not the
+    /// moment this handler got to it: encoding runs behind the stream, and a
+    /// wall clock here drifted a second late by the end of a run.
     func stream(_ stream: SCStream, didOutputSampleBuffer buffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, let pixels = CMSampleBufferGetImageBuffer(buffer) else { return }
-        let image = CIImage(cvPixelBuffer: pixels)
+        let pts = CMSampleBufferGetPresentationTimeStamp(buffer).seconds
+        if firstPTS == nil {
+            firstPTS = pts
+            // The first frame's wall time, taken on arrival (the queue is empty then), so a
+            // run can be lined up with the app's own trace.
+            firstWallTime = Date().timeIntervalSince1970
+        }
+        // Half size: four times fewer pixels to encode, so the queue keeps up
+        // and the stream drops nothing; a one-frame fault is still 550 px wide.
+        let image = CIImage(cvPixelBuffer: pixels).transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5))
         guard let cg = context.createCGImage(image, from: image.extent) else { return }
         index += 1
         let url = outDir.appendingPathComponent(String(format: "f%04d.png", index))
@@ -31,7 +45,7 @@ final class Sink: NSObject, SCStreamOutput {
             CGImageDestinationAddImage(dest, cg, nil)
             CGImageDestinationFinalize(dest)
         }
-        times.append(String(format: "%d %.3f", index, Date().timeIntervalSince(start)))
+        times.append(String(format: "%d %.3f", index, pts - (firstPTS ?? pts)))
     }
 }
 
@@ -68,7 +82,8 @@ struct WinRec {
         try await stream.startCapture()
         try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         try await stream.stopCapture()
-        try? sink.times.joined(separator: "\n").appending("\n")
+        let header = String(format: "epoch %.3f\n", sink.firstWallTime ?? 0)
+        try? (header + sink.times.joined(separator: "\n") + "\n")
             .write(to: outDir.appendingPathComponent("times.txt"), atomically: true, encoding: .utf8)
         print("\(sink.index) frames, \(Int(window.frame.width))x\(Int(window.frame.height)) pt")
     }
