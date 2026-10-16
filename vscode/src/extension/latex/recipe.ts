@@ -143,17 +143,19 @@ export interface BuildStep {
 export type StepsResult = { steps: BuildStep[] } | { error: string };
 
 /**
- * First recipe wins (LW's `latex.recipe.default` is "first"; "lastUsed" isn't
- * observable from outside LW, so we don't emulate it). No recipes configured
- * means LW's implicit latexmk recipe.
+ * LW's `latex.recipe.default`: a recipe name picks that recipe; "first" and
+ * "lastUsed" take the first one ("lastUsed" isn't observable from outside
+ * LW). No recipes configured means LW's implicit latexmk recipe.
  */
 export function resolveBuildSteps(
   recipes: LwRecipe[] | undefined,
   tools: LwTool[] | undefined,
   ctx: PlaceholderContext,
+  defaultRecipe = 'first',
 ): StepsResult {
+  const named = recipes?.find((r) => r.name === defaultRecipe);
   const recipe: LwRecipe =
-    recipes && recipes.length > 0 ? recipes[0] : { name: 'latexmk', tools: ['latexmk'] };
+    named ?? (recipes && recipes.length > 0 ? recipes[0] : { name: 'latexmk', tools: ['latexmk'] });
   const steps: BuildStep[] = [];
   for (const toolName of recipe.tools) {
     let tool = tools?.find((t) => t.name === toolName);
@@ -173,18 +175,22 @@ export function resolveBuildSteps(
 }
 
 /**
- * Whether a save from Chalk should trigger our build. Chalk only fills the
- * gap LaTeX Workshop refuses: its build() bails when there is no active TEXT
- * editor (a focused custom editor never is one). When a text editor IS
- * active, LW's own autoBuild machinery owns the save and building here would
- * double-compile.
+ * Whether a save from Chalk should trigger our build. LW's own build bails
+ * whenever the active editor is not a LaTeX TEXT editor (a focused custom
+ * editor never is one), and otherwise builds the root of THAT editor. So
+ * Chalk builds unless LW will build this same root itself; a second build
+ * while one runs is the caller's queue's business.
  */
 export interface BuildDecisionInput {
   settingEnabled: boolean;
   lwInstalled: boolean;
   isOpenInChalkTexEditor: boolean;
-  hasActiveTextEditor: boolean;
-  alreadyBuilding: boolean;
+  /** `latex-workshop.latex.autoBuild.run`: "onSave", "onFileChange" or "never". */
+  lwAutoBuildRun: string;
+  /** Matched by `latex-workshop.latex.autoBuild.onSave.files.ignore`. */
+  ignoredByLw: boolean;
+  /** A LaTeX text editor is active and resolves to the saved file's root. */
+  lwBuildsSameRoot: boolean;
 }
 
 export function shouldBuildOnSave(d: BuildDecisionInput): { build: boolean; reason: string } {
@@ -193,9 +199,14 @@ export function shouldBuildOnSave(d: BuildDecisionInput): { build: boolean; reas
   if (!d.isOpenInChalkTexEditor) {
     return { build: false, reason: 'saved document is not open in a Chalk editor' };
   }
-  if (d.hasActiveTextEditor) {
-    return { build: false, reason: 'a text editor is active — LaTeX Workshop handles this save' };
+  if (d.lwAutoBuildRun === 'never') {
+    return { build: false, reason: 'latex-workshop.latex.autoBuild.run is "never"' };
   }
-  if (d.alreadyBuilding) return { build: false, reason: 'a build is already running' };
-  return { build: true, reason: 'no active text editor — filling the LaTeX Workshop gap' };
+  if (d.ignoredByLw) {
+    return { build: false, reason: 'matched by latex-workshop.latex.autoBuild.onSave.files.ignore' };
+  }
+  if (d.lwBuildsSameRoot) {
+    return { build: false, reason: 'a LaTeX text editor on the same root is active — LaTeX Workshop builds it' };
+  }
+  return { build: true, reason: 'LaTeX Workshop cannot build from a Chalk editor' };
 }

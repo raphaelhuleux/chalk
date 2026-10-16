@@ -75,6 +75,18 @@
         "command": "chalk.editorHandledKey",
         "title": "Key Handled by the Chalk Editor",
         "category": "Chalk"
+      },
+      {
+        "command": "chalk.latex.build",
+        "title": "Build LaTeX Project",
+        "category": "Chalk",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "chalk.latex.viewPdf",
+        "title": "View LaTeX PDF",
+        "category": "Chalk",
+        "icon": "$(open-preview)"
       }
     ],
     "menus": {
@@ -82,6 +94,26 @@
         {
           "command": "chalk.editorHandledKey",
           "when": "false"
+        },
+        {
+          "command": "chalk.latex.build",
+          "when": "resourceExtname == .tex"
+        },
+        {
+          "command": "chalk.latex.viewPdf",
+          "when": "resourceExtname == .tex"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "chalk.latex.build",
+          "when": "activeCustomEditorId == chalk.texEditor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "chalk.latex.viewPdf",
+          "when": "activeCustomEditorId == chalk.texEditor",
+          "group": "navigation@2"
         }
       ]
     },
@@ -115,6 +147,18 @@
         "key": "ctrl+shift+z",
         "mac": "cmd+shift+z",
         "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"
+      },
+      {
+        "command": "chalk.latex.build",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b",
+        "when": "activeCustomEditorId == chalk.texEditor"
+      },
+      {
+        "command": "chalk.latex.viewPdf",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v",
+        "when": "activeCustomEditorId == chalk.texEditor"
       }
     ],
     "configuration": {
@@ -123,12 +167,17 @@
         "chalk.latex.buildOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Build the LaTeX project when saving a .tex file from a Chalk editor. Only fires in the gap LaTeX Workshop cannot cover (no active text editor); runs your latex-workshop recipe, so the LaTeX Workshop PDF viewer refreshes as usual."
+          "description": "Build the LaTeX project when saving a .tex file from a Chalk editor, with your latex-workshop recipe, so the LaTeX Workshop PDF viewer refreshes as usual. Skipped when LaTeX Workshop builds the same root itself (a LaTeX text editor on that project is active) and when latex-workshop.latex.autoBuild.run is \"never\"."
         },
         "chalk.latex.rootFile": {
           "type": "string",
           "default": "",
           "description": "LaTeX root file for Chalk-triggered builds, relative to the workspace folder. Normally unnecessary: a % !TEX root magic comment, a \\documentclass in the saved file, or the include-graph scan finds the root automatically."
+        },
+        "chalk.latex.reverseSyncToChalk": {
+          "type": "boolean",
+          "default": true,
+          "description": "When a click in the LaTeX Workshop PDF viewer (reverse SyncTeX) opens a .tex file that is open in Chalk, jump in the Chalk editor instead of opening a text editor."
         },
         "chalk.viewMode": {
           "type": "string",

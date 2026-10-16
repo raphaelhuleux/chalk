@@ -136,6 +136,19 @@ describe('resolveBuildSteps', () => {
     expect('steps' in r && r.steps[0].args).toContain('/ws/paper/article/main');
   });
 
+  it('honours latex.recipe.default when it names a recipe', () => {
+    const recipes = [
+      { name: 'latexmk', tools: ['latexmk'] },
+      { name: 'full', tools: ['latexmk', 'bibtex', 'latexmk'] },
+    ];
+    const named = resolveBuildSteps(recipes, userTools, ctx, 'full');
+    expect('steps' in named && named.steps.map((s) => s.name)).toEqual(['latexmk', 'bibtex', 'latexmk']);
+    for (const fallback of ['first', 'lastUsed', 'no such recipe']) {
+      const r = resolveBuildSteps(recipes, userTools, ctx, fallback);
+      expect('steps' in r && r.steps.map((s) => s.name)).toEqual(['latexmk']);
+    }
+  });
+
   it('errors on an unknown tool name', () => {
     const r = resolveBuildSteps([{ name: 'weird', tools: ['tectonic'] }], userTools, ctx);
     expect('error' in r && r.error).toContain('tectonic');
@@ -147,23 +160,26 @@ describe('shouldBuildOnSave', () => {
     settingEnabled: true,
     lwInstalled: true,
     isOpenInChalkTexEditor: true,
-    hasActiveTextEditor: false,
-    alreadyBuilding: false,
+    lwAutoBuildRun: 'onFileChange',
+    ignoredByLw: false,
+    lwBuildsSameRoot: false,
   };
 
-  it('builds only in the LaTeX Workshop gap (no active text editor)', () => {
+  it('builds a Chalk save that LaTeX Workshop cannot', () => {
     expect(shouldBuildOnSave(yes).build).toBe(true);
+    expect(shouldBuildOnSave({ ...yes, lwAutoBuildRun: 'onSave' }).build).toBe(true);
   });
 
   it.each([
     ['settingEnabled', { ...yes, settingEnabled: false }],
     ['lwInstalled', { ...yes, lwInstalled: false }],
     ['isOpenInChalkTexEditor', { ...yes, isOpenInChalkTexEditor: false }],
-    ['hasActiveTextEditor', { ...yes, hasActiveTextEditor: true }],
-    ['alreadyBuilding', { ...yes, alreadyBuilding: true }],
-  ])('declines when %s blocks', (_label, input) => {
+    ['autoBuild.run never', { ...yes, lwAutoBuildRun: 'never' }],
+    ['ignore glob', { ...yes, ignoredByLw: true }],
+    ['LW builds the same root', { ...yes, lwBuildsSameRoot: true }],
+  ])('skips when %s says so', (_name, input) => {
     const d = shouldBuildOnSave(input);
     expect(d.build).toBe(false);
-    expect(d.reason.length).toBeGreaterThan(0);
+    expect(d.reason).not.toBe('');
   });
 });

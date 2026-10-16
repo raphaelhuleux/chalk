@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { ChalkEditorProvider } from './chalk-editor-provider';
 import { diagnoseThemeResolution } from './theme-reader';
-import { installLatexBuildOnSave } from './latex/build-on-save';
+import { LatexBuilder } from './latex/build-on-save';
+import { installLatexCommands } from './latex/pdf-view';
 import { texProfile } from './languages/tex';
 import { markdownProfile } from './languages/markdown';
 
@@ -16,10 +17,13 @@ export function activate(context: vscode.ExtensionContext): void {
     supportsMultipleEditorsPerDocument: false,
   };
 
+  const texProvider = new ChalkEditorProvider(context, texProfile, diagChannel);
+  const latexBuilder = new LatexBuilder(diagChannel);
+
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
       texProfile.viewType,
-      new ChalkEditorProvider(context, texProfile, diagChannel),
+      texProvider,
       editorOptions,
     ),
     vscode.window.registerCustomEditorProvider(
@@ -46,7 +50,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // would undo the TextDocument on top of CodeMirror's own undo
     // (test/unit/keybindings.test.ts).
     vscode.commands.registerCommand('chalk.editorHandledKey', () => {}),
-    installLatexBuildOnSave(diagChannel),
+    latexBuilder,
+    installLatexCommands(latexBuilder, (uri, line) => texProvider.revealLine(uri, line)),
     diagChannel,
   );
 }

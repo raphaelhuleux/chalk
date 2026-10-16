@@ -22,11 +22,24 @@ import type { LanguageProfile } from './languages/types';
 const SAFE_EXTERNAL_SCHEMES = new Set(['http', 'https', 'mailto']);
 
 export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
+  /** Ready webviews by document URI, for `revealLine`. */
+  private readonly readyPanels = new Map<string, vscode.WebviewPanel>();
+
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly profile: LanguageProfile,
     private readonly diagChannel: vscode.OutputChannel,
   ) {}
+
+  /** Move the caret of `uri`'s Chalk editor to `line` (1-based). Transport
+   *  glue like `heartbeat`, outside the HostPort protocol. False when no
+   *  ready Chalk editor shows that document. */
+  public revealLine(uri: vscode.Uri, line: number): boolean {
+    const panel = this.readyPanels.get(uri.toString());
+    if (!panel) return false;
+    void panel.webview.postMessage({ type: 'goto-line', line });
+    return true;
+  }
 
   public async resolveCustomTextEditor(
     document: vscode.TextDocument,
@@ -188,6 +201,7 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
         }
         case 'ready': {
           webviewReady = true;
+          this.readyPanels.set(docKey, webviewPanel);
           webviewPanel.webview.postMessage({
             type: 'init',
             text: document.getText(),
@@ -359,6 +373,7 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel.onDidDispose(() => {
       // An edit still in flight may want to resync; the webview is gone.
       webviewReady = false;
+      if (this.readyPanels.get(docKey) === webviewPanel) this.readyPanels.delete(docKey);
       clearInterval(watchdogTimer);
       messageSub.dispose();
       changeSub.dispose();

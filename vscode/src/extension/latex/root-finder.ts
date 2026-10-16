@@ -6,14 +6,13 @@ import * as path from 'node:path';
  * logic over an injected file-system view so it unit-tests without disk.
  *
  * Resolution order (first hit wins):
- *   1. `% !TEX root = …` magic comment in the saved file (TeXShop convention,
- *      also honored by LaTeX Workshop) — author intent, beats everything.
+ *   1. `% !TEX root = …` magic comment anywhere in the saved file (TeXShop
+ *      convention, also honored by LaTeX Workshop): author intent.
  *   2. `chalk.latex.rootFile` setting.
  *   3. The saved file itself, when it declares `\documentclass`.
- *   4. Include-graph scan: any workspace .tex with `\documentclass` whose
- *      transitive `\input`/`\include`/`\subfile`/`\import` closure reaches
- *      the saved file. LaTeX resolves include paths against the COMPILE
- *      directory (the root's dir), so the scan does too.
+ *   4. Workspace roots (`\documentclass` files) that reach the saved file,
+ *      through their include graph or their latest `.fls` recorder file.
+ *      When several do, see `rankRoots`.
  */
 export interface RootFinderFs {
   /** UTF-8 contents, or null when unreadable. */
@@ -21,12 +20,18 @@ export interface RootFinderFs {
   exists(absPath: string): boolean;
   /** Absolute paths of workspace .tex files (caller bounds the walk). */
   listTexFiles(): string[];
+  /** Absolute input paths from `rootFile`'s last `.fls`, or [] when there is
+   *  none. Catches includes the regex scan cannot see (`\input{\dir/x}`). */
+  flsInputs?(rootFile: string): string[];
 }
 
 export interface RootFinderOptions {
   /** chalk.latex.rootFile — absolute, or relative to workspaceDir. */
   configuredRoot?: string | null;
   workspaceDir?: string | null;
+  /** The root this file last built with this session; wins a tie between
+   *  several roots so the choice does not flip between saves. */
+  preferredRoot?: string | null;
 }
 
 export interface RootResult {
@@ -36,7 +41,6 @@ export interface RootResult {
 }
 
 const MAGIC_ROOT = /^\s*%\s*!\s*TEX\s+root\s*=\s*(.+?)\s*$/i;
-const MAGIC_SCAN_LINES = 15;
 /** Include-graph safety bound; a paper project is a handful of files. */
 const MAX_GRAPH_FILES = 200;
 
@@ -56,29 +60,58 @@ function hasDocumentclass(tex: string): boolean {
   return /\\documentclass/.test(stripComments(tex));
 }
 
-/** Resolve an include target the way TeX does: against the root's directory,
- *  with `.tex` appended when no extension is given. */
-function resolveInclude(rootDir: string, target: string): string {
-  const withExt = path.extname(target) === '' ? `${target}.tex` : target;
-  return path.resolve(rootDir, withExt);
+function withTexExt(target: string): string {
+  return path.extname(target) === '' ? `${target}.tex` : target;
 }
 
-function includesOf(tex: string, rootDir: string): string[] {
+/**
+ * A file in the include graph with the directory its own includes resolve
+ * against. TeX looks in the compile directory (the root's) first; the
+ * `import` package and `subfiles` add the imported file's directory, so
+ * includes inside those resolve against both.
+ */
+interface GraphNode {
+  file: string;
+  base: string;
+}
+
+/** `\input`-family targets resolve against the root dir, then the node's
+ *  import base when that differs. */
+function inputTargets(target: string, node: GraphNode, rootDir: string): GraphNode[] {
+  const rel = withTexExt(target.trim());
+  const bases = node.base === rootDir ? [rootDir] : [rootDir, node.base];
+  return bases.map((b) => ({ file: path.resolve(b, rel), base: node.base }));
+}
+
+function includesOf(tex: string, node: GraphNode, rootDir: string): GraphNode[] {
   const stripped = stripComments(tex);
-  const out: string[] = [];
-  for (const m of stripped.matchAll(/\\(?:input|include|subfile)\s*\{([^}]+)\}/g)) {
-    out.push(resolveInclude(rootDir, m[1].trim()));
+  const out: GraphNode[] = [];
+  // Braced and TeX-primitive (`\input chapters/one`) forms.
+  for (const m of stripped.matchAll(
+    /\\(?:input|include|InputIfFileExists)\s*(?:\{([^}]+)\}|\s([^\s{}%\\]+))/g,
+  )) {
+    out.push(...inputTargets(m[1] ?? m[2], node, rootDir));
   }
-  for (const m of stripped.matchAll(/\\import\s*\{([^}]+)\}\s*\{([^}]+)\}/g)) {
-    out.push(resolveInclude(rootDir, path.join(m[1].trim(), m[2].trim())));
+  for (const m of stripped.matchAll(/\\subfile\s*\{([^}]+)\}/g)) {
+    for (const t of inputTargets(m[1], node, rootDir)) {
+      out.push({ file: t.file, base: path.dirname(t.file) });
+    }
+  }
+  // `import` package: \import{dir}{file} takes dir from the compile
+  // directory; \subimport{dir}{file} from the current file's base.
+  for (const m of stripped.matchAll(
+    /\\(sub)?(?:import|inputfrom|includefrom)\*?\s*\{([^}]*)\}\s*\{([^}]+)\}/g,
+  )) {
+    const dir = path.resolve(m[1] ? node.base : rootDir, m[2].trim());
+    out.push({ file: path.resolve(dir, withTexExt(m[3].trim())), base: dir });
   }
   return out;
 }
 
 /**
- * BFS over `rootFile`'s `\input`/`\include`/`\subfile`/`\import` closure:
- * each file the file system can read, with its resolved include targets
- * (readable or not). Bounded by MAX_GRAPH_FILES visited paths.
+ * BFS over `rootFile`'s include closure: each file the file system can read,
+ * with its resolved include targets (readable or not). Bounded by
+ * MAX_GRAPH_FILES visited paths.
  */
 function* includeClosure(
   rootFile: string,
@@ -86,18 +119,18 @@ function* includeClosure(
 ): Generator<{ file: string; includes: string[] }> {
   const root = path.resolve(rootFile);
   const rootDir = path.dirname(root);
-  const queue = [root];
+  const queue: GraphNode[] = [{ file: root, base: rootDir }];
   const visited = new Set<string>();
   while (queue.length > 0 && visited.size < MAX_GRAPH_FILES) {
-    const current = queue.shift() as string;
-    if (visited.has(current)) continue;
-    visited.add(current);
-    const content = fs.readFile(current);
+    const node = queue.shift() as GraphNode;
+    if (visited.has(node.file)) continue;
+    visited.add(node.file);
+    const content = fs.readFile(node.file);
     if (content === null) continue;
-    const includes = includesOf(content, rootDir);
-    yield { file: current, includes };
-    for (const inc of includes) {
-      if (!visited.has(inc)) queue.push(inc);
+    const children = includesOf(content, node, rootDir);
+    yield { file: node.file, includes: children.map((c) => c.file) };
+    for (const child of children) {
+      if (!visited.has(child.file)) queue.push(child);
     }
   }
 }
@@ -120,6 +153,58 @@ export function includedTexFiles(rootFile: string, fs: RootFinderFs): string[] {
   return Array.from(includeClosure(rootFile, fs), ({ file }) => file);
 }
 
+/**
+ * `INPUT` lines of a `.fls` recorder file as absolute paths. Relative ones
+ * resolve against its `PWD` line, which latexmk and pdflatex both write.
+ */
+export function parseFlsInputs(fls: string): string[] {
+  let pwd = '';
+  const inputs = new Set<string>();
+  for (const line of fls.split(/\r?\n/)) {
+    if (line.startsWith('PWD ')) pwd = line.slice(4).trim();
+    else if (line.startsWith('INPUT ')) {
+      const p = line.slice(6).trim();
+      inputs.add(path.isAbsolute(p) || !pwd ? path.resolve(p) : path.resolve(pwd, p));
+    }
+  }
+  return [...inputs];
+}
+
+/** Directory hops from `root`'s folder to `saved`'s: a sibling is 0, a file
+ *  in `sections/` is 1. */
+function distance(root: string, saved: string): number {
+  const rel = path.relative(path.dirname(root), path.dirname(saved));
+  return rel === '' ? 0 : rel.split(path.sep).length;
+}
+
+/**
+ * Order between several roots that all reach the saved file (a shared
+ * chapter in `main.tex` and `slides.tex`): this session's previous choice,
+ * then a root whose last compile actually read the file, then the nearest
+ * folder, then name.
+ */
+function rankRoots(
+  roots: { file: string; viaFls: boolean }[],
+  saved: string,
+  preferred: string | null,
+): { file: string; viaFls: boolean }[] {
+  const key = (r: { file: string; viaFls: boolean }): [number, number, number, string] => [
+    r.file === preferred ? 0 : 1,
+    r.viaFls ? 0 : 1,
+    distance(r.file, saved),
+    r.file,
+  ];
+  return [...roots].sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    for (let i = 0; i < ka.length; i++) {
+      if (ka[i] < kb[i]) return -1;
+      if (ka[i] > kb[i]) return 1;
+    }
+    return 0;
+  });
+}
+
 export function findLatexRoot(
   savedPath: string,
   fs: RootFinderFs,
@@ -130,7 +215,7 @@ export function findLatexRoot(
 
   // 1. Magic comment.
   if (savedContent !== null) {
-    for (const line of savedContent.split('\n', MAGIC_SCAN_LINES)) {
+    for (const line of savedContent.split('\n')) {
       const m = MAGIC_ROOT.exec(line);
       if (!m) continue;
       const target = m[1];
@@ -160,18 +245,21 @@ export function findLatexRoot(
     return { root: saved, reason: '\\documentclass in the saved file' };
   }
 
-  // 4. Include-graph scan.
-  const candidates = fs
-    .listTexFiles()
-    .map((p) => path.resolve(p))
-    .filter((p) => p !== saved)
-    .sort();
+  // 4. Every root that reaches the saved file, ranked.
+  const reaching: { file: string; viaFls: boolean }[] = [];
+  const candidates = [...new Set(fs.listTexFiles().map((p) => path.resolve(p)))].filter((p) => p !== saved);
   for (const candidate of candidates) {
     const content = fs.readFile(candidate);
     if (content === null || !hasDocumentclass(content)) continue;
-    if (graphReaches(candidate, saved, fs)) {
-      return { root: candidate, reason: `include graph from ${path.basename(candidate)}` };
-    }
+    const viaFls = fs.flsInputs?.(candidate).includes(saved) ?? false;
+    if (viaFls || graphReaches(candidate, saved, fs)) reaching.push({ file: candidate, viaFls });
+  }
+  if (reaching.length > 0) {
+    const preferred = opts.preferredRoot ? path.resolve(opts.preferredRoot) : null;
+    const [best] = rankRoots(reaching, saved, preferred);
+    const how = best.viaFls ? '.fls of' : 'include graph from';
+    const others = reaching.length > 1 ? ` (${reaching.length - 1} other root(s) also include it)` : '';
+    return { root: best.file, reason: `${how} ${path.basename(best.file)}${others}` };
   }
 
   return { root: null, reason: 'no root found (no magic comment, setting, \\documentclass, or including root)' };

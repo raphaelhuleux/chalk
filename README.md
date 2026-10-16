@@ -60,7 +60,9 @@ Mixed view keeps the markup visible but dimmed, while math, images and tables st
 
 ![The Chalk editor showing a .tex file inside VS Code](docs/images/vscode.png)
 
-The extension can also build your LaTeX project on save (`chalk.latex.buildOnSave`).
+The extension can also build your LaTeX project on save (`chalk.latex.buildOnSave`) with your LaTeX Workshop recipe, finding the root of a multi-file project from a `% !TEX root` comment, the include graph or the last build's `.fls`.
+Cmd+Alt+B builds and Cmd+Alt+V opens LaTeX Workshop's PDF viewer from a Chalk tab, and a click in that PDF jumps back into the Chalk editor.
+Jumping from the source to the PDF (forward SyncTeX) is not available from a Chalk tab yet: LaTeX Workshop only offers it from its own text editor.
 
 ## How it is built
 

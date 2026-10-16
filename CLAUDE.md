@@ -29,7 +29,9 @@ anything UIKit-free lives in ChalkKit, and the shell's spec chrome tokens are
   the native shell's swap seam so a TextKit 2 surface could one day replace
   the webview without touching tabs/documents.
 
-Edits buffer host-side and flush on save (no autosave); host→editor `update`s
+On the Mac, edits buffer host-side and flush on save (no autosave); VS Code
+applies each edit to the `TextDocument` as you type and saves through VS
+Code. Host→editor `update`s
 apply as minimal diffs. See [packages/editor-core/CLAUDE.md](packages/editor-core/CLAUDE.md)
 for engine guardrails before touching editor code.
 

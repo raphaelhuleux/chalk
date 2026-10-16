@@ -37,7 +37,7 @@ const port: HostPort = {
       // Request-channel replies are not HostPort messages; letting them
       // through would trip mount.ts's malformed-message warning.
       const data = e.data as { type?: unknown };
-      if (data && typeof data.type === 'string' && requests.isReply(data.type)) return;
+      if (data && typeof data.type === 'string' && (requests.isReply(data.type) || data.type === 'goto-line')) return;
       handler(e.data as HostToEditorMessage);
     };
     window.addEventListener('message', listener);
@@ -81,12 +81,19 @@ if (!root) {
   throw new Error('#editor-root not found');
 }
 const mermaidSrc = root.dataset.mermaidSrc;
-mountEditor({
+const editor = mountEditor({
   root,
   port,
   resolveAsset,
   workspaceAccess,
   loadMermaid: mermaidSrc ? scriptMermaidLoader(mermaidSrc, scriptNonce) : undefined,
+});
+
+// Reverse SyncTeX lands here (latex/pdf-view.ts): VS Code glue, outside
+// the HostPort protocol, so the port listener above drops it.
+window.addEventListener('message', (e: MessageEvent) => {
+  const data = e.data as { type?: unknown; line?: unknown };
+  if (data?.type === 'goto-line' && typeof data.line === 'number') editor.gotoLine(data.line);
 });
 
 // Liveness signal for WebviewWatchdog. Started only after a successful mount:

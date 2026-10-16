@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { findLatexRoot, includedTexFiles, type RootFinderFs } from '../../src/extension/latex/root-finder';
+import {
+  findLatexRoot,
+  includedTexFiles,
+  parseFlsInputs,
+  type RootFinderFs,
+} from '../../src/extension/latex/root-finder';
 
-function memFs(files: Record<string, string>): RootFinderFs {
+function memFs(files: Record<string, string>, fls: Record<string, string[]> = {}): RootFinderFs {
   return {
     readFile: (p) => (p in files ? files[p] : null),
     exists: (p) => p in files,
     listTexFiles: () => Object.keys(files).filter((p) => p.endsWith('.tex')),
+    flsInputs: (root) => fls[root] ?? [],
   };
 }
 
@@ -38,6 +44,14 @@ describe('findLatexRoot: magic comment', () => {
     });
     const r = findLatexRoot('/ws/a.tex', fs, { configuredRoot: 'other.tex', workspaceDir: WS });
     expect(r.root).toBe('/ws/b.tex');
+  });
+
+  it('reads the magic comment past the first lines of the file', () => {
+    const fs = memFs({
+      '/ws/ch.tex': `${'text\n'.repeat(40)}% !TEX root = main.tex\n`,
+      '/ws/main.tex': '\\documentclass{article}\n',
+    });
+    expect(findLatexRoot('/ws/ch.tex', fs, {}).root).toBe('/ws/main.tex');
   });
 
   it('reports a dangling magic target instead of falling through', () => {
@@ -114,6 +128,33 @@ describe('findLatexRoot: include graph', () => {
     expect(findLatexRoot('/ws/parts/intro.tex', fs, { workspaceDir: WS }).root).toBe('/ws/main.tex');
   });
 
+  it('supports the brace-less TeX \\input form', () => {
+    const fs = memFs({
+      '/ws/main.tex': '\\documentclass{article}\n\\input chapters/one\n',
+      '/ws/chapters/one.tex': 'one\n',
+    });
+    expect(findLatexRoot('/ws/chapters/one.tex', fs, { workspaceDir: WS }).root).toBe('/ws/main.tex');
+  });
+
+  it('does not take \\includegraphics or \\includeonly for includes', () => {
+    const fs = memFs({
+      '/ws/main.tex': '\\documentclass{article}\n\\includeonly{frag}\n\\includegraphics{frag}\n',
+      '/ws/frag.tex': 'x\n',
+    });
+    expect(findLatexRoot('/ws/frag.tex', fs, { workspaceDir: WS }).root).toBeNull();
+  });
+
+  it('resolves \\subimport against the importing file and inputs inside it against the import dir', () => {
+    const fs = memFs({
+      '/ws/main.tex': '\\documentclass{article}\n\\import{parts/}{body}\n',
+      '/ws/parts/body.tex': '\\subimport{ch1/}{intro}\n',
+      '/ws/parts/ch1/intro.tex': '\\input{figure}\n',
+      '/ws/parts/ch1/figure.tex': 'fig\n',
+    });
+    expect(findLatexRoot('/ws/parts/ch1/intro.tex', fs, { workspaceDir: WS }).root).toBe('/ws/main.tex');
+    expect(findLatexRoot('/ws/parts/ch1/figure.tex', fs, { workspaceDir: WS }).root).toBe('/ws/main.tex');
+  });
+
   it('survives include cycles', () => {
     const fs = memFs({
       '/ws/main.tex': '\\documentclass{article}\n\\input{a}\n',
@@ -122,6 +163,69 @@ describe('findLatexRoot: include graph', () => {
       '/ws/orphan.tex': 'nope\n',
     });
     expect(findLatexRoot('/ws/orphan.tex', fs, { workspaceDir: WS }).root).toBeNull();
+  });
+});
+
+describe('findLatexRoot: several roots include the file', () => {
+  const shared = {
+    '/ws/main.tex': '\\documentclass{article}\n\\input{sections/intro}\n',
+    '/ws/slides/slides.tex': '\\documentclass{beamer}\n\\input{../sections/intro}\n',
+    '/ws/a-notes.tex': '\\documentclass{article}\n\\input{sections/intro}\n',
+    '/ws/sections/intro.tex': 'shared\n',
+  };
+
+  it('prefers the nearest root, not the alphabetically first', () => {
+    const files: Record<string, string> = { ...shared };
+    delete files['/ws/a-notes.tex'];
+    const r = findLatexRoot('/ws/sections/intro.tex', memFs(files), { workspaceDir: WS });
+    expect(r.root).toBe('/ws/main.tex');
+    expect(r.reason).toContain('1 other root');
+  });
+
+  it('breaks a distance tie by name', () => {
+    expect(findLatexRoot('/ws/sections/intro.tex', memFs(shared), { workspaceDir: WS }).root).toBe('/ws/a-notes.tex');
+  });
+
+  it('prefers a root whose .fls read the file', () => {
+    const fs = memFs(shared, { '/ws/slides/slides.tex': ['/ws/sections/intro.tex'] });
+    const r = findLatexRoot('/ws/sections/intro.tex', fs, { workspaceDir: WS });
+    expect(r.root).toBe('/ws/slides/slides.tex');
+    expect(r.reason).toContain('.fls');
+  });
+
+  it('keeps the root this file built with last', () => {
+    const fs = memFs(shared, { '/ws/slides/slides.tex': ['/ws/sections/intro.tex'] });
+    const r = findLatexRoot('/ws/sections/intro.tex', fs, { workspaceDir: WS, preferredRoot: '/ws/main.tex' });
+    expect(r.root).toBe('/ws/main.tex');
+  });
+
+  it('finds a root through its .fls when the include is built from a macro', () => {
+    const fs = memFs(
+      {
+        '/ws/main.tex': '\\documentclass{article}\n\\newcommand\\ch{chapters}\n\\input{\\ch/one}\n',
+        '/ws/chapters/one.tex': 'one\n',
+      },
+      { '/ws/main.tex': ['/ws/chapters/one.tex'] },
+    );
+    expect(findLatexRoot('/ws/chapters/one.tex', fs, { workspaceDir: WS }).root).toBe('/ws/main.tex');
+  });
+});
+
+describe('parseFlsInputs', () => {
+  it('resolves relative INPUT lines against PWD and dedupes', () => {
+    const fls = [
+      'PWD /ws/paper',
+      'INPUT /usr/local/texlive/2026/texmf.cnf',
+      'INPUT main.tex',
+      'INPUT ./sections/intro.tex',
+      'INPUT ./sections/intro.tex',
+      'OUTPUT main.aux',
+    ].join('\n');
+    expect(parseFlsInputs(fls)).toEqual([
+      '/usr/local/texlive/2026/texmf.cnf',
+      '/ws/paper/main.tex',
+      '/ws/paper/sections/intro.tex',
+    ]);
   });
 });
 
