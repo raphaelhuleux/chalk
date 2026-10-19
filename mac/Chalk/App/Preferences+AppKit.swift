@@ -57,6 +57,15 @@ extension Preferences {
         }
     }
 
+    static let splitFractionKey = "chalk.splitFraction.appkit"
+
+    /// Where the split editor's seam sits, as the leading pane's share of the column. A share, not
+    /// a width, so the seam keeps its place when the window or the Library changes the column.
+    static var splitFraction: CGFloat {
+        get { CGFloat(storedDouble(splitFractionKey, default: 0.5, in: 0.1...0.9)) }
+        set { setStoredDouble(Double(SplitLayout.clampedFraction(newValue)), splitFractionKey, in: 0.1...0.9) }
+    }
+
     private static var widthRange: ClosedRange<Double> {
         Double(sidebarWidthRange.lowerBound)...Double(sidebarWidthRange.upperBound)
     }

@@ -15,28 +15,33 @@ public struct UIState: Equatable, Hashable, Sendable {
     }
     /// Only the chrome-affecting editing modes (not typewriter or focus).
     public enum ChromeMode: String, CaseIterable, Sendable { case normal, zen }
+    /// One editor pane, or two side by side (⌘\).
+    public enum SplitState: String, CaseIterable, Sendable { case single, split }
     public enum Appearance: String, CaseIterable, Sendable { case light, dark }
 
     public let window: WindowMode
     public let sidebar: SidebarState
     public let outline: OutlineState
     public let mode: ChromeMode
+    public let split: SplitState
     public let appearance: Appearance
 
     public init(window: WindowMode, sidebar: SidebarState,
                 outline: OutlineState = .hidden,
-                mode: ChromeMode, appearance: Appearance) {
+                mode: ChromeMode, split: SplitState = .single, appearance: Appearance) {
         self.window = window
         self.sidebar = sidebar
         self.outline = outline
         self.mode = mode
+        self.split = split
         self.appearance = appearance
     }
 
-    /// Stable and readable: the label every test failure names a state by.
+    /// Stable and readable: the label every test failure names a state by. Appearance stays
+    /// last: the light/dark sibling check drops the final component.
     public var id: String {
         [window.rawValue, sidebar.rawValue, outline.rawValue,
-         mode.rawValue, appearance.rawValue].joined(separator: "-")
+         mode.rawValue, split.rawValue, appearance.rawValue].joined(separator: "-")
     }
 
     /// The full cross product of every dimension. Exhaustive on purpose: an
@@ -45,9 +50,11 @@ public struct UIState: Equatable, Hashable, Sendable {
         SidebarState.allCases.flatMap { sidebar in
             OutlineState.allCases.flatMap { outline in
                 ChromeMode.allCases.flatMap { mode in
-                    Appearance.allCases.map { appearance in
-                        UIState(window: window, sidebar: sidebar,
-                                outline: outline, mode: mode, appearance: appearance)
+                    SplitState.allCases.flatMap { split in
+                        Appearance.allCases.map { appearance in
+                            UIState(window: window, sidebar: sidebar, outline: outline,
+                                    mode: mode, split: split, appearance: appearance)
+                        }
                     }
                 }
             }
@@ -66,32 +73,38 @@ public enum TransitionStep: Equatable, Sendable {
     case window(UIState.WindowMode)
     /// Enter or leave zen.
     case zen(Bool)
+    /// Show one editor pane or two.
+    case split(Bool)
 }
 
 extension UIState {
     /// The state a resting window ends in after `step`. Zen owns the chrome:
     /// zen(true) hides sidebar and outline, and opening either while in zen is
-    /// refused (state unchanged).
+    /// refused (state unchanged). The split is documents, not chrome, so zen
+    /// leaves it alone.
     public func applying(_ step: TransitionStep) -> UIState {
         switch step {
         case .sidebar(let visible):
             if visible && mode == .zen { return self }
             return UIState(window: window,
                            sidebar: visible ? .shown : .hidden, outline: outline,
-                           mode: mode, appearance: appearance)
+                           mode: mode, split: split, appearance: appearance)
         case .outline(let visible):
             if visible && mode == .zen { return self }
             return UIState(window: window,
                            sidebar: sidebar, outline: visible ? .shown : .hidden,
-                           mode: mode, appearance: appearance)
+                           mode: mode, split: split, appearance: appearance)
         case .window(let windowMode):
-            return UIState(window: windowMode,
-                           sidebar: sidebar, outline: outline, mode: mode, appearance: appearance)
+            return UIState(window: windowMode, sidebar: sidebar, outline: outline,
+                           mode: mode, split: split, appearance: appearance)
         case .zen(let on):
             return UIState(window: window,
                            sidebar: on ? .hidden : sidebar,
                            outline: on ? .hidden : outline,
-                           mode: on ? .zen : .normal, appearance: appearance)
+                           mode: on ? .zen : .normal, split: split, appearance: appearance)
+        case .split(let on):
+            return UIState(window: window, sidebar: sidebar, outline: outline,
+                           mode: mode, split: on ? .split : .single, appearance: appearance)
         }
     }
 }

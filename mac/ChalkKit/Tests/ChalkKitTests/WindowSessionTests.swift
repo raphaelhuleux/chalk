@@ -92,4 +92,36 @@ final class WindowSessionTests: XCTestCase {
         XCTAssertFalse(decoded.isOutlineVisible)
         XCTAssertTrue(decoded.isSidebarVisible)
     }
+
+    func testSplitRoundTrip() throws {
+        let session = WindowSession(
+            tabs: [record("/a.md"), record("/b.md"), record("/c.md")],
+            activeIndex: 0, isSidebarVisible: false, splitIndex: 2, splitIsLeading: true)
+        let decoded = try XCTUnwrap(WindowSession(data: XCTUnwrap(session.encoded())))
+        XCTAssertEqual(decoded.splitIndex, 2)
+        XCTAssertTrue(decoded.splitIsLeading)
+    }
+
+    func testJournalWithoutSplitDecodesAsNoSplit() throws {
+        let json = """
+        {"tabs":[{"path":"/a.md"},{"path":"/b.md"}],"activeIndex":1,"isSidebarVisible":false}
+        """
+        let decoded = try XCTUnwrap(WindowSession(data: Data(json.utf8)))
+        XCTAssertNil(decoded.splitIndex)
+        XCTAssertFalse(decoded.splitIsLeading)
+    }
+
+    func testSplitRepeatingTheActiveTabIsDropped() {
+        let session = WindowSession(
+            tabs: [record("/a.md"), record("/b.md")],
+            activeIndex: 1, isSidebarVisible: false, splitIndex: 1, splitIsLeading: true)
+        XCTAssertNil(session.splitIndex)
+        XCTAssertFalse(session.splitIsLeading)
+    }
+
+    func testOutOfRangeSplitIsDropped() {
+        let session = WindowSession(
+            tabs: [record("/a.md")], activeIndex: 0, isSidebarVisible: false, splitIndex: 4)
+        XCTAssertNil(session.splitIndex)
+    }
 }

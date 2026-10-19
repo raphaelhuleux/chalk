@@ -21,9 +21,13 @@ public struct WindowSession: Codable, Equatable {
     public var isSidebarVisible: Bool
     /// The persistent outline panel (⌘K). Optional on decode, default closed.
     public var isOutlineVisible: Bool
+    /// The tab in the split's unfocused pane; nil without a split. Optional on decode.
+    public var splitIndex: Int?
+    /// The unfocused pane is the leading one (focus was on the trailing pane).
+    public var splitIsLeading: Bool
 
     public init(tabs: [TabRecord], activeIndex: Int?, isSidebarVisible: Bool,
-                isOutlineVisible: Bool = false) {
+                isOutlineVisible: Bool = false, splitIndex: Int? = nil, splitIsLeading: Bool = false) {
         self.tabs = tabs
         // Clamp: a stale index would crash the restore path.
         if let index = activeIndex, tabs.indices.contains(index) {
@@ -33,10 +37,18 @@ public struct WindowSession: Codable, Equatable {
         }
         self.isSidebarVisible = isSidebarVisible
         self.isOutlineVisible = isOutlineVisible
+        // A split shows two different tabs: one that would repeat the active tab is no split.
+        if let index = splitIndex, tabs.indices.contains(index), index != self.activeIndex {
+            self.splitIndex = index
+            self.splitIsLeading = splitIsLeading
+        } else {
+            self.splitIndex = nil
+            self.splitIsLeading = false
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case tabs, activeIndex, isSidebarVisible, isOutlineVisible
+        case tabs, activeIndex, isSidebarVisible, isOutlineVisible, splitIndex, splitIsLeading
     }
 
     /// Routes through the clamping init.
@@ -46,7 +58,9 @@ public struct WindowSession: Codable, Equatable {
             tabs: try container.decode([TabRecord].self, forKey: .tabs),
             activeIndex: try container.decodeIfPresent(Int.self, forKey: .activeIndex),
             isSidebarVisible: try container.decode(Bool.self, forKey: .isSidebarVisible),
-            isOutlineVisible: try container.decodeIfPresent(Bool.self, forKey: .isOutlineVisible) ?? false)
+            isOutlineVisible: try container.decodeIfPresent(Bool.self, forKey: .isOutlineVisible) ?? false,
+            splitIndex: try container.decodeIfPresent(Int.self, forKey: .splitIndex),
+            splitIsLeading: try container.decodeIfPresent(Bool.self, forKey: .splitIsLeading) ?? false)
     }
 
     public func encoded() -> Data? {

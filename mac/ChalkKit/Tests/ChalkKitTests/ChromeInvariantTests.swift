@@ -7,7 +7,8 @@ final class ChromeInvariantTests: XCTestCase {
     /// A full-screen layout (the UIKit band hosts the tabs) that satisfies
     /// every invariant, which each test then breaks in exactly one way. Building the good case once keeps each test about a
     /// single relationship.
-    private func healthy(sidebar: Bool = true, outline: Bool = false, overlay: Bool = false) -> ChromeLayout {
+    private func healthy(sidebar: Bool = true, outline: Bool = false, overlay: Bool = false,
+                         split: Bool = false) -> ChromeLayout {
         let band = CGRect(x: 0, y: 0, width: 1000, height: 60)
         // Paper: the Library is FLUSH — it reaches the window's leading, top
         // and bottom edges — and the cover is cut around the whole of it.
@@ -26,10 +27,18 @@ final class ChromeInvariantTests: XCTestCase {
         } else {
             content = fullWidthContent
         }
+        var panes = [content]
+        var divider: CGRect?
+        if split {
+            let (leading, trailing) = content.divided(atDistance: (content.width / 2).rounded(.down),
+                                                      from: .minXEdge)
+            panes = [leading, trailing]
+            divider = CGRect(x: leading.maxX - 6, y: content.minY, width: 12, height: content.height)
+        }
         return ChromeLayout(
             state: UIState(window: .fullscreen,
                            sidebar: sidebar ? .shown : .hidden,
-                           mode: .normal, appearance: .dark),
+                           mode: .normal, split: split ? .split : .single, appearance: .dark),
             root: root, band: band, bandPaint: band,
             bandPaintHole: panel.map { CGRect(x: 0, y: 0, width: $0.maxX, height: band.height) },
             libraryPanel: panel,
@@ -48,7 +57,10 @@ final class ChromeInvariantTests: XCTestCase {
             outlinePanel: outlinePanel,
             outlinePanelIsOverlay: overlay,
             outlinePanelPushMinimum: outline ? (overlay ? 500 : 200) : 0,
-            bandPaintTrailingHole: outlinePanel.map { CGRect(x: $0.minX, y: 0, width: 1000 - $0.minX, height: band.height) })
+            bandPaintTrailingHole: outlinePanel.map { CGRect(x: $0.minX, y: 0, width: 1000 - $0.minX, height: band.height) },
+            editorPanes: panes,
+            splitDivider: divider,
+            splitMinimumPane: 200)
     }
 
     /// The windowed sibling: the band is the AppKit strip's business, so
@@ -207,7 +219,7 @@ final class ChromeInvariantTests: XCTestCase {
     /// The other direction: a real layout must not be quietly discounted.
     /// Falsifiability that is too strict would hide coverage the suite has.
     func testAHealthyLayoutIsEvidenceForEveryRuleThatApplies() {
-        for layout in [healthy(sidebar: true), healthy(sidebar: false)] {
+        for layout in [healthy(sidebar: true), healthy(sidebar: false), healthy(split: true)] {
             for invariant in ChromeInvariant.catalogue where invariant.appliesTo(layout) {
                 XCTAssertTrue(invariant.isFalsifiable(layout),
                               "\(invariant.name) applies to a fully populated layout "
@@ -288,5 +300,67 @@ final class ChromeInvariantTests: XCTestCase {
 
     func testOutlinePanelPaintRuleDoesNotApplyWhenThePanelIsHidden() {
         XCTAssertFalse(rule("outlinePanelIsNeverPaintedOver").isEvidence(about: healthy(outline: false)))
+    }
+
+    // MARK: Split
+
+    func testHealthySplitSatisfiesEveryInvariant() {
+        for layout in [healthy(split: true), healthy(outline: true, split: true),
+                       healthy(outline: true, overlay: true, split: true)] {
+            for invariant in ChromeInvariant.catalogue where invariant.isEvidence(about: layout) {
+                XCTAssertTrue(invariant.holds(layout), invariant.name)
+            }
+        }
+    }
+
+    func testPanesRuleFailsWhenTheSplitStateShowsOnePane() {
+        var layout = healthy(split: true)
+        layout.editorPanes = [layout.editorContent]
+        XCTAssertFalse(check("editorPanesTileTheContent", layout))
+    }
+
+    func testPanesRuleFailsWhenTheTrailingPaneStopsShort() {
+        var layout = healthy(split: true)
+        layout.editorPanes[1].size.width -= 20
+        XCTAssertFalse(check("editorPanesTileTheContent", layout))
+    }
+
+    func testPanesRuleFailsWhenThePanesOverlap() {
+        var layout = healthy(split: true)
+        layout.editorPanes[0].size.width += 30
+        XCTAssertFalse(check("editorPanesTileTheContent", layout))
+    }
+
+    func testPanesRuleFailsWhenASinglePaneMissesTheColumn() {
+        var layout = healthy()
+        layout.editorPanes = [layout.editorContent.insetBy(dx: 10, dy: 0)]
+        XCTAssertFalse(check("editorPanesTileTheContent", layout))
+    }
+
+    func testFloorRuleFailsOnASliver() {
+        var layout = healthy(split: true)
+        let content = layout.editorContent
+        layout.editorPanes = [CGRect(x: content.minX, y: content.minY, width: 80, height: content.height),
+                              CGRect(x: content.minX + 80, y: content.minY,
+                                     width: content.width - 80, height: content.height)]
+        XCTAssertFalse(check("splitPanesKeepTheirFloor", layout))
+    }
+
+    func testFloorRuleAcceptsHalvesInANarrowColumn() {
+        var layout = healthy(split: true)
+        layout.splitMinimumPane = layout.editorContent.width
+        XCTAssertTrue(check("splitPanesKeepTheirFloor", layout))
+    }
+
+    func testDividerRuleFailsAtAStaleX() {
+        var layout = healthy(split: true)
+        layout.splitDivider?.origin.x += 40
+        XCTAssertFalse(check("splitDividerSitsOnTheSeam", layout))
+    }
+
+    func testSplitRulesDoNotApplyToOnePane() {
+        let layout = healthy()
+        XCTAssertFalse(rule("splitPanesKeepTheirFloor").appliesTo(layout))
+        XCTAssertFalse(rule("splitDividerSitsOnTheSeam").appliesTo(layout))
     }
 }

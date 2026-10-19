@@ -586,6 +586,7 @@ final class RootSplitViewController: NSViewController {
         let shift = -(headerHeight?.constant ?? ChalkMetrics.headerHeight)
         headerTop?.constant = hidden ? shift : 0
         headerBar.alphaValue = hidden ? 0 : 1
+        editor.setChromeFadeLift(hidden ? -shift : 0)
     }
 
     private func applyPillHidden(_ hidden: Bool) {

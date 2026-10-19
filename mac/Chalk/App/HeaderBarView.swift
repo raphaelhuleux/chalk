@@ -202,13 +202,24 @@ final class HeaderBarView: ThemedView {
 final class ChromeFadeView: ThemedView {
     private let gradient = CAGradientLayer()
 
+    /// The ramp's alpha samples, top to bottom: 1 − smoothstep. Zero slope at
+    /// both ends, so the ramp meets neither the solid part nor the clear paper
+    /// at a crease; a linear ramp shows a Mach band at each end.
+    private static let rampAlphas: [CGFloat] = (0...8).map { i in
+        let t = CGFloat(i) / 8
+        return 1 - t * t * (3 - 2 * t)
+    }
+
+    /// Solid from the top down to here, then the ramp to the bottom edge.
+    /// The band's opaque cover ends at its floor, so the ramp must start
+    /// there at full strength or the floor reads as a step.
+    var solidHeight: CGFloat = 0 {
+        didSet { if solidHeight != oldValue { needsLayout = true } }
+    }
+
     init() {
         super.init(frame: .zero)
         wantsLayer = true
-        // Near-solid (≥92%) through the chip rows so no ghost text shows, then
-        // a LINEAR ramp to zero. Keep the ramp linear and long: eased curves
-        // compress it into a visible cut.
-        gradient.locations = [0, 0.55, 1]
         gradient.startPoint = CGPoint(x: 0.5, y: 0)
         gradient.endPoint = CGPoint(x: 0.5, y: 1)
         layer?.addSublayer(gradient)
@@ -222,13 +233,18 @@ final class ChromeFadeView: ThemedView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         gradient.frame = bounds
+        let solid = bounds.height > 0 ? min(1, max(0, solidHeight / bounds.height)) : 0
+        let ramp = Self.rampAlphas.indices.map { i in
+            NSNumber(value: Double(solid + (1 - solid) * CGFloat(i) / CGFloat(Self.rampAlphas.count - 1)))
+        }
+        gradient.locations = [0] + ramp
         CATransaction.commit()
     }
 
     override func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let bg = NSColor.chalkEditorBackground
-            gradient.colors = [1.0, 0.92, 0.0].map { bg.withAlphaComponent($0).cgColor }
+            gradient.colors = ([1] + Self.rampAlphas).map { bg.withAlphaComponent($0).cgColor }
         }
     }
 }

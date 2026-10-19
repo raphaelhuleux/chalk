@@ -288,5 +288,51 @@ public struct ChromeInvariant: Sendable {
                 let shouldOverlay = column - panel.width < layout.outlinePanelPushMinimum
                 return shouldOverlay == layout.outlinePanelIsOverlay
             }),
+
+        ChromeInvariant(
+            name: "editorPanesTileTheContent",
+            rationale: "The editor panes cover the content column exactly: one pane fills it, a split's two panes meet at one seam with no gap or overlap and share its top and bottom. A pane that stops short shows bare background beside the text; panes that overlap hide one document's edge under the other.",
+            isFalsifiable: { !$0.editorContent.isEmpty && !$0.editorPanes.isEmpty },
+            holds: { layout in
+                let content = layout.editorContent
+                let panes = layout.editorPanes
+                guard !content.isEmpty, let first = panes.first, let last = panes.last else { return true }
+                guard panes.count == (layout.state.split == .split ? 2 : 1) else { return false }
+                let spans = panes.allSatisfy {
+                    abs($0.minY - content.minY) < epsilon && abs($0.maxY - content.maxY) < epsilon
+                }
+                let seams = zip(panes, panes.dropFirst()).allSatisfy { abs($0.maxX - $1.minX) < epsilon }
+                return spans && seams
+                    && abs(first.minX - content.minX) < epsilon
+                    && abs(last.maxX - content.maxX) < epsilon
+            }),
+
+        ChromeInvariant(
+            name: "splitPanesKeepTheirFloor",
+            rationale: "Each pane of a split keeps the metrics table's minimum width, so a dragged divider can never squeeze one document into an unreadable sliver. A column too narrow for two minimum panes splits in equal halves instead.",
+            appliesTo: { $0.state.split == .split },
+            isFalsifiable: { $0.editorPanes.count == 2 && $0.splitMinimumPane > 0 },
+            holds: { layout in
+                guard layout.editorPanes.count == 2 else { return true }
+                let (leading, trailing) = (layout.editorPanes[0], layout.editorPanes[1])
+                let floor = layout.splitMinimumPane
+                let bothKeepFloor = leading.width > floor - epsilon && trailing.width > floor - epsilon
+                // Halves are rounded to whole points, so they may differ by one.
+                let halves = abs(leading.width - trailing.width) < crossSourceEpsilon + epsilon
+                return bothKeepFloor || (layout.editorContent.width < 2 * floor && halves)
+            }),
+
+        ChromeInvariant(
+            name: "splitDividerSitsOnTheSeam",
+            rationale: "The split's drag handle straddles the seam between the panes and runs their full height. A handle left at a stale x catches drags where no edge is drawn, and the visible edge stops responding.",
+            appliesTo: { $0.state.split == .split },
+            isFalsifiable: { $0.editorPanes.count == 2 && ($0.splitDivider.map { !$0.isEmpty } ?? false) },
+            holds: { layout in
+                guard layout.editorPanes.count == 2, let divider = layout.splitDivider else { return true }
+                let seam = layout.editorPanes[0].maxX
+                return abs(divider.midX - seam) < epsilon
+                    && abs(divider.minY - layout.editorContent.minY) < epsilon
+                    && abs(divider.maxY - layout.editorContent.maxY) < epsilon
+            }),
     ]
 }

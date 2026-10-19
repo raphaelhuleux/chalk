@@ -119,14 +119,22 @@ final class EditorContainerViewController: NSViewController {
                 tab.surface.setChromeTopInset(inset)
             }
         }
-        // The fade ends just above the resting first line (inset − 4): it uses the pad below the
-        // band for a gradual feather but never washes out resting text. Taller hides the first
-        // line; band-only reads as a hard cut.
-        chromeFadeHeight?.constant = max(0, CGFloat(inset) - 4)
+        // The ramp fills the one-line pad between the chrome's floor and the resting first line:
+        // solid down to the floor, clear at the resting line's box top, which sits above its ink.
+        // Taller washes out resting text; shorter leaves too short a ramp to read as soft.
+        chromeFadeHeight?.constant = CGFloat(inset)
+        chromeFade.solidHeight = max(0, CGFloat(inset) - ChalkMetrics.editorRestingPad)
+    }
+
+    /// Auto-hide slides the band up by its height; the fade rides along so the band's floor and
+    /// the ramp's start never part. Lifted, only the ramp shows, as a soft top edge.
+    func setChromeFadeLift(_ lift: CGFloat) {
+        chromeFadeTop?.constant = -lift
     }
 
     private let chromeFade = ChromeFadeView()
     private var chromeFadeHeight: NSLayoutConstraint?
+    private var chromeFadeTop: NSLayoutConstraint?
 
     /// A draft was saved to `url` (first save picked a location), so the host
     /// can refresh the sidebar to show the new file.
@@ -195,8 +203,10 @@ final class EditorContainerViewController: NSViewController {
         view.addSubview(chromeFade)
         let fadeHeight = chromeFade.heightAnchor.constraint(equalToConstant: 0)
         chromeFadeHeight = fadeHeight
+        let fadeTop = chromeFade.topAnchor.constraint(equalTo: view.topAnchor)
+        chromeFadeTop = fadeTop
         NSLayoutConstraint.activate([
-            chromeFade.topAnchor.constraint(equalTo: view.topAnchor),
+            fadeTop,
             chromeFade.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             chromeFade.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             fadeHeight,

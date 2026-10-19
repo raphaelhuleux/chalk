@@ -65,6 +65,13 @@ public struct ChromeLayout: Equatable, Sendable {
     /// The trailing-edge cut-out of `bandPaint`, behind the outline panel.
     /// Nil when nothing is cut out there.
     public var bandPaintTrailingHole: CGRect?
+    /// The editor panes inside `editorContent`, leading first: one rect
+    /// without a split, two with one. Empty when nothing was measured.
+    public var editorPanes: [CGRect]
+    /// The split's drag handle, nil without a split.
+    public var splitDivider: CGRect?
+    /// The metrics table's floor for one pane of a split (spec).
+    public var splitMinimumPane: CGFloat
 
     public init(state: UIState, root: CGRect, band: CGRect, bandPaint: CGRect,
                 bandPaintHole: CGRect?, libraryPanel: CGRect?, tabStrip: CGRect,
@@ -83,7 +90,10 @@ public struct ChromeLayout: Equatable, Sendable {
                 outlinePanel: CGRect? = nil,
                 outlinePanelIsOverlay: Bool = false,
                 outlinePanelPushMinimum: CGFloat = 0,
-                bandPaintTrailingHole: CGRect? = nil) {
+                bandPaintTrailingHole: CGRect? = nil,
+                editorPanes: [CGRect] = [],
+                splitDivider: CGRect? = nil,
+                splitMinimumPane: CGFloat = 0) {
         self.state = state
         self.root = root
         self.band = band
@@ -108,6 +118,9 @@ public struct ChromeLayout: Equatable, Sendable {
         self.outlinePanelIsOverlay = outlinePanelIsOverlay
         self.outlinePanelPushMinimum = outlinePanelPushMinimum
         self.bandPaintTrailingHole = bandPaintTrailingHole
+        self.editorPanes = editorPanes
+        self.splitDivider = splitDivider
+        self.splitMinimumPane = splitMinimumPane
     }
 
     /// Whether opaque chrome actually covers any part of `rect`.

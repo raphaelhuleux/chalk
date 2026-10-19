@@ -106,6 +106,8 @@ enum ChalkMetrics {
     /// The outline panel pushes the editor while the column keeps at least
     /// this much text width, and overlays it below that.
     static let outlinePanelPushMinimumEditorWidth: CGFloat = 480
+    /// Each pane of a split editor keeps at least this width while the column can spare two.
+    static let splitMinimumPaneWidth: CGFloat = 320
 
     // Motion (docs/motion.md, Tokens).
     /// Tab hover and dot-swap fades (spec caps at 120ms).
