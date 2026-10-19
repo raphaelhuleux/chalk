@@ -62,6 +62,21 @@ final class WindowRestorationTests: XCTestCase {
         XCTAssertTrue(root.editor.isOutlinePanelVisible)
     }
 
+    func testASplitRoundTripsThroughTheRecord() throws {
+        let a = try writeFile("a.md")
+        let b = try writeFile("b.md")
+        let restored = WindowSession(
+            tabs: [a, b].map { WindowSession.TabRecord(path: $0.path, bookmark: nil) },
+            activeIndex: 1, isSidebarVisible: false, splitIndex: 0, splitIsLeading: true)
+        let controller = EditorWindowController(initialContent: .restoreSession(restored))
+        controllers.append(controller)
+        XCTAssertTrue(controller.root.editor.isSplit)
+        let captured = controller.root.captureSession()
+        XCTAssertEqual(captured.activeIndex, 1)
+        XCTAssertEqual(captured.splitIndex, 0)
+        XCTAssertTrue(captured.splitIsLeading)
+    }
+
     func testTheWindowRecordCarriesIdTabsAndFrame() throws {
         let a = try writeFile("a.md")
         let controller = EditorWindowController(windowID: "win-A", initialContent: .openEmpty, frame: onScreenFrame)

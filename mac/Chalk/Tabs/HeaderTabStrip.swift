@@ -7,6 +7,8 @@ struct TabItem: Hashable {
     let name: String
     let isDirty: Bool
     let isActive: Bool
+    /// Shown in the split's other pane: named like the active tab, without its weight or underline.
+    let isShownInSplit: Bool
     /// A "preview" tab (iA Writer): opened but never edited, so a sidebar click
     /// will replace it in place. Only the ACTIVE one is ever replaced, which is
     /// why only the active one carries the slant (TabStripPolicy.isOblique).
@@ -16,12 +18,13 @@ struct TabItem: Hashable {
     /// (TabStripPolicy.needsFolderPrefix); nil otherwise.
     let folder: String?
 
-    init(id: UUID, name: String, isDirty: Bool, isActive: Bool,
+    init(id: UUID, name: String, isDirty: Bool, isActive: Bool, isShownInSplit: Bool = false,
          isPreview: Bool, folder: String? = nil) {
         self.id = id
         self.name = name
         self.isDirty = isDirty
         self.isActive = isActive
+        self.isShownInSplit = isShownInSplit
         self.isPreview = isPreview
         self.folder = folder
     }
@@ -46,6 +49,8 @@ final class HeaderTabStrip: ThemedView {
     var onNew: (() -> Void)?
     /// Drag-reorder drop: tab `id` should move to row position `index`.
     var onMove: ((UUID, Int) -> Void)?
+    /// The context menu's "Open in Split": show tab `id` in the split's other pane.
+    var onOpenInSplit: ((UUID) -> Void)?
 
     private let scroll = NSScrollView()
     private let content = FlippedView()
@@ -695,8 +700,9 @@ private final class HeaderTabName: FlippedView {
             size: ChalkMetrics.tabFontSize,
             weight: item.isActive ? .medium : .regular,
             oblique: TabStripPolicy.isOblique(isActive: item.isActive, isPreview: item.isPreview))
-        let pathColor: NSColor = item.isActive ? .chalkTabPathActive : .chalkTabPathInactive
-        let nameColor: NSColor = item.isActive || hovering
+        let shown = item.isActive || item.isShownInSplit
+        let pathColor: NSColor = shown ? .chalkTabPathActive : .chalkTabPathInactive
+        let nameColor: NSColor = shown || hovering
             ? .chalkTabLabelActive : .chalkTabLabelInactive
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
@@ -831,6 +837,11 @@ private final class HeaderTabName: FlippedView {
                 return
             }
         }
+        // ⌥-click: beside the focused document rather than in its place.
+        if event.modifierFlags.contains(.option), !isActiveItem, let open = strip.onOpenInSplit {
+            open(itemID)
+            return
+        }
         strip.onSelect?(itemID)
     }
 
@@ -848,6 +859,14 @@ private final class HeaderTabName: FlippedView {
         }
         close.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
         menu.addItem(close)
+        if !item.isActive && !item.isShownInSplit {
+            let split = MenuActionItem(title: "Open in Split") { [weak self] in
+                guard let self else { return }
+                self.strip?.onOpenInSplit?(self.itemID)
+            }
+            split.image = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: nil)
+            menu.addItem(split)
+        }
         return menu
     }
 

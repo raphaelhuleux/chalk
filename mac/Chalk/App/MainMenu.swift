@@ -68,6 +68,10 @@ enum MainMenu {
         nextTab.keyEquivalentModifierMask = [.control]
         let previousTab = view.addItem(withTitle: "Previous Tab", action: #selector(RootSplitViewController.cmdPrevTab(_:)), keyEquivalent: "\t")
         previousTab.keyEquivalentModifierMask = [.control, .shift]
+        view.addItem(.separator())
+        view.addItem(withTitle: "Split Editor", action: #selector(RootSplitViewController.cmdToggleSplit(_:)), keyEquivalent: "\\")
+        let focusPane = view.addItem(withTitle: "Focus Other Pane", action: #selector(RootSplitViewController.cmdFocusOtherPane(_:)), keyEquivalent: "\\")
+        focusPane.keyEquivalentModifierMask = [.command, .option]
         main.addItem(submenu(view, title: "View"))
 
         main.addItem(submenu(typesetMenu(), title: "Typeset"))

@@ -162,6 +162,7 @@ final class RootSplitViewController: NSViewController {
         headerBar.tabStrip.onClose = { [weak self] id in self?.editor.closeTab(id: id) }
         headerBar.tabStrip.onNew = { [weak self] in self?.cmdNewFile() }
         headerBar.tabStrip.onMove = { [weak self] id, index in self?.editor.moveTab(id: id, to: index) }
+        headerBar.tabStrip.onOpenInSplit = { [weak self] id in self?.editor.openInSplit(id: id) }
         // The pill routes to the same shell commands the menu uses.
         footerBar.onToggleSidebar = { [weak self] in self?.cmdToggleSidebar() }
         footerBar.onQuickOpen = { [weak self] in self?.cmdQuickOpen() }
@@ -713,11 +714,13 @@ final class RootSplitViewController: NSViewController {
         // A bookmark per tab: it makes restoration independent of
         // Location-resolution order, and it is the only thing that reopens
         // an external file's sandbox scope after relaunch.
+        let snapshot = editor.sessionSnapshot()
         return WindowSession(
-            tabs: editor.sessionTabRecords(), activeIndex: editor.sessionSnapshot().activeIndex,
+            tabs: editor.sessionTabRecords(), activeIndex: snapshot.activeIndex,
             isSidebarVisible: isSidebarVisible,
             // The window's outline intent; a tab's PDF reopens on its next compile.
-            isOutlineVisible: editor.isOutlineWanted)
+            isOutlineVisible: editor.isOutlineWanted,
+            splitIndex: snapshot.splitIndex, splitIsLeading: snapshot.splitIsLeading)
     }
 
     /// Reopen a restored window's tabs. Unresolvable or unreadable files (moved
@@ -745,6 +748,11 @@ final class RootSplitViewController: NSViewController {
             editor.activateTab(at: position)
         } else if !openedRecordIndices.isEmpty {
             editor.activateTab(at: 0)
+        }
+        // Restored tabs are all file tabs, so a position here is a file-tab index.
+        if let wanted = session.splitIndex,
+           let position = openedRecordIndices.firstIndex(of: wanted) {
+            editor.restoreSplit(fileTabAt: position, leading: session.splitIsLeading)
         }
         if session.isSidebarVisible {
             setSidebarVisible(true)
@@ -1386,6 +1394,14 @@ final class RootSplitViewController: NSViewController {
     @objc func cmdNextTab(_ sender: Any? = nil) { editor.nextTab() }
     @objc func cmdPrevTab(_ sender: Any? = nil) { editor.previousTab() }
 
+    /// ⌘\: two documents side by side, or back to one.
+    @objc func cmdToggleSplit(_ sender: Any? = nil) {
+        guard editor.canToggleSplit else { return NSSound.beep() }
+        editor.toggleSplit()
+    }
+
+    @objc func cmdFocusOtherPane(_ sender: Any? = nil) { editor.focusOtherPane() }
+
     /// ⌘,: the app's one Settings window, owned by the app delegate.
     @objc func cmdSettings(_ sender: Any? = nil) {
         guard admitShellAction(#selector(cmdSettings(_:))) else { return }
@@ -1608,12 +1624,54 @@ final class RootSplitViewController: NSViewController {
     }
 
     /// The live editor surface's covered-transition seams: a bitmap of the
-    /// pixels on screen, and the surface's own paint gate.
+    /// pixels on screen, and the surface's own paint gate. While split, both
+    /// panes: one bitmap of the pane area, released once both have painted, so
+    /// the unfocused pane never shows bare background under the cover.
     private func liveWebPaintSeams() -> (snapshotter: WebPaintGate.Snapshotter,
                                          paintGate: WebPaintGate.PaintGate,
                                          bitmapSource: NSView)? {
         guard let surface = editor.activeSurface, surface.view.window != nil else { return nil }
-        return (surface.captureSnapshot, surface.afterNextPaint, surface.view)
+        guard let other = editor.splitSurface, other.view.window != nil else {
+            return (surface.captureSnapshot, surface.afterNextPaint, surface.view)
+        }
+        let host = editor.paneHostView
+        let surfaces = [surface, other]
+        let snapshotter: WebPaintGate.Snapshotter = { done in
+            var images: [NSImage?] = Array(repeating: nil, count: surfaces.count)
+            var pending = surfaces.count
+            for (index, surface) in surfaces.enumerated() {
+                surface.captureSnapshot { image in
+                    images[index] = image
+                    pending -= 1
+                    guard pending == 0 else { return }
+                    done(Self.composite(images, of: surfaces.map(\.view), in: host))
+                }
+            }
+        }
+        let paintGate: WebPaintGate.PaintGate = { ready in
+            var pending = surfaces.count
+            for surface in surfaces {
+                surface.afterNextPaint {
+                    pending -= 1
+                    if pending == 0 { ready() }
+                }
+            }
+        }
+        return (snapshotter, paintGate, host)
+    }
+
+    /// One bitmap of `host` with each view's snapshot at its place; nil when any is missing,
+    /// which the cover treats as "no bitmap" (a plain shield).
+    private static func composite(_ images: [NSImage?], of views: [NSView], in host: NSView) -> NSImage? {
+        let pairs = zip(images, views).compactMap { image, view in image.map { ($0, view) } }
+        guard pairs.count == views.count, host.bounds.width > 0, host.bounds.height > 0 else { return nil }
+        return NSImage(size: host.bounds.size, flipped: host.isFlipped) { _ in
+            for (image, view) in pairs {
+                image.draw(in: host.convert(view.bounds, from: view), from: .zero,
+                           operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
+            return true
+        }
     }
 
     /// The opaque shield a covered transition installs over the editor: the
@@ -1706,6 +1764,11 @@ extension RootSplitViewController: NSMenuItemValidation {
             return editor.canCompileActive
         case #selector(cmdShowInPDF(_:))?:
             return editor.canSyncActiveToPDF
+        case #selector(cmdToggleSplit(_:))?:
+            item.state = editor.isSplit ? .on : .off
+            return editor.canToggleSplit
+        case #selector(cmdFocusOtherPane(_:))?:
+            return editor.isSplit
         default:
             break
         }
@@ -1755,6 +1818,12 @@ extension RootSplitViewController {
         case .shown: editor.showTrailingPanel(.outline, animated: false)
         case .pdf: editor.showTrailingPanel(.pdf, animated: false)
         }
+    }
+    /// The split axis, through the menu command's own path. Like ⌘\, it opens no tabs: the
+    /// caller seeds the two a split shows.
+    func setSplitForTesting(_ state: UIState.SplitState) {
+        guard (state == .split) != editor.isSplit else { return }
+        cmdToggleSplit()
     }
     /// Drive the web-forwarded shell command lane (`editor.onShellCommand`).
     func simulateShellCommandForTesting(_ name: String) { editor.onShellCommand?(name) }
@@ -1837,7 +1906,12 @@ extension RootSplitViewController {
                 ? editor.outlinePanelFrame.map { view.convert($0, from: editor.view) } : nil,
             outlinePanelIsOverlay: editor.outlinePanelIsOverlay,
             outlinePanelPushMinimum: ChalkMetrics.outlinePanelPushMinimumEditorWidth,
-            bandPaintTrailingHole: trailingHole)
+            bandPaintTrailingHole: trailingHole,
+            editorPanes: editor.isViewLoaded
+                ? editor.paneFramesForTesting.map { view.convert($0, from: editor.view) } : [],
+            splitDivider: editor.isViewLoaded
+                ? editor.splitDividerFrameForTesting.map { view.convert($0, from: editor.view) } : nil,
+            splitMinimumPane: ChalkMetrics.splitMinimumPaneWidth)
     }
 
     /// Drive one user-level chrome toggle through the REAL entry points.
@@ -1851,6 +1925,8 @@ extension RootSplitViewController {
             setMacFullscreenForTesting(mode == .fullscreen)
         case .zen(let on):
             setEditingMode(on ? .zen : .normal)
+        case .split(let on):
+            setSplitForTesting(on ? .split : .single)
         case .outline(let visible):
             if visible, isZen { return }
             revealChrome()

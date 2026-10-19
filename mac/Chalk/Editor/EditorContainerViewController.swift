@@ -14,17 +14,28 @@ final class EditorContainerView: ThemedView {
     override func refreshColors() { onAppearanceChange?() }
 }
 
-/// Hosts the open tabs and shows the active tab's editor surface. Each tab owns its surface and
-/// document controller, so switching tabs preserves cursor, scroll and undo.
+/// Hosts the open tabs and shows the active tab's editor surface, plus a second tab's beside it
+/// while split. Each tab owns its surface and document controller, so switching tabs preserves
+/// cursor, scroll and undo.
 final class EditorContainerViewController: NSViewController {
     private var tabs: [Tab] = []
+    /// The FOCUSED pane's tab: every command (save, compile, outline, PDF) acts on it.
     private var activeTab: Tab?
+    /// The split's other pane (⌘\); nil without a split. Never `activeTab`.
+    private var splitTab: Tab?
+    /// The pane `activeTab` is drawn in. Without a split it is the pane that fills the area.
+    private var focusedSide: EditorPaneHostView.Side = .leading
+    /// What the focused pane showed before `activeTab`: what ⌘\ puts in the new pane.
+    private weak var previousActiveTab: Tab?
 
     /// Reads the host window's own editing mode. A closure, not a stored copy: a copy goes stale
     /// when another window changes its mode. The default serves a container with no host (tests).
     var currentEditingMode: () -> EditingMode = { Preferences.editingMode }
 
-    private let contentView = FlippedView()
+    private let contentView = EditorPaneHostView()
+    /// Watches clicks so one in the unfocused pane focuses it (`focusPane(under:)`).
+    private var paneClickMonitor: Any?
+    private var splitResizeStartWidth: CGFloat = 0
     /// "No document open". Visibility is set explicitly by `refreshEmptyState()`, never by
     /// occlusion: a detached surface must not read as an empty window under a live chip.
     /// See docs/issues/2026-07-24-blank-editor-on-open.md.
@@ -36,6 +47,7 @@ final class EditorContainerViewController: NSViewController {
     private var recoverySnapshotTimer: Timer?
 
     deinit {
+        if let paneClickMonitor { NSEvent.removeMonitor(paneClickMonitor) }
         // The run loop retains the timer, so without this each closed dirty window leaks one.
         recoverySnapshotTimer?.invalidate()
         // A closed window's TeX runs would otherwise finish into nothing.
@@ -113,7 +125,7 @@ final class EditorContainerViewController: NSViewController {
         chromeTopChangeTrailForTesting.append((inset: inset, duration: glide))
         #endif
         for tab in tabs {
-            if let glide, tab === activeTab {
+            if let glide, isShown(tab) {
                 tab.surface.setChromeTopInset(inset, animatedOverSeconds: glide)
             } else {
                 tab.surface.setChromeTopInset(inset)
@@ -212,6 +224,7 @@ final class EditorContainerViewController: NSViewController {
             fadeHeight,
         ])
         installOutlinePanel()
+        installSplitControls()
 
         // Cross-window save sync. One observer per container, not per tab, so tab close needs no
         // teardown; selector-based observers detach on dealloc.
@@ -605,7 +618,7 @@ final class EditorContainerViewController: NSViewController {
         pushAppearance(dark: dark, theme: theme)
     }
 
-    /// What the ACTIVE surface was last told, so a resync can tell "already agrees" from "never
+    /// What the shown surfaces were last told, so a resync can tell "already agrees" from "never
     /// heard". Reset on activate.
     private var pushedDark: Bool?
     private var pushedTheme: ChalkTheme?
@@ -615,12 +628,12 @@ final class EditorContainerViewController: NSViewController {
     /// the page outside the cover. Standalone containers (tests) keep the hook.
     var hostOwnsAppearanceTransitions = false
 
-    /// The orchestrator's push (active surface only).
+    /// The orchestrator's push (the shown surfaces only; the rest are dressed on activate).
     func pushAppearance(dark: Bool, theme: ChalkTheme) {
         pushedDark = dark
         pushedTheme = theme
-        if let surface = activeTab?.surface {
-            pushAppearance(to: surface, dark: dark, theme: theme)
+        for tab in [activeTab, splitTab].compactMap({ $0 }) {
+            pushAppearance(to: tab.surface, dark: dark, theme: theme)
         }
     }
 
@@ -835,11 +848,12 @@ final class EditorContainerViewController: NSViewController {
 
     /// File-backed tab URLs in strip order and the active tab's index. Drafts are skipped, so the
     /// index counts the returned URLs, not `tabs`.
-    func sessionSnapshot() -> (urls: [URL], activeIndex: Int?) {
+    func sessionSnapshot() -> (urls: [URL], activeIndex: Int?, splitIndex: Int?, splitIsLeading: Bool) {
         let fileTabs = tabs.filter { $0.url != nil }
         let urls = fileTabs.compactMap(\.url)
         let activeIndex = fileTabs.firstIndex { $0 === activeTab }
-        return (urls, activeIndex)
+        let splitIndex = fileTabs.firstIndex { $0 === splitTab }
+        return (urls, activeIndex, splitIndex, splitIndex != nil && focusedSide == .trailing)
     }
 
     /// The file-backed tabs as journal records, bookmarks included (drafts die with the window).
@@ -995,6 +1009,37 @@ final class EditorContainerViewController: NSViewController {
     }
 
     var contentViewFrameForTesting: CGRect { contentView.frame }
+    /// The panes on screen, leading first, in this view's coordinates: the focused pane alone
+    /// without a split.
+    var paneFramesForTesting: [CGRect] {
+        let panes = isSplit ? [contentView.leadingPane, contentView.trailingPane]
+            : [contentView.pane(focusedSide)]
+        return panes.map { view.convert($0.frame, from: contentView) }
+    }
+    var splitDividerFrameForTesting: CGRect? {
+        isSplit ? view.convert(contentView.divider.frame, from: contentView) : nil
+    }
+    var activeTabIndexForTesting: Int? { tabs.firstIndex { $0 === activeTab } }
+    var splitTabIndexForTesting: Int? { tabs.firstIndex { $0 === splitTab } }
+    /// "leading" or "trailing": the pane the tab's surface is installed in; nil when detached.
+    func paneSideForTesting(tabAt index: Int) -> String? {
+        guard tabs.indices.contains(index) else { return nil }
+        let superview = tabs[index].surface.view.superview
+        if superview === contentView.leadingPane { return "leading" }
+        if superview === contentView.trailingPane { return "trailing" }
+        return nil
+    }
+    /// The click path's focus change, without synthesizing an event.
+    func focusPaneForTesting(tabAt index: Int) {
+        guard tabs.indices.contains(index), tabs[index] === splitTab else { return }
+        swapFocus(focusingEditor: false)
+    }
+    func dragSplitDividerForTesting(by dx: CGFloat) {
+        contentView.divider.onDragBegan?()
+        contentView.divider.onDragged?(dx)
+        contentView.divider.onDragEnded?()
+        contentView.layoutSubtreeIfNeeded()
+    }
 
     var outlinePanelWidthForTesting: CGFloat { outlinePanelWidth?.constant ?? 0 }
     var outlineResizeGripFrameForTesting: CGRect { outlineResizeGrip.frame }
@@ -1087,9 +1132,14 @@ final class EditorContainerViewController: NSViewController {
     }
 
     private func activate(_ tab: Tab) {
+        if tab === splitTab {
+            swapFocus()
+            return
+        }
         if activeTab !== tab {
             let outgoingSurface = activeTab?.surface
             if isOutlineShowing { activeTab?.surface.setOutlineSubscription(false) }
+            previousActiveTab = activeTab
             activeTab = tab
             // Dress the incoming surface (appearance, chrome-top) BEFORE install, so it never
             // flashes a stale theme or band height (docs/motion.md "Tab switch").
@@ -1120,8 +1170,12 @@ final class EditorContainerViewController: NSViewController {
         }
         refreshEmptyState()
         refreshTabBar()
-        // Every activation focuses the editor, a turn later so the triggering control (tab chip,
-        // Library row) has finished its click and can't pull first responder back.
+        focusEditorNextTurn(tab)
+    }
+
+    /// Every activation focuses the editor, a turn later so the triggering control (tab chip,
+    /// Library row) has finished its click and can't pull first responder back.
+    private func focusEditorNextTurn(_ tab: Tab) {
         DispatchQueue.main.async { [weak self, weak tab] in
             guard let self, let tab, self.activeTab === tab else { return }
             tab.surface.focusEditor()
@@ -1138,25 +1192,27 @@ final class EditorContainerViewController: NSViewController {
         let outgoing = outgoingSurface.view
         let incoming = incomingSurface.view
         incoming.alphaValue = 1
-        guard incoming.chalkMotionAllowed, !motionIsInstant else {
+        // Both live in the focused pane; the fade never touches the split's other pane.
+        guard incoming.chalkMotionAllowed, !motionIsInstant,
+              let pane = incoming.superview, outgoing.superview === pane else {
             DebugTrace.log("tab cross-fade: instant swap")
             outgoing.removeFromSuperview()
             return
         }
-        contentView.addSubview(incoming, positioned: .below, relativeTo: outgoing)
+        pane.addSubview(incoming, positioned: .below, relativeTo: outgoing)
         var swapped = false
         let swap: (NSImage?) -> Void = { [weak self] image in
             guard !swapped, let self else { return }
             swapped = true
-            // A rapid switch can make `outgoing` active again before its bitmap lands: never
-            // remove it then, and never paint a stale bitmap over it.
-            guard outgoing !== self.activeTab?.surface.view else { return }
+            // A rapid switch can show `outgoing` again (active, or in the split's other pane)
+            // before its bitmap lands: never remove it then, and never paint a stale bitmap over it.
+            guard !self.isShown(outgoing) else { return }
             guard let image else {
                 outgoing.removeFromSuperview()
                 return
             }
             let bitmap = NSImageView.chalkSnapshot(image, frame: outgoing.frame)
-            self.contentView.addSubview(bitmap, positioned: .above, relativeTo: nil)
+            pane.addSubview(bitmap, positioned: .above, relativeTo: nil)
             outgoing.removeFromSuperview()
             #if DEBUG
             self.activateEventTrailForTesting.append("fade-begin")
@@ -1191,20 +1247,37 @@ final class EditorContainerViewController: NSViewController {
         #endif
     }
 
-    /// The single surface-install site. Removal drops the edge constraints, so each install
-    /// activates a fresh set.
+    /// The single surface-install site: the active tab into the focused pane, the split tab into
+    /// the other. A surface in the wrong pane moves. Removal drops the edge constraints, so each
+    /// install activates a fresh set.
     private func ensureInstalled(_ tab: Tab) {
+        let side: EditorPaneHostView.Side
+        if tab === activeTab {
+            side = focusedSide
+        } else if tab === splitTab {
+            side = focusedSide.other
+        } else {
+            return
+        }
         tab.surface.bootIfNeeded() // dormant until first shown (fd bound)
+        let pane = contentView.pane(side)
         let editorView = tab.surface.view
-        guard editorView.superview == nil else { return }
+        guard editorView.superview !== pane else { return }
+        editorView.removeFromSuperview()
         editorView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(editorView)
+        pane.addSubview(editorView)
         NSLayoutConstraint.activate([
-            editorView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            editorView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            editorView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            editorView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            editorView.topAnchor.constraint(equalTo: pane.topAnchor),
+            editorView.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
+            editorView.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
+            editorView.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
         ])
+    }
+
+    private func isShown(_ tab: Tab) -> Bool { tab === activeTab || tab === splitTab }
+
+    private func isShown(_ surfaceView: NSView) -> Bool {
+        surfaceView === activeTab?.surface.view || surfaceView === splitTab?.surface.view
     }
 
     /// Tab strip callbacks.
@@ -1231,17 +1304,36 @@ final class EditorContainerViewController: NSViewController {
             clearSnapshotQueued(id: tab.id.uuidString)
         }
         let wasActive = activeTab === tab
+        let wasSplit = splitTab === tab
         let index = tabs.firstIndex { $0 === tab }
         tab.surface.view.removeFromSuperview()
         tab.surface.teardown()
         tab.controller.close()
         if let index { tabs.remove(at: index) }
 
-        if wasActive {
+        if wasSplit {
+            // The other pane takes the next tab the focused pane is not showing, or closes.
+            splitTab = nil
+            if let next = neighbor(at: index ?? 0, excluding: activeTab) {
+                show(next, inSplitAt: focusedSide.other)
+            } else {
+                applyPaneLayout()
+                refreshTabBar()
+            }
+        } else if wasActive {
             activeTab = nil
-            if !tabs.isEmpty {
-                let neighbor = tabs[min(index ?? 0, tabs.count - 1)]
-                activate(neighbor)
+            if let next = neighbor(at: index ?? 0, excluding: splitTab) {
+                activate(next)
+            } else if let other = splitTab {
+                // The split's other tab is all that is left: it becomes the only pane, in place.
+                splitTab = nil
+                activeTab = other
+                focusedSide = focusedSide.other
+                applyPaneLayout()
+                applySlot(animated: false)
+                refreshEmptyState()
+                refreshTabBar()
+                focusEditorNextTurn(other)
             } else {
                 applySlot(animated: false)
                 refreshEmptyState()
@@ -1252,10 +1344,18 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
+    /// The tab nearest strip position `index` (the closed tab's), skipping `excluded`.
+    private func neighbor(at index: Int, excluding excluded: Tab?) -> Tab? {
+        let pool = tabs.enumerated().filter { $0.element !== excluded }
+        return (pool.first { $0.offset >= index } ?? pool.last)?.element
+    }
+
+    /// The split's other tab is skipped: ⌃Tab changes what the focused pane shows, not focus.
     private func cycle(_ delta: Int) {
-        guard let active = activeTab, tabs.count > 1,
-              let i = tabs.firstIndex(where: { $0 === active }) else { return }
-        activate(tabs[(i + delta + tabs.count) % tabs.count])
+        let ring = tabs.filter { $0 !== splitTab }
+        guard let active = activeTab, ring.count > 1,
+              let i = ring.firstIndex(where: { $0 === active }) else { return }
+        activate(ring[(i + delta + ring.count) % ring.count])
     }
 
     /// Save, Discard, Cancel as a window sheet. Without a window (tests) the tab stays, which is
@@ -1300,6 +1400,7 @@ final class EditorContainerViewController: NSViewController {
         return tabs.enumerated().map { index, tab in
             TabItem(id: tab.id, name: tab.displayName, isDirty: tab.isDirty,
                     isActive: tab === activeTab,
+                    isShownInSplit: tab === splitTab,
                     // Preview: a file-backed tab not yet committed (what a sidebar click reuses).
                     isPreview: tab.url != nil && !tab.isCommitted,
                     folder: needsPrefix[index]
@@ -1322,13 +1423,144 @@ final class EditorContainerViewController: NSViewController {
         stack.alignment = .centerX
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(stack)
+        contentView.addSubview(stack, positioned: .below, relativeTo: nil)
         NSLayoutConstraint.activate([
             stack.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
         ])
         emptyStateView = stack
         refreshEmptyState()
+    }
+}
+
+// MARK: - Split
+
+extension EditorContainerViewController {
+    var isSplit: Bool { splitTab != nil }
+    /// A split shows two different tabs, so it needs a second one to show.
+    var canToggleSplit: Bool { isSplit || tabs.count > 1 }
+    /// The split's other surface, for the covers a transition installs over the panes.
+    var splitSurface: EditorSurface? { splitTab?.surface }
+    /// Both panes, for a cover's bitmap of what is on screen.
+    var paneHostView: NSView { contentView }
+
+    /// ⌘\: open the split with the tab the focused pane showed before (else a strip neighbour)
+    /// beside it, or close it, keeping the focused pane's tab. Focus stays where it is.
+    func toggleSplit() {
+        if isSplit {
+            closeSplit()
+            return
+        }
+        guard let active = activeTab else { return }
+        let candidate = previousActiveTab.flatMap { tab in tabs.contains { $0 === tab } ? tab : nil }
+            ?? neighbor(at: (tabs.firstIndex { $0 === active } ?? 0) + 1, excluding: active)
+        guard let other = candidate, other !== active else { return }
+        show(other, inSplitAt: .trailing)
+        focusEditorNextTurn(active)
+    }
+
+    /// The tab chip's "Open in Split": show tab `id` in the other pane and focus it.
+    func openInSplit(id: UUID) {
+        guard let tab = tabs.first(where: { $0.id == id }), tab !== activeTab else { return }
+        if tab !== splitTab { show(tab, inSplitAt: isSplit ? focusedSide.other : .trailing) }
+        swapFocus()
+    }
+
+    func focusOtherPane() { swapFocus() }
+
+    /// Put `tab` in the pane on `side` as the split's other tab; the active surface moves to the
+    /// opposite pane if it is not already there. The new surface is dressed before install, like
+    /// an activated one, so it never shows a stale theme or band height.
+    private func show(_ tab: Tab, inSplitAt side: EditorPaneHostView.Side) {
+        guard tab !== activeTab else { return }
+        if let current = splitTab, current !== tab { current.surface.view.removeFromSuperview() }
+        splitTab = tab
+        focusedSide = side.other
+        if let dark = pushedDark, let theme = pushedTheme {
+            pushAppearance(to: tab.surface, dark: dark, theme: theme)
+        } else {
+            pushAppearance(to: tab.surface, dark: view.effectiveAppearance.isChalkDark,
+                           theme: ChalkAppearance.theme)
+        }
+        if let inset = chromeTopInset { tab.surface.setChromeTopInset(inset) }
+        if let active = activeTab { ensureInstalled(active) }
+        ensureInstalled(tab)
+        applyPaneLayout()
+        refreshTabBar()
+    }
+
+    /// Drop the unfocused pane. The focused surface stays in its pane, which now fills the area,
+    /// so nothing reloads or repaints.
+    private func closeSplit() {
+        guard let other = splitTab else { return }
+        splitTab = nil
+        other.surface.view.removeFromSuperview()
+        applyPaneLayout()
+        refreshTabBar()
+        if let active = activeTab { focusEditorNextTurn(active) }
+    }
+
+    /// The other pane takes focus: its tab becomes the active one. Both surfaces stay where they
+    /// are, so there is no install and no cross-fade.
+    private func swapFocus(focusingEditor: Bool = true) {
+        guard let incoming = splitTab, let outgoing = activeTab else { return }
+        if isOutlineShowing { outgoing.surface.setOutlineSubscription(false) }
+        splitTab = outgoing
+        activeTab = incoming
+        focusedSide = focusedSide.other
+        // The outline and the PDF follow focus.
+        applySlot(animated: false)
+        refreshEmptyState()
+        refreshTabBar()
+        if focusingEditor { focusEditorNextTurn(incoming) }
+    }
+
+    /// The pane host follows the model: two panes while `splitTab` is set, else the focused one.
+    private func applyPaneLayout() {
+        contentView.isSplit = splitTab != nil
+        contentView.soloSide = focusedSide
+        contentView.layoutSubtreeIfNeeded()
+    }
+
+    private func installSplitControls() {
+        contentView.fraction = Preferences.splitFraction
+        let grip = contentView.divider
+        grip.onDragBegan = { [weak self] in
+            self?.splitResizeStartWidth = self?.contentView.leadingWidth ?? 0
+        }
+        grip.onDragged = { [weak self] dx in
+            guard let self, self.contentView.bounds.width > 0 else { return }
+            self.contentView.fraction = (self.splitResizeStartWidth + dx) / self.contentView.bounds.width
+        }
+        grip.onDragEnded = { [weak self] in
+            guard let self else { return }
+            Preferences.splitFraction = self.contentView.fraction
+        }
+        paneClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            self?.focusPane(under: event)
+            return event
+        }
+    }
+
+    /// A click in the unfocused pane focuses it. Observed, never consumed: the click still lands
+    /// in the page and places the caret, so the editor is not refocused on top of it.
+    private func focusPane(under event: NSEvent) {
+        guard splitTab != nil, let window = view.window, event.window === window,
+              let root = window.contentView, let frame = root.superview else { return }
+        // A hit test, not a frame check: the tab band, the outline overlay and the divider sit
+        // over the panes and own their clicks.
+        let other = contentView.pane(focusedSide.other)
+        guard let hit = root.hitTest(frame.convert(event.locationInWindow, from: nil)),
+              hit.isDescendant(of: other) else { return }
+        swapFocus(focusingEditor: false)
+    }
+
+    /// Session restore: show the file tab at `index` (strip order, drafts excluded) in the split,
+    /// on the leading side when focus was on the trailing pane.
+    func restoreSplit(fileTabAt index: Int, leading: Bool) {
+        let fileTabs = tabs.filter { $0.url != nil }
+        guard fileTabs.indices.contains(index), fileTabs[index] !== activeTab else { return }
+        show(fileTabs[index], inSplitAt: leading ? .leading : .trailing)
     }
 }
 

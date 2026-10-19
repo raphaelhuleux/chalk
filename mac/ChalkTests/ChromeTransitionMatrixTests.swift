@@ -26,6 +26,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
     override func setUp() {
         super.setUp()
         host = ChromeMatrixHost()
+        host.seedsTwoTabs = true
         Preferences.sidebarWidth = Self.pinnedSidebarWidth
     }
 
@@ -53,6 +54,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         host.settleToFixedPoint(root, state: state, budget: 2.0, stableTurns: 3) { root in
             root.isSidebarVisible == (state.sidebar == .shown)
                 && root.trailingPanelStateForTesting == state.outline
+                && root.editor.isSplit == (state.split == .split)
         }
         let layout = root.chromeLayout(for: state)
         Self.freshLayouts[state.id] = layout
@@ -125,6 +127,14 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         }
         optRect("outlinePanel", reached.outlinePanel, fresh.outlinePanel)
         optRect("bandPaintTrailingHole", reached.bandPaintTrailingHole, fresh.bandPaintTrailingHole)
+        if reached.editorPanes.count != fresh.editorPanes.count {
+            out.append("editorPanes: reached=\(reached.editorPanes) fresh=\(fresh.editorPanes)")
+        } else {
+            for (index, (a, b)) in zip(reached.editorPanes, fresh.editorPanes).enumerated() {
+                rect("editorPanes[\(index)]", a, b)
+            }
+        }
+        optRect("splitDivider", reached.splitDivider, fresh.splitDivider)
         if reached.outlinePanelIsOverlay != fresh.outlinePanelIsOverlay {
             out.append("outlinePanelIsOverlay: reached=\(reached.outlinePanelIsOverlay) "
                        + "fresh=\(fresh.outlinePanelIsOverlay)")
@@ -155,6 +165,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         host.settle(root, state: state, budget: 2.0, stableTurns: 3) { root in
             root.isSidebarVisible == (expected.sidebar == .shown)
                 && root.trailingPanelStateForTesting == expected.outline
+                && root.editor.isSplit == (expected.split == .split)
         }
 
         var complaints: [String] = []
@@ -171,6 +182,9 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         if slot != expected.outline {
             complaints.append("\(path): trailing slot \(slot.rawValue), expected \(expected.outline.rawValue)")
         }
+        if root.editor.isSplit != (expected.split == .split) {
+            complaints.append("\(path): split \(root.editor.isSplit), expected \(expected.split.rawValue)")
+        }
 
         for invariant in ChromeInvariant.catalogue where invariant.isEvidence(about: layout) {
             if !invariant.holds(layout) {
@@ -184,16 +198,18 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         return complaints
     }
 
-    /// The four user toggles, each phrased as "flip this dimension" relative
+    /// The five user toggles, each phrased as "flip this dimension" relative
     /// to `state`.
     private func flip(_ dimension: Int, of state: UIState) -> TransitionStep {
         switch dimension {
         case 0: return .sidebar(state.sidebar == .hidden)
         case 1: return .window(state.window == .windowed ? .fullscreen : .windowed)
         case 2: return .zen(state.mode == .normal)
+        case 3: return .split(state.split == .single)
         default: return .outline(state.outline == .hidden)
         }
     }
+    private static let dimensions = 5
 
     /// The light cells: appearance is a colour dimension and transitions do
     /// not touch it. Zen cells are NORMALIZED to sidebar-hidden and
@@ -223,7 +239,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         warmFreshLayouts()
         var complaints: [String] = []
         for start in startStates {
-            for dimension in 0..<4 {
+            for dimension in 0..<Self.dimensions {
                 let root = makeStartRoot(start)
                 var state = start
                 let first = flip(dimension, of: state)
@@ -243,8 +259,8 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         warmFreshLayouts()
         var complaints: [String] = []
         for start in startStates {
-            for a in 0..<4 {
-                for b in 0..<4 where a != b {
+            for a in 0..<Self.dimensions {
+                for b in 0..<Self.dimensions where a != b {
                     let root = makeStartRoot(start)
                     var state = start
                     var path = start.id

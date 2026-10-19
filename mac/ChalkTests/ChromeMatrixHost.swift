@@ -49,11 +49,19 @@ final class ChromeMatrixHost {
     /// And for the slot's width while it shows the PDF.
     private let incomingPDFPanelWidthRaw: Any?
     private static let pdfPanelWidthKey = Preferences.pdfPanelWidthKey
+    /// And for the split's seam, so every split cell starts from the default halves.
+    private let incomingSplitFractionRaw: Any?
+    private static let splitFractionKey = Preferences.splitFractionKey
 
     /// One folder with one file, so every Library-open cell has a first area
     /// header to measure: `libraryListStartsAtTheChromeFloor` is evidence only
     /// against a measured header, and a detached root's Library is empty.
     private let libraryFolder: URL
+
+    /// Seed two draft tabs in every cell, not only the split ones. The transition suite needs it:
+    /// a split toggled off must land on a fresh single cell with the same strip, and toggling a
+    /// split on must not open tabs (a new active draft would drop the PDF a cell asked for).
+    var seedsTwoTabs = false
 
     init() {
         libraryFolder = FileManager.default.temporaryDirectory
@@ -66,6 +74,8 @@ final class ChromeMatrixHost {
         UserDefaults.standard.removeObject(forKey: Self.outlinePanelWidthKey)
         incomingPDFPanelWidthRaw = UserDefaults.standard.object(forKey: Self.pdfPanelWidthKey)
         UserDefaults.standard.removeObject(forKey: Self.pdfPanelWidthKey)
+        incomingSplitFractionRaw = UserDefaults.standard.object(forKey: Self.splitFractionKey)
+        UserDefaults.standard.removeObject(forKey: Self.splitFractionKey)
         window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
         window.isHidden = false
     }
@@ -87,6 +97,11 @@ final class ChromeMatrixHost {
             UserDefaults.standard.set(raw, forKey: Self.pdfPanelWidthKey)
         } else {
             UserDefaults.standard.removeObject(forKey: Self.pdfPanelWidthKey)
+        }
+        if let raw = incomingSplitFractionRaw {
+            UserDefaults.standard.set(raw, forKey: Self.splitFractionKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.splitFractionKey)
         }
         window.isHidden = true
         window.rootViewController = nil
@@ -144,6 +159,15 @@ final class ChromeMatrixHost {
         // its windowed height at the screen's top edge. Nothing else in a
         // test can flip it.
         root.setMacFullscreenForTesting(state.window == .fullscreen)
+        window.layoutIfNeeded()
+        root.view.layoutIfNeeded()
+        // The split before the trailing slot: the PDF belongs to a tab, so it
+        // is requested on the focused tab once both tabs exist. Two draft
+        // tabs, so two real web views share the column.
+        if seedsTwoTabs || state.split == .split {
+            while root.editor.openTabCount < 2 { root.editor.newFile() }
+        }
+        root.setSplitForTesting(state.split)
         window.layoutIfNeeded()
         root.view.layoutIfNeeded()
         // The outline axis, before zen: zen closes the panel the way it

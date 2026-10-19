@@ -46,7 +46,8 @@ final class MenuRoutingTests: XCTestCase {
 
         let view = try submenu(titled: "View", in: main)
         XCTAssertEqual(itemTitles(view), ["Toggle Sidebar", "Outline", "Outline Panel", "Editing Mode", "View Mode",
-                                      "Zoom In", "Zoom Out", "Actual Size", "Next Tab", "Previous Tab"])
+                                      "Zoom In", "Zoom Out", "Actual Size", "Next Tab", "Previous Tab",
+                                      "Split Editor", "Focus Other Pane"])
         let modes = try XCTUnwrap(view.items.first { $0.title == "Editing Mode" }?.submenu)
         XCTAssertEqual(itemTitles(modes), ["Normal", "Zen", "Typewriter", "Focus", "Cycle Editing Mode"])
         let viewModes = try XCTUnwrap(view.items.first { $0.title == "View Mode" }?.submenu)
@@ -89,6 +90,9 @@ final class MenuRoutingTests: XCTestCase {
         XCTAssertEqual(try item("Next Tab").keyEquivalent, "\t")
         XCTAssertEqual(try item("Next Tab").keyEquivalentModifierMask, [.control])
         XCTAssertEqual(try item("Previous Tab").keyEquivalentModifierMask, [.control, .shift])
+        XCTAssertEqual(try item("Split Editor").keyEquivalent, "\\")
+        XCTAssertEqual(try item("Split Editor").keyEquivalentModifierMask, [.command])
+        XCTAssertEqual(try item("Focus Other Pane").keyEquivalentModifierMask, [.command, .option])
         XCTAssertEqual(try item("Settings\u{2026}").keyEquivalent, ",")
         XCTAssertEqual(try item("Compile").keyEquivalent, "r")
         XCTAssertEqual(try item("Compile").keyEquivalentModifierMask, [.command])

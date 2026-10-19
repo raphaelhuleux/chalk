@@ -77,6 +77,9 @@ final class ChromeInvariantMatrixTests: XCTestCase {
         if state.outline == .hidden && layout.outlinePanel != nil {
             faults.append("\(state.id): the outline panel was not requested and is open")
         }
+        if controller.editor.isSplit != (state.split == .split) {
+            faults.append("\(state.id): the split is \(controller.editor.isSplit ? "open" : "closed")")
+        }
         // The band is Chalk's own in every window mode: a full-screen cell
         // with no band is a cell that did not configure.
         if state.mode == .normal && layout.band.isEmpty {

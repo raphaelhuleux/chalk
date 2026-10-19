@@ -7,11 +7,13 @@ Naming one of these is enough to describe a chrome bug precisely.
 
 ## Where each rule is actually asserted
 
-`ChromeInvariantMatrixTests` walks all 48 cells of the state matrix (`ChalkTests`).
+`ChromeInvariantMatrixTests` walks all 96 cells of the state matrix (`ChalkTests`).
 In each cell it asserts every rule that both APPLIES there and is FALSIFIABLE there.
 A rule evaluated against absent geometry passes whatever the app did, so it is not counted as coverage and never reported as a pass.
 
 The matrix carries a trailing-slot axis: every cell exists with the slot closed, showing the outline, and showing the PDF. The PDF shares the outline's frame, so the four `outlinePanel*` rules are evidence in every open cell, whichever content fills it.
+
+It also carries a split axis: every cell exists with one editor pane and with two. A split cell opens two draft tabs, so two real web views share the column. `editorPanesTileTheContent` is evidence in every cell; the two `split*` rules only where the split is open.
 
 EVERY cell asserts something falsifiable, and the blind-cell guard in the matrix test PASSES.
 The utility pill stands in every state, so `pillRestsInTheCorner` is evidence everywhere rather than only where the pill happened to be showing.
@@ -20,15 +22,16 @@ The matrix host seeds one Library folder, so every Library-open cell has a first
 Coverage is still not uniform, and the differences are structural.
 The counts below are the ones the suite PRINTS (`ChromeInvariantMatrixTests falsifiable coverage`), read off a run rather than reasoned about.
 Windowed and full screen are the same chrome (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
+Each row holds its one-pane cells; the same cells split assert the two `split*` rules on top, so add 2.
 
-| Cells | Falsifiable rules | Why |
+| Cells (one pane; as many again split) | Falsifiable rules, one pane / split | Why |
 | --- | --- | --- |
-| normal, Library open, slot open: outline or PDF (8) | 15 of 15 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the underline, window containment, and the four `outlinePanel*` rules |
-| normal, Library open, slot closed (4) | 11 of 15 | as above, minus the four `outlinePanel*` rules |
-| normal, Library closed, slot open: outline or PDF (8) | 11 of 15 | as the first row, minus the three Library rules and the name row |
-| normal, Library closed, slot closed (4) | 7 of 15 | the band and its paint, the resting line, the pill, the content column, the underline, window containment |
-| zen, slot closed (8) | 4 of 15 | resting reserve, pill, content column, window containment: zen hides the band and closes the Library |
-| zen, slot open: outline or PDF (16) | 4 of 15 | zen forces the slot closed regardless of the request, so its four rules are never evidence here |
+| normal, Library open, slot open: outline or PDF (8) | 16 / 18 of 18 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the panes, the underline, window containment, and the four `outlinePanel*` rules |
+| normal, Library open, slot closed (4) | 12 / 14 of 18 | as above, minus the four `outlinePanel*` rules |
+| normal, Library closed, slot open: outline or PDF (8) | 12 / 14 of 18 | as the first row, minus the three Library rules and the name row |
+| normal, Library closed, slot closed (4) | 8 / 10 of 18 | the band and its paint, the resting line, the pill, the content column, the panes, the underline, window containment |
+| zen, slot closed (8) | 5 / 7 of 18 | resting reserve, pill, content column, panes, window containment: zen hides the band and closes the Library |
+| zen, slot open: outline or PDF (16) | 5 / 7 of 18 | zen forces the slot closed regardless of the request, so its four rules are never evidence here |
 
 ## The rules
 
@@ -92,4 +95,16 @@ The panel starts where the editor's content column starts: full-bleed under the 
 
 The panel pushes the editor while the column can spare the width and overlays it once the text would drop below the readable floor. The floor is the metrics table's number, so a panel that pushes a 300pt column or overlays a 900pt one is applying the wrong rule.
 
-_15 invariants._
+### `editorPanesTileTheContent`
+
+The editor panes cover the content column exactly: one pane fills it, a split's two panes meet at one seam with no gap or overlap and share its top and bottom. A pane that stops short shows bare background beside the text; panes that overlap hide one document's edge under the other.
+
+### `splitPanesKeepTheirFloor`
+
+Each pane of a split keeps the metrics table's minimum width, so a dragged divider can never squeeze one document into an unreadable sliver. A column too narrow for two minimum panes splits in equal halves instead.
+
+### `splitDividerSitsOnTheSeam`
+
+The split's drag handle straddles the seam between the panes and runs their full height. A handle left at a stale x catches drags where no edge is drawn, and the visible edge stops responding.
+
+_18 invariants._
