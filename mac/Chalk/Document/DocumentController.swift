@@ -797,6 +797,12 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     /// A bibliography this large is useless in the completion popup, and it crosses IPC.
     private static let maxReadTextBytes = 2 * 1024 * 1024
 
+    /// pdflatex runs in the document's folder, so the picture's `\input`s resolve as in a compile.
+    func editor(_ surface: EditorSurface, renderTikz document: String) async -> TikzRenderResult? {
+        let directory = await MainActor.run { self.document?.fileURL.deletingLastPathComponent() }
+        return await TikzRenderService.shared.render(.init(document: document, workingDirectory: directory))
+    }
+
     func editor(_ surface: EditorSurface, requestsCommand name: String) {
         // Raw value of ChalkKit's `ShellCommand`; unknown names go to the shell, which ignores them.
         if ShellCommand(rawValue: name) == .save {

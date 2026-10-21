@@ -6,6 +6,7 @@ import { documentStats, type DocumentStats } from './editor/doc-stats';
 import type { AssetResolver } from './editor/asset-resolver';
 import type { WorkspaceAccess } from './editor/workspace-files';
 import type { MermaidLoader } from './editor/md-mermaid-plugin';
+import type { TikzRenderer } from './editor/tikz-renderer';
 import {
   themeCompartment,
   vsCodeTheme,
@@ -55,6 +56,9 @@ export interface MountOptions {
   /** Loads the mermaid renderer on the first ```mermaid fence (usually
    *  `scriptMermaidLoader`). Omitted: those fences render as plain code. */
   loadMermaid?: MermaidLoader;
+  /** Typesets TikZ pictures (usually the `renderTikz` of `requestHooks`).
+   *  Omitted: they show as source only. */
+  renderTikz?: TikzRenderer;
   /** Outline, cursor line and prose counts, debounced 120ms after each doc or
    *  selection change, only while `setOutlineSubscription(true)` is in force. */
   onOutline?: (snapshot: OutlineSnapshot) => void;
@@ -103,6 +107,7 @@ export function mountEditor({
   resolveAsset,
   workspaceAccess,
   loadMermaid,
+  renderTikz,
   onOutline,
   deadKeyCommitDedupe = false,
 }: MountOptions): MountedEditor {
@@ -203,6 +208,7 @@ export function mountEditor({
           resolveAsset,
           workspaceAccess,
           loadMermaid,
+          renderTikz,
           deadKeyDedupe: deadKeyCommitDedupe,
           extraExtensions: outlineCompartment.of(outlineExtension()),
         });

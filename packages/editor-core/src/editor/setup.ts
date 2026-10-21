@@ -79,6 +79,8 @@ import { mdCodeLanguages } from './code-languages';
 import { codeHighlightStyle } from './code-syntax-highlight';
 import { codeBlockPlugin } from './md-code-block-plugin';
 import { mermaidLoaderFacet, mermaidPlugin, type MermaidLoader } from './md-mermaid-plugin';
+import { tikzPlugin } from './tikz-plugin';
+import { tikzRendererFacet, type TikzRenderer } from './tikz-renderer';
 import { tablePlugin } from './table-field';
 import { mdListNewlineKeymap } from './md-list-newline';
 import { mdListIndentKeymap } from './md-list-indent';
@@ -116,6 +118,8 @@ export interface EditorOptions {
   workspaceAccess?: WorkspaceAccess;
   /** Loads the mermaid renderer; ```mermaid fences render as code without one. */
   loadMermaid?: MermaidLoader;
+  /** Typesets TikZ pictures; they stay source-only without one. */
+  renderTikz?: TikzRenderer;
   /** Mac Catalyst's dead-key commit dedupe (dead-key-commit.ts). */
   deadKeyDedupe?: boolean;
   /** Appended after the editor's own extensions (mount.ts's outline push). */
@@ -137,6 +141,7 @@ function buildExtensions(
     ...(opts.resolveAsset ? [assetResolverFacet.of(memoizedAssetResolver(opts.resolveAsset))] : []),
     ...(opts.workspaceAccess ? [workspaceAccessFacet.of(opts.workspaceAccess)] : []),
     ...(opts.loadMermaid ? [mermaidLoaderFacet.of(opts.loadMermaid)] : []),
+    ...(opts.renderTikz ? [tikzRendererFacet.of(opts.renderTikz)] : []),
 
     keymap.of(hsnipsKeymap),
     keymap.of([{ key: 'Tab', run: acceptCompletion }]),
@@ -195,6 +200,7 @@ function buildExtensions(
     // Preview and Mixed share ONE math field instance: CM6 keeps a field's
     // value across a reconfigure that keeps it, so switching re-renders nothing.
     const texMath = texMathPlugin();
+    const texTikz = tikzPlugin('tex');
     const texSets: PreviewSets = {
       preview: [
         texFramePlugin(),
@@ -202,6 +208,7 @@ function buildExtensions(
         texListPlugin(),
         texMath,
         texImagePlugin(),
+        texTikz,
         texConcealPlugin(),
         texLayoutDimPlugin(),
       ],
@@ -213,6 +220,7 @@ function buildExtensions(
         texListPlugin({ conceal: false }),
         texMath,
         texImagePlugin(),
+        texTikz,
         texConcealPlugin({ conceal: false }),
         texLayoutDimPlugin(),
       ],
@@ -256,6 +264,7 @@ function buildExtensions(
   // tablePlugin before livePreviewPlugin so the block-replace claims Table
   // ranges first. One math instance for both sets, as in the tex branch.
   const mdMath = mathPlugin();
+  const mdTikz = tikzPlugin('md');
   const mdSets: PreviewSets = {
     preview: [
       mdMath,
@@ -267,6 +276,7 @@ function buildExtensions(
       frontmatterDimExtension(),
       codeBlockPlugin(),
       mermaidPlugin(),
+      mdTikz,
     ],
     mixed: [
       mdMath,
@@ -277,6 +287,7 @@ function buildExtensions(
       frontmatterDimExtension(),
       codeBlockPlugin(),
       mermaidPlugin(),
+      mdTikz,
     ],
     source: [],
   };

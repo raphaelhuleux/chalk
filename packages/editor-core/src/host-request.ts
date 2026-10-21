@@ -1,9 +1,10 @@
 /**
  * Id bookkeeping for the transport-internal request/reply channel both hosts
- * run to fulfil promise hooks (`resolveAsset`, `WorkspaceAccess`). Not part of
+ * run to fulfil promise hooks (`resolveAsset`, `WorkspaceAccess`, `renderTikz`). Not part of
  * the frozen `HostPort` protocol. Pure TS: no `window`, no DOM.
  */
 import type { AssetResolver } from './editor/asset-resolver';
+import type { TikzRenderer, TikzResult } from './editor/tikz-renderer';
 import type { WorkspaceAccess } from './editor/workspace-files';
 
 /** Reply message type to the field carrying its value. Hosts whose replies
@@ -12,11 +13,15 @@ export const REPLY_FIELDS: Readonly<Record<string, string>> = {
   'resolve-asset-reply': 'url',
   'list-files-reply': 'paths',
   'read-text-reply': 'text',
+  'render-tikz-reply': 'result',
 };
 
 // Settle with the fallback if the host never answers, so the promise and Map
 // entry don't leak.
 const DEFAULT_TIMEOUT_MS = 10_000;
+// A TeX run is about half a second, and a document's pictures queue behind
+// the host's few concurrent runs, so a long page can wait well past 10s.
+const RENDER_TIKZ_TIMEOUT_MS = 90_000;
 
 // Ids must be unique across page reloads: a late reply from the previous page
 // lands in the current one. Seeding from boot time x1000 keeps each page's range
@@ -25,8 +30,8 @@ let sharedNextId = Date.now() * 1000;
 
 export interface RequestChannel {
   /** Post `message` with a fresh id; resolve when the host settles that id, or
-   *  with `fallback` if it never does. */
-  request<T>(message: Record<string, unknown>, fallback: T): Promise<T>;
+   *  with `fallback` if it never does within `timeoutMs` (the channel's). */
+  request<T>(message: Record<string, unknown>, fallback: T, timeoutMs?: number): Promise<T>;
   /** Settle pending request `id`; unknown ids (stale or double replies) are
    *  ignored. */
   settle<T>(id: number, value: T): void;
@@ -46,13 +51,13 @@ export function createRequestChannel(
   const pending = new Map<number, Pending>();
 
   return {
-    request<T>(message: Record<string, unknown>, fallback: T): Promise<T> {
+    request<T>(message: Record<string, unknown>, fallback: T, timeout = timeoutMs): Promise<T> {
       return new Promise<T>((resolve) => {
         const id = sharedNextId++;
         const timer = setTimeout(() => {
           pending.delete(id);
           resolve(fallback);
-        }, timeoutMs);
+        }, timeout);
         pending.set(id, {
           settle: resolve as unknown as (value: never) => void,
           timer,
@@ -78,13 +83,16 @@ export function createRequestChannel(
 
 /** The `mountEditor` promise hooks over `channel`: each posts its request type
  *  and settles on the matching entry of `REPLY_FIELDS`. The host fulfils them
- *  (resolving an image path, walking the document directory). */
+ *  (resolving an image path, walking the document directory, running TeX). */
 export function requestHooks(channel: RequestChannel): {
   resolveAsset: AssetResolver;
   workspaceAccess: WorkspaceAccess;
+  renderTikz: TikzRenderer;
 } {
   return {
     resolveAsset: (src) => channel.request<string | null>({ type: 'resolve-asset', src }, null),
+    renderTikz: (document) =>
+      channel.request<TikzResult | null>({ type: 'render-tikz', document }, null, RENDER_TIKZ_TIMEOUT_MS),
     workspaceAccess: {
       list: (kinds) => channel.request<string[]>({ type: 'list-files', kinds: [...kinds] }, []),
       readText: (path) => channel.request<string | null>({ type: 'read-text', path }, null),

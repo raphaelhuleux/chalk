@@ -16,7 +16,7 @@ anything UIKit-free lives in ChalkKit, and the shell's spec chrome tokens are
   `heading-colors`, `editor-config`, `hsnips`. Editor→host: `ready`, `edit`,
   `open-external`. Entry point `mountEditor` ([mount.ts](packages/editor-core/src/mount.ts)).
   The native transport additionally carries transport-internal messages
-  (`resolve-asset` request/reply, `scroll` telemetry, `outline` pushes for the
+  (`resolve-asset` and `render-tikz` request/reply, `scroll` telemetry, `outline` pushes for the
   persistent panel, `command` save/toggle-outline/toggle-outline-panel) and the
   `window.__chalkEditor` bridge (clipboard, outline access, and
   `setOutlineSubscription`, which turns the `outline` pushes on and off),

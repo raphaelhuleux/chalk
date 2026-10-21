@@ -2,8 +2,8 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// The three transport-internal requests (`resolve-asset`, `list-files`,
-/// `read-text`) share one reply path: the delegate's answer, JSON-encoded, or
+/// The transport-internal requests (`resolve-asset`, `list-files`,
+/// `read-text`, `render-tikz`) share one reply path: the delegate's answer, JSON-encoded, or
 /// `null`, handed back to the page under the request's id.
 @MainActor
 final class WebEditorSurfaceReplyTests: XCTestCase {
@@ -37,10 +37,13 @@ final class WebEditorSurfaceReplyTests: XCTestCase {
         surface.handleHostMessage(body: ["type": "list-files", "id": 1, "kinds": ["bib"]])
         surface.handleHostMessage(body: ["type": "read-text", "id": 2, "path": "refs.bib"])
         surface.handleHostMessage(body: ["type": "resolve-asset", "id": 3, "src": "fig.png"])
+        surface.handleHostMessage(body: ["type": "render-tikz", "id": 6, "document": "\\begin{document}"])
 
         waitForScript(#"window.__chalkHost.listFilesReply(1, ["refs.bib"])"#)
         waitForScript(#"window.__chalkHost.readTextReply(2, "@book{x}")"#)
         waitForScript(#"window.__chalkHost.resolveAssetReply(3, "data:fig.png")"#)
+        waitForScript(#"window.__chalkHost.renderTikzReply(6, {"error":"! Oops."})"#)
+        XCTAssertEqual(answerer.typeset, ["\\begin{document}"])
         XCTAssertEqual(answerer.listedKinds, [[.bib]])
     }
 
@@ -60,6 +63,7 @@ final class WebEditorSurfaceReplyTests: XCTestCase {
 private final class Answerer: EditorSurfaceDelegate {
     var hasAnswers = true
     private(set) var listedKinds: [[WorkspaceFileKind]] = []
+    private(set) var typeset: [String] = []
 
     func editorDidBecomeReady(_ surface: EditorSurface) {}
     func editor(_ surface: EditorSurface, didEdit text: String) {}
@@ -73,5 +77,9 @@ private final class Answerer: EditorSurfaceDelegate {
     }
     func editor(_ surface: EditorSurface, readText path: String) async -> String? {
         hasAnswers ? "@book{x}" : nil
+    }
+    func editor(_ surface: EditorSurface, renderTikz document: String) async -> TikzRenderResult? {
+        typeset.append(document)
+        return hasAnswers ? .error("! Oops.") : nil
     }
 }

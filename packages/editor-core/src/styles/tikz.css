@@ -1,0 +1,37 @@
+/* Figures under TikZ pictures: tikz-plugin.ts's block widget.
+ * NO vertical margins inside .cm-content (CM6 height map): padding only. */
+
+.cm-tikz {
+  padding: 0.6em 0 0.9em;
+  text-align: center;
+  /* A wide figure must not widen .cm-content (as .cm-math-display). */
+  contain: inline-size;
+}
+
+/* Width and aspect-ratio come inline from the host's size, so the box has
+   its height before the image decodes. */
+.cm-tikz-figure {
+  max-width: 100%;
+  height: auto;
+  vertical-align: top;
+}
+
+/* TeX draws black on transparent: on a dark editor, invert the lightness and
+   turn the hues back, so a red curve stays red. */
+.cm-tikz-dark .cm-tikz-figure {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.cm-tikz-stale .cm-tikz-figure {
+  opacity: 0.35;
+}
+
+.cm-tikz-error {
+  /* CM6's base `.cm-line` padding, so the message lines up with the source. */
+  padding: 0 2px 0 6px;
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  text-align: left;
+  color: #e53e3e;
+}

@@ -95,11 +95,14 @@ protocol EditorSurfaceDelegate: AnyObject {
     ) async -> [String]
     /// Text of a document-relative file, for `.bib` parsing. Nil when unreadable or too large.
     func editor(_ surface: EditorSurface, readText path: String) async -> String?
+    /// Typeset a TikZ widget's standalone document; nil when TeX can't run here.
+    func editor(_ surface: EditorSurface, renderTikz document: String) async -> TikzRenderResult?
     /// A shell shortcut the web layer forwarded (e.g. "save" for Cmd+S).
     func editor(_ surface: EditorSurface, requestsCommand name: String)
 }
 
 extension EditorSurfaceDelegate {
     func editor(_ surface: EditorSurface, requestsCommand name: String) {}
+    func editor(_ surface: EditorSurface, renderTikz document: String) async -> TikzRenderResult? { nil }
     func editorDidResetConnection(_ surface: EditorSurface) {}
 }

@@ -28,6 +28,7 @@ It comes as a native Mac app and as a VS Code extension, built on one editor eng
 - Multi-file projects: saving a chapter compiles the root file, found from `% !TEX root`, the `\input`/`\include` graph or the last build.
 - LaTeX builds with latexmk when installed, otherwise pdflatex, xelatex or lualatex with bibtex or biber, or tectonic. Markdown and Quarto build with Quarto or pandoc.
 - Compile errors are listed under the PDF; a click jumps to the line.
+- TikZ pictures (`tikzpicture` and `tikzcd` in LaTeX, ```` ```tikz ```` fences in Markdown and Quarto) render under their source, typeset by your own TeX installation with your preamble.
 
 **VS Code extension**
 

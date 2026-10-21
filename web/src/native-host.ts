@@ -16,6 +16,7 @@ import {
   type HostToEditorMessage,
   type EditorToHostMessage,
   type OutlineSnapshot,
+  type TikzResult,
 } from '@chalk/editor-core';
 // Page-level shell sizing, shared with the VS Code host. Imported before
 // chalk-theme.css so the native theme can still override.
@@ -40,6 +41,8 @@ interface ChalkHostBridge {
   listFilesReply(id: number, paths: string[] | null): void;
   /** Swift answers a pending read-text request. */
   readTextReply(id: number, text: string | null): void;
+  /** Swift answers a pending render-tikz request (null: no TeX here). */
+  renderTikzReply(id: number, result: TikzResult | null): void;
 }
 
 /**
@@ -110,9 +113,10 @@ const port: HostPort = {
 // Request/reply keyed by id: post {type, id, …} and settle when Swift calls
 // the matching `…Reply(id, value)`. Id bookkeeping and the hook wrappers live
 // in editor-core's host-request.ts, shared with the VS Code host. For
-// `workspaceAccess`, Swift walks the document directory.
+// `workspaceAccess`, Swift walks the document directory; for `renderTikz` it
+// runs pdflatex (TikzRenderService).
 const requests = createRequestChannel(postToHost);
-const { resolveAsset, workspaceAccess } = requestHooks(requests);
+const { resolveAsset, workspaceAccess, renderTikz } = requestHooks(requests);
 
 // --- The object Swift calls into ---------------------------------------------
 
@@ -128,6 +132,9 @@ window.__chalkHost = {
   },
   readTextReply(id: number, text: string | null): void {
     requests.settle(id, text);
+  },
+  renderTikzReply(id: number, result: TikzResult | null): void {
+    requests.settle(id, result);
   },
 };
 
@@ -203,6 +210,7 @@ function boot(): void {
     workspaceAccess,
     // Built beside bundle.js by web/build.mjs; `script-src 'self'` admits it.
     loadMermaid: scriptMermaidLoader('mermaid.js'),
+    renderTikz,
     // Outline panel feed; flows only while subscribed
     // (WebEditorSurface.setOutlineSubscription).
     onOutline: (snapshot) => postToHost({ type: 'outline', ...snapshot }),

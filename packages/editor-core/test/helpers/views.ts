@@ -6,6 +6,7 @@ import { createEditor, type Language } from '../../src/editor/setup';
 import { defaultEditorConfig, type EditorConfig } from '../../src/editor/theme';
 import type { WorkspaceAccess } from '../../src/editor/workspace-files';
 import type { MermaidLoader } from '../../src/editor/md-mermaid-plugin';
+import type { TikzRenderer } from '../../src/editor/tikz-renderer';
 import type { EditorToHostMessage, HostPort, HostToEditorMessage } from '../../src/host-port';
 import { parsed } from './force-parse';
 
@@ -33,6 +34,7 @@ export interface ViewOptions {
   resolveAsset?: AssetResolver;
   workspaceAccess?: WorkspaceAccess;
   loadMermaid?: MermaidLoader;
+  renderTikz?: TikzRenderer;
   /** Run `ensureSyntaxTree` over the whole document after mounting, on top of
    *  the `parsed()` forced parse, so decorations rebuild against a full tree. */
   ensureTree?: boolean;
@@ -62,6 +64,7 @@ function mountView(doc: string, language: Language, opts: ViewOptions = {}): Edi
       resolveAsset: opts.resolveAsset,
       workspaceAccess: opts.workspaceAccess,
       loadMermaid: opts.loadMermaid,
+      renderTikz: opts.renderTikz,
       deadKeyDedupe: opts.deadKeyCommitDedupe,
     }),
   );

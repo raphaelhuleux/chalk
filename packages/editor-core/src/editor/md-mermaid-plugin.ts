@@ -4,6 +4,7 @@ import { syntaxTree } from '@codemirror/language';
 import { normalizeFenceInfo } from './code-languages';
 import { openExternal } from '../host-port';
 import { MERMAID_GLOBAL, type MermaidRenderer, type MermaidTheme } from './mermaid-api';
+import { luminance, observeLook } from './editor-look';
 import '../styles/mermaid.css';
 
 // A ```mermaid fence keeps its source and gains the rendered diagram below its
@@ -65,17 +66,6 @@ function remember<V>(cache: Map<string, V>, key: string, value: V): void {
   cache.delete(key);
   cache.set(key, value);
   if (cache.size > RENDER_CACHE_LIMIT) cache.delete(cache.keys().next().value as string);
-}
-
-/** Relative luminance of a computed `rgb(…)` colour; 0 when unparseable. */
-function luminance(color: string): number {
-  const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(color);
-  if (!m) return 0;
-  const [r, g, b] = [m[1], m[2], m[3]].map((c) => {
-    const s = Number(c) / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /** The editor's look, or null while the view is detached (nothing computed yet). */
@@ -250,16 +240,11 @@ const mermaidField = StateField.define<MermaidDecorations>({
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
 });
 
-/**
- * Re-renders every diagram when the editor's look changes: the native host
- * flips `data-theme` / `data-palette` on <html>, VS Code swaps <body> classes,
- * and an editor-config push reconfigures the font.
- */
+/** Re-renders every diagram when the editor's look changes (observeLook). */
 const themeWatcher = ViewPlugin.fromClass(
   class {
     private key: string | null = null;
-    private readonly observer: MutationObserver | null = null;
-    private readonly media: MediaQueryList | null = null;
+    private readonly stop: (() => void) | null = null;
     // A detached view reads null, so a check that fires after destroy is inert.
     private readonly check = (): void => {
       const theme = readTheme(this.view);
@@ -271,24 +256,18 @@ const themeWatcher = ViewPlugin.fromClass(
 
     constructor(private readonly view: EditorView) {
       if (!view.state.facet(mermaidLoaderFacet)) return;
-      this.observer = new MutationObserver(this.check);
-      const attributeFilter = ['class', 'style', 'data-theme', 'data-palette'];
-      this.observer.observe(document.documentElement, { attributes: true, attributeFilter });
-      this.observer.observe(document.body, { attributes: true, attributeFilter });
-      this.media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
-      this.media?.addEventListener('change', this.check);
+      this.stop = observeLook(this.check);
       // Seed once the view is attached; a dispatch can't run inside construction.
       setTimeout(this.check, 0);
     }
 
     update(update: ViewUpdate): void {
       // New theme styles apply after this update; compare once they have.
-      if (this.observer && update.transactions.some((tr) => tr.reconfigured)) setTimeout(this.check, 0);
+      if (this.stop && update.transactions.some((tr) => tr.reconfigured)) setTimeout(this.check, 0);
     }
 
     destroy(): void {
-      this.observer?.disconnect();
-      this.media?.removeEventListener('change', this.check);
+      this.stop?.();
     }
   },
 );

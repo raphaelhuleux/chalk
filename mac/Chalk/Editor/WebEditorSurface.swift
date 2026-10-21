@@ -661,6 +661,10 @@ extension WebEditorSurface: WKScriptMessageHandler {
             handleReadText(body)
             return
         }
+        if type == "render-tikz" {
+            handleRenderTikz(body)
+            return
+        }
 
         // The page never scrolls natively (CM6 scrolls .cm-scroller), so this is the shell's only
         // view of editor scrolling.
@@ -764,6 +768,11 @@ extension WebEditorSurface: WKScriptMessageHandler {
     private func handleReadText(_ body: [String: Any]) {
         guard let id = body["id"] as? Int, let path = body["path"] as? String else { return }
         reply("readTextReply", id: id) { await $0.editor(self, readText: path) }
+    }
+
+    private func handleRenderTikz(_ body: [String: Any]) {
+        guard let id = body["id"] as? Int, let document = body["document"] as? String else { return }
+        reply("renderTikzReply", id: id) { await $0.editor(self, renderTikz: document) }
     }
 
     private func handleResolveAsset(_ body: [String: Any]) {

@@ -22,3 +22,4 @@ export type { EditorConfig, ViewMode } from './editor/theme';
 export type { WorkspaceAccess, WorkspaceFileKind } from './editor/workspace-files';
 export { scriptMermaidLoader } from './editor/md-mermaid-plugin';
 export type { MermaidLoader } from './editor/md-mermaid-plugin';
+export type { TikzRenderer, TikzResult } from './editor/tikz-renderer';

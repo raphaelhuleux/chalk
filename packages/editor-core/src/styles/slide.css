@@ -9,7 +9,8 @@
  * appearances. */
 
 .cm-line.cm-slide,
-.cm-tex-math-display.cm-slide {
+.cm-tex-math-display.cm-slide,
+.cm-tikz.cm-slide {
   --slide-edge: var(--chalk-slide-edge, rgba(140, 140, 140, 0.34));
   --slide-band: var(--chalk-slide-band, rgba(140, 140, 140, 0.07));
 
@@ -25,7 +26,8 @@
 }
 
 /* Display math gets these classes via frameBlockAt. Its `width: 100%` ignores
-   the negative margin, so widen by the outdent to meet the card's right edge. */
+   the negative margin, so widen by the outdent to meet the card's right edge.
+   TikZ figures (also via frameBlockAt) are auto-width, like the lines. */
 .cm-tex-math-display.cm-slide {
   width: calc(100% + var(--chalk-slide-outdent, 0.75em));
   max-width: calc(100% + var(--chalk-slide-outdent, 0.75em));

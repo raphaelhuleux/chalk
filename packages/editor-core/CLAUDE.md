@@ -65,6 +65,17 @@ vertical-motion code; the jsdom twin for the logic level is
   [mermaid-api.ts](src/editor/mermaid-api.ts), which must stay import-free or
   its imports get bundled twice. No loader, no widgets. VS Code's CSP admits
   the injected script only with the page nonce.
+- **TikZ** ([tikz-plugin.ts](src/editor/tikz-plugin.ts)): a `tikzpicture` /
+  `tikzcd` outside math in .tex, or a ```` ```tikz ```` / ```` ```{tikz} ````
+  fence, keeps its source and gains the typeset figure as a block widget under
+  its last line, the mermaid pattern. The editor builds the whole standalone
+  document ([tikz-source.ts](src/editor/tikz-source.ts): an allow-list of
+  preamble commands, a deny-list of packages that break under
+  pdflatex + standalone) and the host only compiles it, over the
+  transport-internal `render-tikz` request; so the hosts can't drift. Without a
+  `renderTikz` hook (VS Code today) nothing renders. Dark mode inverts the PNG
+  in CSS (`cm-tikz-dark` on the editor root), so a theme flip re-renders
+  nothing.
 - **View modes** (preview / mixed / source, [src/editor/view-mode.ts](src/editor/view-mode.ts)):
   each language hands `viewModeExtension` three preview-compartment sets. Mixed
   is built by passing `{ conceal: false }` into the SAME builders, which turns
