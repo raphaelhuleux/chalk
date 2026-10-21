@@ -109,9 +109,18 @@ export function tablePlugin(): Extension {
 //  1. The adjacent line is a table: cross it as one line.
 //  2. The default move would skip a whole table: step one logical line.
 
-interface TableLines {
+export interface TableLines {
   startLine: number;
   endLine: number;
+}
+
+/** Where a host's always-rendered table blocks sit, for moveAcrossBlocks. */
+export interface BlockSpans {
+  any(state: EditorState): boolean;
+  /** The block covering line `lineNumber`, if any. */
+  spanAtLine(state: EditorState, lineNumber: number): TableLines | null;
+  /** Whether a whole block sits strictly between lines `low` and `high`. */
+  between(state: EditorState, low: number, high: number): boolean;
 }
 
 /** If `lineNumber` falls inside a GFM Table node, return its line span. */
@@ -168,10 +177,14 @@ function applyHead(view: EditorView, head: number, extend: boolean): boolean {
   return true;
 }
 
-function moveAcrossTable(view: EditorView, forward: boolean, extend: boolean): boolean {
+export function moveAcrossBlocks(
+  view: EditorView,
+  forward: boolean,
+  extend: boolean,
+  spans: BlockSpans,
+): boolean {
   const { state } = view;
-  const tables = state.field(tableField, false);
-  if (!tables || tables.size === 0) return false;
+  if (!spans.any(state)) return false;
 
   const sel = state.selection.main;
   const headLine = state.doc.lineAt(sel.head).number;
@@ -179,7 +192,7 @@ function moveAcrossTable(view: EditorView, forward: boolean, extend: boolean): b
 
   // (1)
   const adjacent = forward ? headLine + 1 : headLine - 1;
-  const span = tableSpanAtLine(state, adjacent);
+  const span = spans.spanAtLine(state, adjacent);
   if (span) {
     if (forward) {
       const t = span.endLine + 1;
@@ -200,21 +213,36 @@ function moveAcrossTable(view: EditorView, forward: boolean, extend: boolean): b
     return false; // no layout (tests)
   }
   const overshot = forward
-    ? tableBetween(state, headLine, defLine)
-    : tableBetween(state, defLine, headLine);
+    ? spans.between(state, headLine, defLine)
+    : spans.between(state, defLine, headLine);
   if (!overshot) return false;
 
   const targetLine = forward ? headLine + 1 : headLine - 1;
   return applyHead(view, sameColumnOnLine(state, sel.head, targetLine), extend);
 }
 
-const tableArrowKeymap: Extension = Prec.high(
-  keymap.of([
-    { key: 'ArrowUp', run: (v) => moveAcrossTable(v, false, false) },
-    { key: 'ArrowDown', run: (v) => moveAcrossTable(v, true, false) },
-    { key: 'Shift-ArrowUp', run: (v) => moveAcrossTable(v, false, true) },
-    { key: 'Shift-ArrowDown', run: (v) => moveAcrossTable(v, true, true) },
-  ]),
-);
+/** Up/Down (and their Shift variants) through `moveAcrossBlocks`. */
+export function blockCrossingKeymap(spans: BlockSpans): Extension {
+  return Prec.high(
+    keymap.of([
+      { key: 'ArrowUp', run: (v) => moveAcrossBlocks(v, false, false, spans) },
+      { key: 'ArrowDown', run: (v) => moveAcrossBlocks(v, true, false, spans) },
+      { key: 'Shift-ArrowUp', run: (v) => moveAcrossBlocks(v, false, true, spans) },
+      { key: 'Shift-ArrowDown', run: (v) => moveAcrossBlocks(v, true, true, spans) },
+    ]),
+  );
+}
+
+const gfmSpans: BlockSpans = {
+  any: (state) => (state.field(tableField, false)?.size ?? 0) > 0,
+  spanAtLine: tableSpanAtLine,
+  between: tableBetween,
+};
+
+function moveAcrossTable(view: EditorView, forward: boolean, extend: boolean): boolean {
+  return moveAcrossBlocks(view, forward, extend, gfmSpans);
+}
+
+const tableArrowKeymap: Extension = blockCrossingKeymap(gfmSpans);
 
 export const _testing = { tableSpanAtLine, tableBetween, moveAcrossTable };

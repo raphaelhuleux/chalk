@@ -82,6 +82,7 @@ import { mermaidLoaderFacet, mermaidPlugin, type MermaidLoader } from './md-merm
 import { tikzPlugin } from './tikz-plugin';
 import { tikzRendererFacet, type TikzRenderer } from './tikz-renderer';
 import { tablePlugin } from './table-field';
+import { texTablePlugin } from './tex-table-field';
 import { mdListNewlineKeymap } from './md-list-newline';
 import { mdListIndentKeymap } from './md-list-indent';
 import { assetResolverFacet, type AssetResolver } from './asset-resolver';
@@ -206,6 +207,7 @@ function buildExtensions(
         texFramePlugin(),
         texCalloutPlugin(texListLineCollapsed),
         texListPlugin(),
+        texTablePlugin(),
         texMath,
         texImagePlugin(),
         texTikz,
@@ -218,6 +220,7 @@ function buildExtensions(
         // bottom off.
         texCalloutPlugin(() => false, { conceal: false }),
         texListPlugin({ conceal: false }),
+        texTablePlugin(),
         texMath,
         texImagePlugin(),
         texTikz,

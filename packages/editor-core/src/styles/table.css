@@ -108,3 +108,99 @@
   margin: 2px 3px;
   background-color: var(--divider, #8884);
 }
+
+/* ---- LaTeX tabular widget (tex-table-widget.ts) ----
+   No grid: a tabular draws only the rules its source asks for. */
+
+.cm-tex-table {
+  font-family: inherit;
+  font-size: 1em;
+}
+
+.cm-tex-table td {
+  border: none;
+  padding: 0.2em 0.7em;
+  vertical-align: baseline;
+  min-width: 1.5em;
+}
+
+.cm-tex-table td.cm-tex-cell-multirow {
+  vertical-align: middle;
+}
+
+/* Raw source while a cell is being edited. */
+.cm-tex-table td.cm-tex-cell-editing {
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+.cm-tex-table td:empty::after {
+  content: '\200b';
+}
+
+/* Rules: booktabs heavy for top/bottom, thin for mid/hline/cline. */
+.cm-tex-table {
+  --cm-tex-rule: color-mix(in srgb, var(--vscode-editor-foreground, currentColor) 75%, transparent);
+}
+.cm-tex-table td.cm-tex-rule-top-thin {
+  border-top: 1px solid var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-rule-top-heavy {
+  border-top: 1.6px solid var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-rule-top-double {
+  border-top: 3px double var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-rule-bottom-thin {
+  border-bottom: 1px solid var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-rule-bottom-heavy {
+  border-bottom: 1.6px solid var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-rule-bottom-double {
+  border-bottom: 3px double var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-vrule-left {
+  border-left: 1px solid var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-vrule-left-double {
+  border-left: 3px double var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-vrule-right {
+  border-right: 1px solid var(--cm-tex-rule);
+}
+.cm-tex-table td.cm-tex-vrule-right-double {
+  border-right: 3px double var(--cm-tex-rule);
+}
+
+.cm-tex-cell-sc {
+  font-variant: small-caps;
+}
+
+/* Commands the cell renderer doesn't know, shown as written. */
+.cm-tex-cell-cmd,
+.cm-tex-cell-error {
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.cm-tex-cell-error {
+  color: var(--vscode-errorForeground, #d33);
+}
+
+.cm-tex-cell-ref {
+  color: var(--syntax-link, var(--vscode-textLink-foreground, #4488ff));
+}
+
+/* A `\resizebox{…}{` / `}` sharing the table's first or last line. */
+.cm-tex-table-src {
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 0.8em;
+  opacity: 0.5;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

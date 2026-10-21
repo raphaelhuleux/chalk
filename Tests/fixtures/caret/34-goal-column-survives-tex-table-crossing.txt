@@ -1,0 +1,27 @@
+--- text
+park park park park park one
+\begin{tabular}{ll}
+a & b \\
+1 & 2 \\
+\end{tabular}
+
+park park park park park two
+--- caret
+18
+--- language
+tex
+--- keys
+Down Down
+--- expect
+park park park park park one
+\begin{tabular}{ll}
+a & b \\
+1 & 2 \\
+\end{tabular}
+
+park park park park park two
+--- expect-caret
+100
+--- note
+The tex twin of 33: a rendered tabular is crossed in one press through the same blockCrossingKeymap as the GFM table.
+Start at offset 18 (column 18 of the top line); the first Down lands on the blank line under the table (offset 81), the second must aim back at the goal column (offset 100).

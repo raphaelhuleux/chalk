@@ -93,7 +93,8 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     /// saveAll) would read our own fresh mtime as an external conflict.
     private var saveInFlight = false
     /// One external reload at a time. The file watcher and a focus pass can both fire on one write; a
-    /// second read started before the first lands would push the same text twice.
+    /// second read started before the first lands would push the same text twice. A check that arrives
+    /// mid-read or mid-save sets `reloadPending` and reruns when that one lands.
     private var reloadInFlight = false
     private var reloadPending = false
     private var queuedSaveCompletions: [((Bool) -> Void)?] = []
@@ -229,13 +230,15 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     }
 
     /// Re-read the file if it changed on disk and push it as a minimal diff (keeps the cursor). Called on
-    /// foreground and after cross-window saves. With local edits, keep them rather than clobber.
+    /// foreground, on the file watcher and after cross-window saves. Unsaved local edits are merged with
+    /// the disk change (`TextMerge`); when they clash, the local copy is kept and save()'s conflict copy
+    /// takes over.
     func reloadIfChangedExternally() {
-        // Our own write in flight looks external until its completion records the new (date, size).
         // Mid-open, `syncedModDate` still describes the previous file.
-        guard let doc = document, isLoaded, !saveInFlight else { return }
-        // Re-checked once the read in flight has recorded its (date, size).
-        guard !reloadInFlight else { reloadPending = true; return }
+        guard let doc = document, isLoaded else { return }
+        // Our own write in flight looks external until its completion records the new (date, size), and
+        // a read in flight hasn't recorded its own yet: both re-check once they land.
+        guard !saveInFlight, !reloadInFlight else { reloadPending = true; return }
         // An undownloaded iCloud placeholder has no local bytes; a later foreground pass retries.
         if let values = try? doc.fileURL.resourceValues(
             forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]),
@@ -249,10 +252,11 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         // fresher external write the same date, and missing it means the next save clobbers it.
         guard let synced = syncedModDate,
               onDisk != synced || onDiskState.size != syncedFileSize else { return }
-        guard !buffer.isDirty else {
-            log.notice("\(doc.fileURL.lastPathComponent, privacy: .private) changed on disk with local edits; keeping local copy")
-            return
-        }
+        // The merge inputs, captured here and checked again on landing: an edit typed during the read
+        // means merging again, not dropping the disk change.
+        let base = buffer.savedText
+        let mine = buffer.currentText
+        let hasLocalEdits = buffer.isDirty
         // Coordinated read, so a torn write from another process never becomes the document and the new
         // baseline; the mod date is read inside the same block so `syncedModDate` matches the content.
         // Strict UTF-8 like ChalkDocument: bail rather than adopt a lossy decode.
@@ -278,6 +282,9 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
                 // flushed, so an earlier reader of the same URL (the conflict check) leaves a stale date.
                 coordinatedDate = Self.fileState(of: url).modDate
             }
+            let merged = newText.flatMap { theirs in
+                hasLocalEdits ? TextMerge.threeWay(base: base, mine: mine, theirs: theirs) : theirs
+            }
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.reloadInFlight = false
@@ -287,20 +294,34 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
                         self.reloadIfChangedExternally()
                     }
                 }
-                // The user may have typed (local edits win) or the tab moved to another file meanwhile.
-                guard self.document === doc, !self.buffer.isDirty else { return }
+                guard self.document === doc else { return }
+                guard self.buffer.currentText == mine else {
+                    self.reloadPending = true
+                    return
+                }
                 guard coordError == nil, let text = newText else {
                     log.notice("external reload skipped for \(doc.fileURL.lastPathComponent, privacy: .private) (unreadable or not UTF-8)")
+                    return
+                }
+                guard let merged else {
+                    log.notice("\(doc.fileURL.lastPathComponent, privacy: .private) changed on disk where it has local edits; keeping local copy")
                     return
                 }
                 self.syncedModDate = coordinatedDate ?? onDisk
                 self.syncedFileSize = coordinatedSize ?? onDiskState.size
                 doc.text = text
-                self.buffer.adoptExternal(text)
+                if merged == text {
+                    self.buffer.adoptExternal(text)
+                } else {
+                    self.buffer.rebase(onto: text, pending: merged)
+                }
                 // pushText, not `surface.update`: a web process killed in the background and not yet
                 // re-seeded would drop an `update`.
-                self.pushText(text, language: self.language)
-                log.info("reloaded external change for \(doc.fileURL.lastPathComponent, privacy: .private)")
+                if merged != mine { self.pushText(merged, language: self.language) }
+                if self.buffer.isDirty != hasLocalEdits {
+                    self.delegate?.documentController(self, didChangeDirty: self.buffer.isDirty)
+                }
+                log.info("\(hasLocalEdits ? "merged" : "reloaded") external change for \(doc.fileURL.lastPathComponent, privacy: .private)")
             }
         }
     }
@@ -391,6 +412,11 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
             if ok {
                 self.buffer.confirmFlush(text)
                 self.recordSyncedFileState(of: doc.fileURL)
+                // A disk change seen mid-write waited for this baseline (see reloadIfChangedExternally).
+                if self.reloadPending {
+                    self.reloadPending = false
+                    self.reloadIfChangedExternally()
+                }
                 // Only on a confirmed write of real changes: see `documentControllerDidSave`.
                 self.delegate?.documentControllerDidSave(self)
                 self.delegate?.documentController(self, didChangeDirty: self.buffer.isDirty)

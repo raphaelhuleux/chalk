@@ -139,4 +139,30 @@ describe('buffered cell edits vs external document changes', () => {
 
     expect(view.state.doc.toString()).toContain('| edited | 2');
   });
+
+  /** Focus leaving the widget (a click elsewhere, or the window losing focus). */
+  async function blurTable(): Promise<void> {
+    const wrap = view.dom.querySelector<HTMLElement>('.cm-live-table-wrap')!;
+    wrap.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    await new Promise((r) => setTimeout(r, 50)); // past the rAF-deferred flush
+  }
+
+  it('(e) blur without an edit leaves a compact table byte-identical', async () => {
+    // AI agents write tables unpadded; the padded serialization never equals
+    // them, so a no-edit blur used to rewrite the table as a phantom edit.
+    const compact = '| a | b |\n|---|---|\n| long cell | 2 |';
+    let edits = 0;
+    view = parsed(createEditor(parent, `before\n\n${compact}\n\nafter`, { onContentChange: () => { edits++; } }, 'md'));
+    await blurTable();
+    expect(view.state.doc.toString()).toBe(`before\n\n${compact}\n\nafter`);
+    expect(edits).toBe(0);
+  });
+
+  it('(f) blur after a cell edit still flushes it', async () => {
+    const compact = '| a | b |\n|---|---|\n| 1 | 2 |';
+    view = parsed(createEditor(parent, `before\n\n${compact}\n\nafter`, { onContentChange: () => {} }, 'md'));
+    view.dom.querySelector<HTMLElement>('tbody td')!.textContent = 'edited';
+    await blurTable();
+    expect(view.state.doc.toString()).toContain('| edited | 2');
+  });
 });

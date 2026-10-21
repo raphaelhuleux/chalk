@@ -79,6 +79,11 @@ final class PDFPanelViewController: NSViewController {
     #if DEBUG
     var statusTextForTesting: String { statusLabel.stringValue }
     var issueCountForTesting: Int { issues.count }
+    /// The very top of the document. `goToFirstPage` stops short of the title in a fresh slot.
+    func scrollToTopForTesting() {
+        guard let doc = pdfView.documentView else { return }
+        doc.scrollToVisible(NSRect(x: 0, y: doc.isFlipped ? 0 : doc.bounds.maxY - 1, width: 1, height: 1))
+    }
     #endif
 
     override func loadView() {

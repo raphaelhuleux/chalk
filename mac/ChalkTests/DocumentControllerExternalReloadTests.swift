@@ -3,8 +3,8 @@ import ChalkKit
 @testable import Chalk
 
 /// Covers `reloadIfChangedExternally`'s decision branches around the
-/// NSFileCoordinator-based read: adopt a clean external change, keep local
-/// edits on a conflict, and refuse to adopt bytes that aren't valid UTF-8
+/// NSFileCoordinator-based read: adopt a clean external change, merge one into
+/// local edits, keep local edits on a clash, and refuse to adopt bytes that aren't valid UTF-8
 /// (a lossy decode would become the new baseline and get written back).
 final class DocumentControllerExternalReloadTests: XCTestCase {
     private var surface: FakeEditorSurface!
@@ -79,6 +79,30 @@ final class DocumentControllerExternalReloadTests: XCTestCase {
         XCTAssertTrue(controller.isDirty, "the conflicting local edit must survive")
         XCTAssertFalse(surface.updateTexts.contains("# External\n"),
                        "the external text must not be pushed over local edits")
+    }
+
+    /// An agent writes the file while the tab holds an unsaved edit elsewhere: both land, the tab stays
+    /// dirty, and the save that follows is not a conflict.
+    func testMergesDisjointExternalChangeIntoLocalEdits() throws {
+        let url = try writeTempFile(name: "m.md", contents: "a\nb\nc\nd\ne\n")
+        openAndWait(url)
+        controller.editor(surface, didEdit: "A\nb\nc\nd\ne\n")
+
+        try overwrite(url, contents: "a\nb\nc\nd\ne\nagent line\n")
+        controller.reloadIfChangedExternally()
+        waitForDisplayedText("A\nb\nc\nd\ne\nagent line\n")
+        XCTAssertTrue(controller.isDirty, "the merged local edit is still unsaved")
+
+        let spy = ConflictSpy()
+        controller.delegate = spy
+        let saved = expectation(description: "save")
+        controller.save { ok in
+            XCTAssertTrue(ok)
+            saved.fulfill()
+        }
+        wait(for: [saved], timeout: 5)
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "A\nb\nc\nd\ne\nagent line\n")
+        XCTAssertTrue(spy.conflictURLs.isEmpty, "a merged change is not a save conflict")
     }
 
     func testSkipsExternalChangeThatIsNotUTF8() throws {
@@ -158,5 +182,18 @@ final class DocumentControllerExternalReloadTests: XCTestCase {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { done.fulfill() }
         }
         wait(for: [done], timeout: 5)
+    }
+}
+
+private final class ConflictSpy: DocumentControllerDelegate {
+    var conflictURLs: [URL] = []
+    func documentController(_ controller: DocumentController, didChangeDirty isDirty: Bool) {}
+    func documentController(_ controller: DocumentController,
+                            needsSaveDestination completion: @escaping (Bool) -> Void) {
+        completion(false)
+    }
+    func documentController(_ controller: DocumentController,
+                            hasSaveConflictAt url: URL, backupAt backupURL: URL?) {
+        conflictURLs.append(url)
     }
 }

@@ -509,7 +509,7 @@ final class EditorContainerViewController: NSViewController {
     }
 
     /// A DocumentController (possibly in another window) saved `url`. Reuses the external-change
-    /// path, which reloads only a clean buffer. The posting controller is already current.
+    /// path, which never overwrites local edits. The posting controller is already current.
     @objc private func documentDidSaveElsewhere(_ note: Notification) {
         guard let url = note.userInfo?[ChalkNotificationKey.url] as? URL else { return }
         let sender = note.object as? DocumentController

@@ -64,11 +64,15 @@ quit_app() {
 }
 
 # shot NAME FILE [ENV=VALUE ...] -- [launch arguments]
+# SETTLE=<seconds> among the ENV pairs stays with the script: a longer wait before the capture.
 shot() {
   local name="$1" file="$2"; shift 2
   [[ "$ONLY" == "  " || "$ONLY" == *" $name "* ]] || return 0
-  local envs=(--env CHALK_AUDIT_STATE=promo-file --env "CHALK_AUDIT_FILE=$file")
-  while [[ $# -gt 0 && "$1" != -- ]]; do envs+=(--env "$1"); shift; done
+  local envs=(--env CHALK_AUDIT_STATE=promo-file --env "CHALK_AUDIT_FILE=$file") settle=4
+  while [[ $# -gt 0 && "$1" != -- ]]; do
+    if [[ "$1" == SETTLE=* ]]; then settle="${1#SETTLE=}"; else envs+=(--env "$1"); fi
+    shift
+  done
   [[ "${1:-}" == -- ]] && shift
   local pid="" win="" attempt
   # Two attempts: a launch issued while the previous instance is still quitting
@@ -89,7 +93,7 @@ shot() {
   done
   [[ -n "$win" ]] || die "$name: the app never showed a window"
   osascript -e "tell application id \"$BUNDLE_ID\" to activate" >/dev/null 2>&1 || true
-  sleep 4 # web view boot, KaTeX, the outline panel's delayed open
+  sleep "$settle" # web view boot, KaTeX, the outline panel's delayed open
   # The window may have resized since it first appeared; look it up again.
   local again
   again="$("$WINID" "$pid" 2>/dev/null | cut -d' ' -f1 || true)"
@@ -107,3 +111,12 @@ shot mac-tex    "$SHOW/least-squares.tex" CHALK_AUDIT_OUTLINE=1 CHALK_AUDIT_SIZE
 shot mac-beamer "$SHOW/slides.tex"        CHALK_AUDIT_SIZE=1100x900
 shot mac-mermaid "$SHOW/instruments.md"   CHALK_AUDIT_SIZE=1100x820 CHALK_AUDIT_LINE=2
 shot mac-light  "$SHOW/least-squares.tex" CHALK_AUDIT_OUTLINE=1 CHALK_AUDIT_SIZE=1280x900 CHALK_AUDIT_LINE=3 -- -chalk.themePreference 1
+# Compiles paper.tex, the root that \input's the chapter. On a copy, so the build files stay out of
+# the repo; nested two folders deep because the root search walks up two levels from a loose file.
+if [[ "$ONLY" == "  " || "$ONLY" == *" mac-pdf "* ]]; then
+  mkdir -p "$TMP/pdf"
+  cp -R "$SHOW" "$TMP/pdf/showcase"
+  # Without latexmk Chalk runs pdflatex once; a first pass here leaves the .aux that resolves \ref.
+  (cd "$TMP/pdf/showcase" && pdflatex -interaction=nonstopmode paper.tex >/dev/null 2>&1 || true)
+fi
+shot mac-pdf    "$TMP/pdf/showcase/least-squares.tex" CHALK_AUDIT_PDF=1 CHALK_AUDIT_SIZE=1600x900 CHALK_AUDIT_LINE=3 SETTLE=12

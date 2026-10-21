@@ -160,6 +160,10 @@ export class TableWidget extends WidgetType {
     const range = this.tableRange(view, table);
     if (!range) return;
     const serialized = serializeTable(this.readModel(table));
+    // Unedited cells must not rewrite the source: a compact table never equals
+    // the padded form, and focus leaves on every window switch (see
+    // docs/issues/2026-10-19-table-blur-shadows-agent-writes.md).
+    if (serialized === this.source) return;
     if (serialized === view.state.doc.sliceString(range.from, range.to)) return;
     view.dispatch({
       changes: { from: range.from, to: range.to, insert: serialized },

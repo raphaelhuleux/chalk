@@ -301,7 +301,7 @@ extension RootSplitViewController {
                     cmdToggleOutline()
                 }
             // README screenshots (scripts/screenshots/capture-mac.sh): one file, plus an optional
-            // Library folder, outline panel and window size, all from the environment.
+            // Library folder, outline panel, compiled PDF and window size, all from the environment.
             case "promo-file":
                 let env = ProcessInfo.processInfo.environment
                 guard let path = env["CHALK_AUDIT_FILE"] else { break }
@@ -321,6 +321,15 @@ extension RootSplitViewController {
                 if env["CHALK_AUDIT_OUTLINE"] != nil {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
                         cmdToggleOutlinePanel()
+                    }
+                }
+                if env["CHALK_AUDIT_PDF"] != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+                        cmdCompile()
+                    }
+                    // The panel's slide-in and the PDF's reloads leave it scrolled anywhere.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [self] in
+                        editor.pdfPanel.scrollToTopForTesting()
                     }
                 }
             case "sidebar-deep":

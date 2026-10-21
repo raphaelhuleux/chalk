@@ -4,7 +4,7 @@ import ChalkKit
 
 /// Multi-window sync contracts: Library mutations broadcast so every window's
 /// sidebar reloads, and a save broadcasts so other windows with the same file
-/// open adopt the new contents (clean buffers only — dirty local edits win).
+/// open adopt the new contents (dirty buffers merge it, and keep their edits on a clash).
 final class CrossWindowSyncTests: XCTestCase {
     // MARK: - LocationStore broadcasts
 

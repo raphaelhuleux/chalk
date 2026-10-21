@@ -50,6 +50,21 @@ vertical-motion code; the jsdom twin for the logic level is
   as one transaction on blur/Escape/structural op. The table range is an
   `atomicRange`. v1 renders cell content as plain text — don't add rich
   in-cell rendering without weighing the selection-mapping cost.
+- **LaTeX tabulars** (tabular, tabular*, tabularx, tabulary, longtable, tblr)
+  render through their own widget
+  ([tex-table-field.ts](src/editor/tex-table-field.ts) +
+  [tex-table-widget.ts](src/editor/tex-table-widget.ts), pure model in
+  [tex-table-model.ts](src/editor/tex-table-model.ts)). Two deliberate
+  differences from GFM: the model keeps a document range for every cell, rule
+  and spec column, and every edit is a change to those ranges, never a
+  re-serialization (a tex user's spacing, comments and wrappers are theirs);
+  and a cell shows rendered tex ([tex-cell-render.ts](src/editor/tex-cell-render.ts))
+  until focused, then its raw source as plain text, which sidesteps selection
+  mapping. A flush writes a cell only if its live source still equals what
+  the DOM was built from. A table the parser can't read exactly (unbalanced
+  braces, stray `\end`) stays source, as does one inside math. The replace
+  covers whole lines, so text sharing the `\begin`/`\end` lines (a
+  `\resizebox{…}{`'s `}`) shows as a dim strip in the widget.
 - **Markdown live-preview scope**: headings, bold, italic, link, code,
   strikethrough, `==highlight==`, blockquote, math, GFM tables, and
   theorem-family callouts. Don't expand to footnotes/MDX without a concrete need.

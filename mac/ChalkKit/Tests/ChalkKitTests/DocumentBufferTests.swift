@@ -26,6 +26,16 @@ final class DocumentBufferTests: XCTestCase {
         XCTAssertNil(b.textToFlush())
     }
 
+    func testRebaseKeepsMergedEditPending() {
+        let b = DocumentBuffer(initial: "a\nb\n")
+        b.recordEdit("A\nb\n")
+        b.rebase(onto: "a\nb\nc\n", pending: "A\nb\nc\n")
+        XCTAssertEqual(b.savedText, "a\nb\nc\n")
+        XCTAssertEqual(b.textToFlush(), "A\nb\nc\n")
+        b.rebase(onto: "x\n", pending: "x\n")
+        XCTAssertFalse(b.isDirty, "a merge equal to disk is clean")
+    }
+
     func testConfirmFlushClearsPending() {
         let b = DocumentBuffer(initial: "a")
         b.recordEdit("b")

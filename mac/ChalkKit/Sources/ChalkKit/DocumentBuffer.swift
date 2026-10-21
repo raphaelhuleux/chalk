@@ -56,4 +56,12 @@ public final class DocumentBuffer {
         pendingText = nil
         isDirty = false
     }
+
+    /// Adopt an external change as the saved baseline while keeping local edits,
+    /// already merged into `pending` (`TextMerge.threeWay`).
+    public func rebase(onto text: String, pending: String) {
+        savedText = text
+        pendingText = pending
+        isDirty = Self.differ(pending, text)
+    }
 }

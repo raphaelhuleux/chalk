@@ -24,11 +24,14 @@ It comes as a native Mac app and as a VS Code extension, built on one editor eng
 **Mac app**
 
 - Tabs, a folder sidebar, an outline panel with a word count, and a split view for two files side by side (Cmd+\\).
-- Cmd+R compiles and shows the PDF beside the text. SyncTeX works both ways: Cmd-click in the PDF to jump to the source, Option+Cmd+J to jump to the PDF.
+- Cmd+R compiles and shows the PDF beside the text.
+- The PDF and the source are linked (SyncTeX): Cmd-click a spot in the PDF to jump to its line in the source, and press Option+Cmd+J to find the caret's line in the PDF.
 - Multi-file projects: saving a chapter compiles the root file, found from `% !TEX root`, the `\input`/`\include` graph or the last build.
 - LaTeX builds with latexmk when installed, otherwise pdflatex, xelatex or lualatex with bibtex or biber, or tectonic. Markdown and Quarto build with Quarto or pandoc.
 - Compile errors are listed under the PDF; a click jumps to the line.
 - TikZ pictures (`tikzpicture` and `tikzcd` in LaTeX, ```` ```tikz ```` fences in Markdown and Quarto) render under their source, typeset by your own TeX installation with your preamble.
+
+![A LaTeX chapter in the editor, with its compiled PDF in the panel beside it](docs/images/mac-pdf.png)
 
 **VS Code extension**
 
