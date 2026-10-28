@@ -451,6 +451,10 @@ final class RootSplitViewController: NSViewController {
         }
         headerBar.setLibraryHole(measured.libraryColumn.map { libraryHole(upTo: $0) })
         headerBar.setOutlineHole(outlineHole())
+        if editor.isViewLoaded {
+            let chipsEnd = editor.view.convert(NSPoint(x: headerBar.stripMinimumExtent, y: 0), from: headerBar)
+            editor.setSlotLeadingLimit(chipsEnd.x)
+        }
         editor.setChromeTopInset(Double(layout.editorChromeTopInset))
     }
 

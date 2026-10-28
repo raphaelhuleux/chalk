@@ -31,8 +31,8 @@ final class PDFPanelSlotTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeRoot(_ content: WindowContent = .openWelcome) -> RootSplitViewController {
-        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1400, height: 820))
+    private func makeRoot(_ content: WindowContent = .openWelcome, width: CGFloat = 1400) -> RootSplitViewController {
+        let window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: width, height: 820))
         let root = RootSplitViewController(initialContent: content)
         root.motionPolicyForTesting = .instant
         window.rootViewController = root
@@ -111,6 +111,33 @@ final class PDFPanelSlotTests: XCTestCase {
         outlastAdmitWindow()
         root.cmdTogglePDFPanel()
         XCTAssertEqual(root.trailingPanelStateForTesting, .shown, "taking the PDF down uncovers the outline")
+    }
+
+    /// A PDF width remembered from a wider window fits this column past the band's chips, and the
+    /// window keeps its size (docs/issues/2026-10-28-wide-pdf-slot-loops-layout.md). A wider
+    /// window gives the remembered width back.
+    func testAPDFWiderThanTheColumnFitsItAndTheWindowKeepsItsSize() throws {
+        Preferences.pdfPanelWidth = 983
+        let root = makeRoot(width: 1100)
+        let window = try XCTUnwrap(root.view.window)
+        root.setSidebarVisible(true)
+        root.view.layoutSubtreeIfNeeded()
+        let editor = root.editorForTesting
+        let column = editor.view.bounds.width
+        XCTAssertLessThan(column, 983, "the case needs a column narrower than the PDF")
+
+        root.cmdTogglePDFPanel()
+        outlastAdmitWindow()
+        root.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(window.frame.width, 1100, "the band grew the window")
+        let panel = try XCTUnwrap(editor.outlinePanelFrame)
+        XCTAssertGreaterThan(panel.minX, 0, "the slot overhangs the Library")
+        XCTAssertEqual(panel.maxX, column, accuracy: 0.5)
+        XCTAssertEqual(Preferences.pdfPanelWidth, 983, "fitting is not a resize")
+
+        window.setFrame(CGRect(x: 0, y: 0, width: 1800, height: 820), display: false)
+        root.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(editor.outlinePanelWidthForTesting, 983, accuracy: 0.5)
     }
 
     func testAPDFSlotDoesNotRestoreAsTheOutline() {

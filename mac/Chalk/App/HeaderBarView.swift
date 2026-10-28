@@ -67,6 +67,10 @@ final class HeaderBarView: ThemedView {
             equalTo: leadingAnchor, constant: ChalkMetrics.tabStripLeading)
         stripTrailing = tabStrip.trailingAnchor.constraint(
             lessThanOrEqualTo: trailingAnchor, constant: -ChalkMetrics.headerPadding)
+        // Below the window's own size: when the outline hole leaves the strip less than its fixed
+        // tail, the strip overlaps the hole instead of growing the window, which moved the hole
+        // and looped layout until AppKit aborted (docs/issues/2026-10-28-wide-pdf-slot-loops-layout.md).
+        stripTrailing.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue - 1)
 
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -157,6 +161,12 @@ final class HeaderBarView: ThemedView {
         let inset = rect.map { max(0, bounds.maxX - $0.minX) } ?? 0
         stripTrailing.constant = -(ChalkMetrics.headerPadding + inset)
         applyHoles()
+    }
+
+    /// Where the chips' narrowest strip ends, with the band's trailing padding, in this view: an
+    /// outline hole that starts before this overlaps the strip.
+    var stripMinimumExtent: CGFloat {
+        stripLeading.constant + HeaderTabStrip.minimumWidth + ChalkMetrics.headerPadding
     }
 
     override func layout() {

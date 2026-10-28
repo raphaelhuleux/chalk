@@ -105,6 +105,9 @@ final class HeaderTabStrip: ThemedView {
     /// reserved, mirroring the constraint chain.
     private static let reservedTail: CGFloat = ChalkMetrics.tabGap + newTabSize + overflowGap
 
+    /// The narrowest the row gets: the names scrolled out, the tail left.
+    static var minimumWidth: CGFloat { reservedTail }
+
     /// The row's names, in row order.
     private var names: [HeaderTabName] {
         stack.arrangedSubviews.compactMap { $0 as? HeaderTabName }

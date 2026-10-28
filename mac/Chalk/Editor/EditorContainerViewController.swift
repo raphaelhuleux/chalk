@@ -76,7 +76,14 @@ final class EditorContainerViewController: NSViewController {
     /// The panel's frame in this container's view, nil while hidden.
     var outlinePanelFrame: CGRect? { isOutlinePanelVisible ? outlinePanel.view.frame : nil }
     private(set) var outlinePanelIsOverlay = false
+    /// The shown width: `preferredSlotWidth` fitted to the column (`fitSlotWidth`).
     private var outlinePanelWidth: NSLayoutConstraint?
+    /// The width the slot asks for (a drag, the content's preference), kept while a narrow column
+    /// shows less of it, so a wider window gives it back.
+    private var preferredSlotWidth = Preferences.outlinePanelWidth
+    /// The x, in this view, the slot must not start before: past it the band's chips lose their
+    /// narrowest strip. Set by the host (`setSlotLeadingLimit`).
+    private var slotLeadingLimit: CGFloat = 0
     /// The panel's trailing pin: 0 when shown, +width when parked off-screen.
     private var outlinePanelTrailing: NSLayoutConstraint?
     private var contentTrailingToEdge: NSLayoutConstraint?
@@ -490,11 +497,15 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
+    private var slotWidthRange: ClosedRange<CGFloat> {
+        trailingPanelContent == .pdf ? Preferences.pdfPanelWidthRange : Preferences.sidebarWidthRange
+    }
+
     func setOutlinePanelWidth(_ proposed: CGFloat, persist: Bool) {
-        let range = trailingPanelContent == .pdf ? Preferences.pdfPanelWidthRange : Preferences.sidebarWidthRange
+        let range = slotWidthRange
         let clamped = min(range.upperBound, max(range.lowerBound, proposed))
-        outlinePanelWidth?.constant = clamped
-        if !isOutlinePanelVisible { outlinePanelTrailing?.constant = clamped }
+        preferredSlotWidth = clamped
+        fitSlotWidth()
         updateOutlinePanelMode()
         if persist {
             switch trailingPanelContent {
@@ -506,6 +517,30 @@ final class EditorContainerViewController: NSViewController {
             view.layoutSubtreeIfNeeded()
             onOutlinePanelLayoutChanged?()
         }
+    }
+
+    /// Show `preferredSlotWidth`, or as much of it as the column has past `slotLeadingLimit`.
+    /// Wider, the slot overhangs the Library and leaves the band's chips no room. Never below the
+    /// content's minimum, which an early layout pass's column and a tiny window both undercut: the
+    /// panel's own chrome needs it, and the band survives the overhang (`HeaderBarView.stripTrailing`).
+    private func fitSlotWidth() {
+        guard let widthPin = outlinePanelWidth else { return }
+        let room = view.bounds.width - slotLeadingLimit
+        let fitted = max(slotWidthRange.lowerBound, min(preferredSlotWidth, room))
+        guard abs(widthPin.constant - fitted) > 0.5 else { return }
+        widthPin.constant = fitted
+        if !isOutlinePanelVisible { outlinePanelTrailing?.constant = fitted }
+    }
+
+    /// The host's limit for the slot's leading edge, in this view (`HeaderBarView.stripMinimumExtent`).
+    func setSlotLeadingLimit(_ x: CGFloat) {
+        guard abs(x - slotLeadingLimit) > 0.5 else { return }
+        slotLeadingLimit = x
+        // Mid-slide a pushed column is pinned to the slot at a frozen width: resizing the slot
+        // would jump it sideways. `unfreezeContentWidth` refits.
+        guard frozenContentWidth == nil else { return }
+        fitSlotWidth()
+        updateOutlinePanelMode()
     }
 
     /// A DocumentController (possibly in another window) saved `url`. Reuses the external-change
@@ -549,7 +584,9 @@ final class EditorContainerViewController: NSViewController {
         contentView.layer?.chalkEndSlide()
         contentLeading?.isActive = true
         view.layoutSubtreeIfNeeded()
-        // The slide may have crossed the push/overlay threshold while frozen.
+        // The slide may have narrowed the column past the slot and crossed the push/overlay
+        // threshold while frozen.
+        fitSlotWidth()
         updateOutlinePanelMode()
     }
 
@@ -598,6 +635,7 @@ final class EditorContainerViewController: NSViewController {
         if line != lastTracedLayout { lastTracedLayout = line; DebugTrace.log(line) }
         #endif
         syncActiveSurfaceAppearance()
+        if frozenContentWidth == nil { fitSlotWidth() }
         updateOutlinePanelMode()
         let panelFrame = outlinePanelFrame
         if panelFrame != lastAnnouncedOutlinePanelFrame {
