@@ -47,7 +47,7 @@ extension ShortcutCategory {
         ShortcutCategory(id: "environments", title: "Environments", symbol: "curlybraces",
                          sections: ["Environments", "LaTeX environments (no math context required)"]),
         ShortcutCategory(id: "delimiters", title: "Delimiters", symbol: "parentheses",
-                         sections: ["Brackets", "Math mode"]),
+                         sections: ["Brackets"]),
     ]
 
     /// The rail: `yours`, curated groups that have snippets, then a row per

@@ -16,27 +16,6 @@ endglobal
 
 
 ##############################################################################
-# Math mode
-##############################################################################
-context math(context)
-snippet ;; "Superscript" iA
-^{$0}
-endsnippet
-
-snippet ;$ "Display math `$$ … $$`" iA
-$$
-$0
-$$
-endsnippet
-
-snippet dm "Display math" A
-\begin{align}
-$0
-\end{align}
-endsnippet
-
-
-##############################################################################
 # Operations
 ##############################################################################
 context math(context)
@@ -70,8 +49,13 @@ snippet `([ ]*)sp` "superscript" Ai
 endsnippet
 
 context math(context)
-snippet _ "subscript" Ai
+snippet __ "subscript" Ai
 _{$1}$0
+endsnippet
+
+context math(context)
+snippet ^^ "superscript (braces)" Ai
+^{$1}$0
 endsnippet
 
 context math(context)
@@ -85,13 +69,13 @@ snippet sq "square root" Ai
 endsnippet
 
 context math(context)
-snippet ee "exp (superscript)" Ai
+snippet ee "exp (superscript)" Aw
 e^{ $1 }$0
 endsnippet
 
 context math(context)
-snippet `([^no])rm` "roman" Ai
-``rv = m[1]``\mathrm{$1}$0
+snippet rm "roman" Ai
+\mathrm{$1}$0
 endsnippet
 
 context math(context)
@@ -105,22 +89,32 @@ snippet `([ ]*)conj` "conjugate" Ai
 endsnippet
 
 context math(context)
+snippet `(?<![a-zA-Z\\])(arcsin|arccos|arctan|sin|cos|tan|cot|sec|csc|log|ln|exp|det|max|min|sup|inf)` "function name" A
+\\``rv = m[1]``
+endsnippet
+
+context math(context)
+snippet argmax "arg max" Ai
+\arg\max
+endsnippet
+
+context math(context)
+snippet argmin "arg min" Ai
+\arg\min
+endsnippet
+
+context math(context)
 snippet Tr "trace" Ai
-\Tr
+\operatorname{Tr}
 endsnippet
 
 context math(context)
-snippet det "determinant" Ai
-\det
-endsnippet
-
-context math(context)
-snippet re "real part" A
+snippet Re "real part" Aw
 \Re
 endsnippet
 
 context math(context)
-snippet im "imaginary part" A
+snippet Im "imaginary part" Aw
 \Im
 endsnippet
 
@@ -174,6 +168,8 @@ snippet `([a-zA-Z])hat` "add hat" Ai
 \hat{``rv = m[1]``}
 endsnippet
 
+# above `ddot`, which would otherwise take the letter-less match first.
+priority 1
 context math(context)
 snippet `([a-zA-Z])ddot` "add ddot" A
 \ddot{``rv = m[1]``}
@@ -192,6 +188,13 @@ endsnippet
 context math(context)
 snippet `([a-zA-Z])tilde` "add tilde" Ai
 \tilde{``rv = m[1]``}
+endsnippet
+
+# A Greek letter from a snippet: `;a` then `hat`.
+priority 1
+context math(context)
+snippet `\\(alpha|beta|gamma|Gamma|delta|Delta|epsilon|varepsilon|zeta|eta|theta|vartheta|Theta|iota|kappa|lambda|Lambda|mu|nu|xi|Xi|pi|varpi|Pi|rho|varrho|sigma|varsigma|Sigma|tau|upsilon|Upsilon|phi|varphi|Phi|chi|psi|Psi|omega|Omega)(hat|bar|ddot|dot|vec|tilde)` "accent on a Greek letter" A
+\\``rv = m[2]``{\\``rv = m[1]``}
 endsnippet
 
 context math(context)
@@ -215,10 +218,12 @@ snippet Hat "wide hat" Ai
 endsnippet
 
 context math(context)
-snippet `\\dot` "dot" Ai
+snippet dot "dot" Ai
 \dot{$1}$0
 endsnippet
 
+# above `dot`, which would otherwise match the "dot" suffix first.
+priority 1
 context math(context)
 snippet ddot "ddot" Ai
 \ddot{$1}$0
@@ -240,13 +245,35 @@ snippet Tilde "wide tilde" Ai
 endsnippet
 
 context math(context)
+snippet ubr "underbrace" Ai
+\underbrace{$1}_{$2}$0
+endsnippet
+
+context math(context)
+snippet obr "overbrace" Ai
+\overbrace{$1}^{$2}$0
+endsnippet
+
+context math(context)
 snippet und "underline" Ai
 \underline{$1}$0
 endsnippet
 
+# above `rm`, which would otherwise match the "rm" suffix first.
+priority 1
 context math(context)
 snippet norm "norm" Ai
 \lVert $1 \rVert$0
+endsnippet
+
+context math(context)
+snippet ceil "ceiling" Ai
+\lceil $1 \rceil$0
+endsnippet
+
+context math(context)
+snippet floor "floor" Ai
+\lfloor $1 \rfloor$0
 endsnippet
 
 context math(context)
@@ -255,7 +282,7 @@ snippet abs "absolute value" Ai
 endsnippet
 
 context math(context)
-snippet set "set" Ai
+snippet set "set" Aw
 \set{ $1 }$0
 endsnippet
 
@@ -314,13 +341,18 @@ snippet ;z "ζ" Ai
 endsnippet
 
 context math(context)
-snippet eta "η" Ai
+snippet ;h "η" Ai
 \eta
 endsnippet
 
 context math(context)
-snippet ;t "θ" Ai
+snippet ;th "θ" Ai
 \theta
+endsnippet
+
+context math(context)
+snippet ;ta "τ" Ai
+\tau
 endsnippet
 
 context math(context)
@@ -359,32 +391,32 @@ snippet ;m "μ" Ai
 endsnippet
 
 context math(context)
-snippet nu "ν" Ai
+snippet ;n "ν" Ai
 \nu
 endsnippet
 
 context math(context)
-snippet xi "ξ" Ai
+snippet ;x "ξ" Ai
 \xi
 endsnippet
 
 context math(context)
-snippet Xi "Ξ" Ai
+snippet ;X "Ξ" Ai
 \Xi
 endsnippet
 
 context math(context)
-snippet pi "π" Ai
+snippet ;p "π" Ai
 \pi
 endsnippet
 
 context math(context)
-snippet Pi "Π" Ai
+snippet ;P "Π" Ai
 \Pi
 endsnippet
 
 context math(context)
-snippet rho "ρ" Ai
+snippet ;r "ρ" Ai
 \rho
 endsnippet
 
@@ -409,11 +441,6 @@ snippet ;vs "variant of σ" Ai
 endsnippet
 
 context math(context)
-snippet tau "τ" Ai
-\tau
-endsnippet
-
-context math(context)
 snippet ;u "υ" Ai
 \upsilon
 endsnippet
@@ -424,7 +451,7 @@ snippet ;U "Υ" Ai
 endsnippet
 
 context math(context)
-snippet phi "φ" Ai
+snippet ;f "φ" Ai
 \phi
 endsnippet
 
@@ -434,22 +461,22 @@ snippet ;vp "variant of φ" Ai
 endsnippet
 
 context math(context)
-snippet Phi "Φ" Ai
+snippet ;F "Φ" Ai
 \Phi
 endsnippet
 
 context math(context)
-snippet chi "χ" Ai
+snippet ;c "χ" Ai
 \chi
 endsnippet
 
 context math(context)
-snippet psi "ψ" Ai
+snippet ;q "ψ" Ai
 \psi
 endsnippet
 
 context math(context)
-snippet Psi "Ψ" Ai
+snippet ;Q "Ψ" Ai
 \Psi
 endsnippet
 
@@ -537,28 +564,33 @@ snippet d.. "ddots" Ai
 \ddots
 endsnippet
 
+# Above `->` and `=>`, which would otherwise match the tail first.
+priority 1
 context math(context)
-snippet <-> "left rigth arrow" A
+snippet <-> "left rigth arrow" Ai
 \leftrightarrow
 endsnippet
 
+priority 1
 context math(context)
-snippet <--> "long left rigth arrow" A
+snippet <--> "long left rigth arrow" Ai
 \longleftrightarrow
 endsnippet
 
+priority 1
 context math(context)
-snippet <=> "Left rigth arrow" A
+snippet <=> "Left rigth arrow" Ai
 \Leftrightarrow
 endsnippet
 
+priority 1
 context math(context)
-snippet <==> "Long left rigth arrow" A
+snippet <==> "Long left rigth arrow" Ai
 \Longleftrightarrow
 endsnippet
 
 context math(context)
-snippet -> "to" A
+snippet -> "to" Ai
 \to
 endsnippet
 
@@ -568,7 +600,7 @@ snippet `<-([^->])` "get" A
 endsnippet
 
 context math(context)
-snippet |> "mapsto" A
+snippet |> "mapsto" Ai
 \mapsto
 endsnippet
 
@@ -583,7 +615,7 @@ snippet || "middle" A
 endsnippet
 
 context math(context)
-snippet wed "wedge symbol" A
+snippet wed "wedge symbol" Aw
 \wedge
 endsnippet
 
@@ -593,7 +625,7 @@ snippet Wed "wedge operator" Ai
 endsnippet
 
 context math(context)
-snippet vel "descending wedge symbol" A
+snippet vel "descending wedge symbol" Aw
 \vee
 endsnippet
 
@@ -603,7 +635,7 @@ snippet Vel "descending wedge operator" Ai
 endsnippet
 
 context math(context)
-snippet cap "cap" A
+snippet cap "cap" Aw
 \cap
 endsnippet
 
@@ -613,7 +645,7 @@ snippet Cap "Big cap" Ai
 endsnippet
 
 context math(context)
-snippet cup "cup" A
+snippet cup "cup" Aw
 \cup
 endsnippet
 
@@ -623,34 +655,47 @@ snippet Cup "Big cup" Ai
 endsnippet
 
 context math(context)
-snippet inn "set in" A
+snippet inn "set in" Aw
 \in
 endsnippet
 
-# above `set`, which would otherwise match the "set" suffix first.
-priority 1
 context math(context)
-snippet subset "subset" A
+snippet subset "subset" Aw
 \subset
 endsnippet
 
 context math(context)
-snippet subseteq "subseteq" A
+snippet subseteq "subseteq" Aw
 \subseteq
 endsnippet
 
 context math(context)
-snippet => "implies" A
+snippet notin "not in" Ai
+\notin
+endsnippet
+
+context math(context)
+snippet +- "plus or minus" Ai
+\pm
+endsnippet
+
+context math(context)
+snippet -+ "minus or plus" Ai
+\mp
+endsnippet
+
+context math(context)
+snippet => "implies" Ai
 \implies
 endsnippet
 
 context math(context)
-snippet =< "impliedby" A
+snippet =< "impliedby" Ai
 \impliedby
 endsnippet
 
 context math(context)
-snippet iff "if and only if" A
+snippet iff "if and only if" Aw
 \iff
 endsnippet
 
@@ -665,22 +710,29 @@ snippet forall "for all" Ai
 endsnippet
 
 context math(context)
-snippet s.t. "such that or subjected to" A
+snippet s.t. "such that or subjected to" Aw
 \text{s.t.}
 endsnippet
 
 context math(context)
-snippet === "equiv" A
+snippet eqv "equiv" Ai
 \equiv
 endsnippet
 
+# Next row of an `align`. The lookbehind keeps `<==>` reachable.
 context math(context)
-snippet := "colon eq" A
+snippet `(?<!<)==` "aligned equals, next row" A
+&= $1 \\\\
+$0
+endsnippet
+
+context math(context)
+snippet := "colon eq" Ai
 \coloneq
 endsnippet
 
 context math(context)
-snippet =: "eq colon" A
+snippet =: "eq colon" Ai
 \eqcolon
 endsnippet
 
@@ -690,7 +742,7 @@ snippet Sq "square" Ai
 endsnippet
 
 context math(context)
-snippet != "not eq" A
+snippet != "not eq" Ai
 \neq
 endsnippet
 
@@ -705,32 +757,32 @@ snippet `<=([^=])` "less than or equal to" A
 endsnippet
 
 context math(context)
-snippet >> "much greater than" A
+snippet >> "much greater than" Ai
 \gg
 endsnippet
 
 context math(context)
-snippet << "much less than" A
+snippet << "much less than" Ai
 \ll
 endsnippet
 
 context math(context)
-snippet ~~ "similar" A
+snippet ~~ "similar" Ai
 \sim
 endsnippet
 
 context math(context)
-snippet ~= "similar" A
+snippet ~= "similar" Ai
 \simeq
 endsnippet
 
 context math(context)
-snippet \sim~ "approx" A
+snippet \sim~ "approx" Ai
 \approx
 endsnippet
 
 context math(context)
-snippet prop "propotional to" A
+snippet prop "propotional to" Aw
 \propto
 endsnippet
 
@@ -740,32 +792,39 @@ snippet nabl "nabla" Ai
 endsnippet
 
 context math(context)
-snippet div "divergence" Ai
+snippet div "division sign" Ai
 \div
 endsnippet
 
 context math(context)
 snippet rot "rotation" Ai
-\rot
+\operatorname{rot}
 endsnippet
 
 context math(context)
 snippet grad "gradient" Ai
-\grad
+\operatorname{grad}
 endsnippet
 
 context math(context)
-snippet xx "times" A
+snippet xx "times" Aw
 \times
 endsnippet
 
+# above the `([a-ce-zA-Z])dot` accent, which would otherwise take the "c".
+priority 1
 context math(context)
-snippet ** "cdot" A
+snippet cdot "cdot" Ai
 \cdot
 endsnippet
 
 context math(context)
-snippet para "parallel" A
+snippet ** "cdot" Ai
+\cdot
+endsnippet
+
+context math(context)
+snippet para "parallel" Aw
 \parallel
 endsnippet
 
@@ -820,13 +879,13 @@ snippet ell "ell" Ai
 endsnippet
 
 context math(context)
-snippet LL "Calligraphy L" Ai
-\mathcal{L}
+snippet LL "Blackboard L" Ai
+\mathbb{L}
 endsnippet
 
 context math(context)
-snippet HH "Calligraphy H" Ai
-\mathcal{H}
+snippet HH "Blackboard H" Ai
+\mathbb{H}
 endsnippet
 
 context math(context)
@@ -837,6 +896,21 @@ endsnippet
 context math(context)
 snippet RR "Real field" Ai
 \mathbb{R}
+endsnippet
+
+context math(context)
+snippet QQ "Rational field" Ai
+\mathbb{Q}
+endsnippet
+
+context math(context)
+snippet PP "Probability" Ai
+\mathbb{P}
+endsnippet
+
+context math(context)
+snippet `([A-Z])cal` "calligraphic letter" Ai
+\mathcal{``rv = m[1]``}
 endsnippet
 
 context math(context)
@@ -860,18 +934,18 @@ snippet \mathbb{1}I "Unit (alt)" Ai
 endsnippet
 
 context math(context)
-snippet AA "Calligraphy A" Ai
-\mathcal{A}
+snippet AA "Blackboard A" Ai
+\mathbb{A}
 endsnippet
 
 context math(context)
-snippet BB "bold B" Ai
-\mathbf{B}
+snippet BB "Blackboard B" Ai
+\mathbb{B}
 endsnippet
 
 context math(context)
-snippet EE "bold E" Ai
-\mathbf{E}
+snippet EE "Blackboard E" Ai
+\mathbb{E}
 endsnippet
 
 context math(context)
@@ -880,7 +954,7 @@ snippet ;E "expectation operator" Ai
 endsnippet
 
 context math(context)
-snippet ii "imaginary unit" Ai
+snippet ii "imaginary unit" i
 \mathrm{i}
 endsnippet
 
@@ -928,6 +1002,16 @@ endsnippet
 # Derivatives
 ##############################################################################
 context math(context)
+snippet part "partial" Ai
+\partial
+endsnippet
+
+context math(context)
+snippet par "partial derivative" i
+\frac{\partial $1}{\partial $2}$0
+endsnippet
+
+context math(context)
 snippet pa2 "second partial derivative" Ai
 \frac{\partial^2 $1}{\partial $2^2}$0
 endsnippet
@@ -938,12 +1022,12 @@ snippet pa3 "third partial derivative" Ai
 endsnippet
 
 context math(context)
-snippet `pa([a-zA-Z])([a-zA-Z])` "regex partial derivative" Ai
+snippet `pa([a-zA-Z])([a-zA-Z])` "regex partial derivative" i
 \frac{\partial ``rv = m[1]``}{\partial ``rv = m[2]``}
 endsnippet
 
 context math(context)
-snippet `d([a-zA-Z])d([a-zA-Z])` "regex derivative" Ai
+snippet `d([a-zA-Z])d([a-zA-Z])` "regex derivative" i
 \frac{d ``rv = m[1]``}{d ``rv = m[2]``}
 endsnippet
 
@@ -962,43 +1046,38 @@ endsnippet
 # Integrals
 ##############################################################################
 context math(context)
-snippet int "integral" A
-\int d$1 \,$0
+snippet int "integral" Aw
+\int $1 \, d$2$0
 endsnippet
 
 context math(context)
-snippet dint "definite integral" A
-\int_{$1}^{$2} d$3 \,$0
+snippet dint "definite integral" Aw
+\int_{$1}^{$2} $3 \, d$4$0
 endsnippet
 
 context math(context)
-snippet oinf "half improper integral" A
-\int_{0}^{\infty} d$1 \,$0
+snippet oinf "half improper integral" Aw
+\int_{0}^{\infty} $1 \, d$2$0
 endsnippet
 
 context math(context)
-snippet infi "improper integral" A
-\int_{-\infty}^{\infty} d$1 \,$0
+snippet ninf "improper integral" Aw
+\int_{-\infty}^{\infty} $1 \, d$2$0
 endsnippet
 
 context math(context)
-snippet oint "closed loop integral" A
+snippet oint "closed loop integral" Aw
 \oint
 endsnippet
 
 context math(context)
-snippet iint "2-fold integral" A
+snippet iint "2-fold integral" Aw
 \iint
 endsnippet
 
 context math(context)
-snippet iiint "3-fold integral" A
+snippet iiint "3-fold integral" Aw
 \iiint
-endsnippet
-
-context math(context)
-snippet i.int "indefinite integral" A
-\idotsint d$1 \,$0
 endsnippet
 
 
@@ -1023,7 +1102,7 @@ snippet `([ ]*)dag` "dagger" Ai
 endsnippet
 
 context math(context)
-snippet o+ "direct sum" A
+snippet o+ "direct sum" Aw
 \oplus
 endsnippet
 
@@ -1033,7 +1112,7 @@ snippet O+ "big direct sum" Ai
 endsnippet
 
 context math(context)
-snippet otimes "direct product (alt)" A
+snippet otimes "direct product (alt)" Aw
 \otimes
 endsnippet
 
@@ -1102,14 +1181,21 @@ endsnippet
 # Environments
 ##############################################################################
 context math(context)
-snippet beg "environment" A
+snippet beg "environment" Aw
 \begin{$1}
 $0
 \end{$1}
 endsnippet
 
 context math(context)
-snippet case "cases" A
+snippet ali "aligned" Aw
+\begin{aligned}
+$1
+\end{aligned}$0
+endsnippet
+
+context math(context)
+snippet case "cases" Aw
 \begin{cases}
 $1
 \end{cases}$0
@@ -1119,50 +1205,60 @@ endsnippet
 ##############################################################################
 # Linear algebra
 ##############################################################################
+
+# `pmat22` is why the plain triggers wait for Tab: an auto `pmat` would fire
+# before the digits arrive.
 context math(context)
-snippet pmat "parentheses matrix" A
+snippet `(?<![a-zA-Z\\])([pbBvV]?)mat([1-9])([1-9])` "matrix of any size" A
+\begin{``rv = m[1]``matrix}
+#grid(#2,#3)
+\end{``rv = m[1]``matrix}$0
+endsnippet
+
+context math(context)
+snippet pmat "parentheses matrix" w
 \begin{pmatrix}
 $1
 \end{pmatrix}$0
 endsnippet
 
 context math(context)
-snippet bmat "bracket matrix" A
+snippet bmat "bracket matrix" w
 \begin{bmatrix}
 $1
 \end{bmatrix}$0
 endsnippet
 
 context math(context)
-snippet Bmat "brace matrix" A
+snippet Bmat "brace matrix" w
 \begin{Bmatrix}
 $1
 \end{Bmatrix}$0
 endsnippet
 
 context math(context)
-snippet vmat "vertical line matrix" A
+snippet vmat "vertical line matrix" w
 \begin{vmatrix}
 $1
 \end{vmatrix}$0
 endsnippet
 
 context math(context)
-snippet Vmat "double vertical line matrix" A
+snippet Vmat "double vertical line matrix" w
 \begin{Vmatrix}
 $1
 \end{Vmatrix}$0
 endsnippet
 
 context math(context)
-snippet arr "array" A
+snippet arr "array" Aw
 \begin{array}{|c|}
 $1
 \end{array}$0
 endsnippet
 
 context math(context)
-snippet mat "matrix" A
+snippet mat "matrix" w
 \begin{matrix}
 $1
 \end{matrix}$0
@@ -1252,7 +1348,79 @@ endsnippet
 # LaTeX environments (no math context required)
 ##############################################################################
 
-snippet bfig "figure environment" bA
+# Outside math, `;` plus a letter opens a structure. Inside math the same keys
+# are symbols, which is why these filters are part of each snippet's key.
+
+context prose(context)
+snippet mk "inline math" Aw
+$$1$$0
+endsnippet
+
+context prose(context)
+snippet ;m "inline math" iA
+$$1$$0
+endsnippet
+
+context texprose(context)
+snippet dm "display math" Aw
+\[
+$1
+\]$0
+endsnippet
+
+context mdprose(context)
+snippet dm "display math" Aw
+$$
+$1
+$$$0
+endsnippet
+
+context texprose(context)
+snippet ;d "display math" iA
+\[
+$1
+\]$0
+endsnippet
+
+context mdprose(context)
+snippet ;d "display math" iA
+$$
+$1
+$$$0
+endsnippet
+
+context prose(context)
+snippet ;e "equation" iA
+\begin{equation}
+    $1
+    \label{eq:$2}
+\end{equation}
+$0
+endsnippet
+
+context prose(context)
+snippet ;a "align" iA
+\begin{align}
+    $0
+\end{align}
+endsnippet
+
+context prose(context)
+snippet ;A "align*" iA
+\begin{align*}
+    $0
+\end{align*}
+endsnippet
+
+context prose(context)
+snippet ;b "any environment" iA
+\begin{$1}
+    $0
+\end{$1}
+endsnippet
+
+context texprose(context)
+snippet ;f "figure" iA
 \begin{figure}[${1:htbp}]
     \centering
     \includegraphics[width=${2:0.8}\textwidth]{$3}
@@ -1262,7 +1430,8 @@ snippet bfig "figure environment" bA
 $0
 endsnippet
 
-snippet btab "table environment" bA
+context texprose(context)
+snippet ;t "table" iA
 \begin{table}[${1:htbp}]
     \centering
     \caption{$2}
@@ -1273,26 +1442,6 @@ snippet btab "table environment" bA
         \hline
     \end{tabular}
 \end{table}
-endsnippet
-
-snippet beq "equation environment" bA
-\begin{equation}
-    $1
-    \label{eq:$2}
-\end{equation}
-$0
-endsnippet
-
-snippet bal "align environment" bA
-\begin{align}
-    $0
-\end{align}
-endsnippet
-
-snippet bali "align* environment" bA
-\begin{align*}
-    $0
-\end{align*}
 endsnippet
 
 context !math(context)
@@ -1309,40 +1458,37 @@ snippet ;11 "enumerate (outside math)" iA
 \end{enumerate}
 endsnippet
 
-snippet bsec "section" bA
+context texprose(context)
+snippet ;s "section" iA
 \section{$1}
 \label{sec:$2}
 $0
 endsnippet
 
-snippet bsub "subsection" bA
+context texprose(context)
+snippet ;2 "subsection" iA
 \subsection{$1}
 \label{subsec:$2}
 $0
 endsnippet
 
-snippet bssub "subsubsection" bA
+context texprose(context)
+snippet ;3 "subsubsection" iA
 \subsubsection{$1}
 \label{subsubsec:$2}
 $0
 endsnippet
 
-# above the `([^no])rm` roman regex, which would otherwise eat "frm".
-priority 1
-snippet bfrm "frame (beamer)" bA
+context texprose(context)
+snippet ;F "frame (beamer)" iA
 \begin{frame}{$1}
     $0
 \end{frame}
 endsnippet
 
-snippet bmin "minipage" bA
+context texprose(context)
+snippet ;M "minipage" iA
 \begin{minipage}{${1:0.45}\textwidth}
     $0
 \end{minipage}
-endsnippet
-
-snippet benv "generic \\begin{}...\\end{}" bA
-\begin{$1}
-    $0
-\end{$1}
 endsnippet

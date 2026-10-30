@@ -88,20 +88,18 @@ describe('a Settings-authored shortcut in a mounted editor', () => {
   it('does not expand inside \\text, through the real setup wiring', () => {
     // Proves setup.ts actually composes the \text exclusion into the hsnips
     // math filter; latex-text-span.test.ts only checks the predicate itself.
-    // `nu` is a bundled Ai snippet, so this is the exact `$\text{number}$`
-    // case: without the exclusion it expands two characters in.
+    // `sum` is a bundled Ai snippet, so this is the exact `$\text{summary}$`
+    // case: without the exclusion it expands three characters in.
     const view = mountWith(BUNDLED, '$\\text{}$', 7);
-    type(view, 'n');
-    type(view, 'u');
-    expect(view.state.doc.toString()).toBe('$\\text{nu}$');
+    for (const ch of 'sum') type(view, ch);
+    expect(view.state.doc.toString()).toBe('$\\text{sum}$');
     view.destroy();
   });
 
   it('still expands the same trigger in real math', () => {
     const view = mountWith(BUNDLED, '$$', 1);
-    type(view, 'n');
-    type(view, 'u');
-    expect(view.state.doc.toString()).toBe('$\\nu$');
+    for (const ch of 'sum') type(view, ch);
+    expect(view.state.doc.toString()).toBe('$\\sum$');
     view.destroy();
   });
 

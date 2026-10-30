@@ -22,26 +22,30 @@ final class HSnipsCatalogTests: XCTestCase {
     }
 
     func testScansAllBundledSnippets() throws {
-        // 242 = `grep -c '^snippet' latex.hsnips`; update when defaults change.
-        XCTAssertEqual(try bundledSnippets().count, 242)
+        // N = `grep -c '^snippet' latex.hsnips`; update when defaults change.
+        XCTAssertEqual(try bundledSnippets().count, 264)
     }
 
     func testSuperscriptSnippet() throws {
         // Math-only: `^{}` is invalid outside math, so unlike the display-math
         // triggers this one must not fire in prose.
-        let superscript = try XCTUnwrap(bundledSnippets().first { $0.key == ";;" })
-        XCTAssertEqual(superscript.description, "Superscript")
+        let superscript = try XCTUnwrap(bundledSnippets().first { $0.key == "^^" })
+        XCTAssertEqual(superscript.description, "superscript (braces)")
         XCTAssertFalse(superscript.options.isRegex)
         XCTAssertTrue(superscript.options.autoExpand)
         XCTAssertEqual(superscript.options.mode, .math)
-        XCTAssertEqual(superscript.replacement, "^{$0}")
+        XCTAssertEqual(superscript.replacement, "^{$1}$0")
     }
 
-    func testDisplayMathSnippetStillFiresAnywhere() throws {
-        // `;$` opens a math block, so it has to work from prose.
-        let display = try XCTUnwrap(bundledSnippets().first { $0.key == ";$" })
-        XCTAssertEqual(display.options.mode, .any)
-        XCTAssertTrue(display.options.autoExpand)
+    func testDisplayMathSnippetFiresFromProse() throws {
+        // A math block has to open from prose, and `dm` differs per language.
+        let snippets = try bundledSnippets()
+        let tex = try XCTUnwrap(snippets.first { $0.key == "dm [texprose]" })
+        let md = try XCTUnwrap(snippets.first { $0.key == "dm [mdprose]" })
+        XCTAssertEqual(tex.options.mode, .text)
+        XCTAssertEqual(tex.replacement, "\\[\n$1\n\\]$0")
+        XCTAssertEqual(md.replacement, "$$\n$1\n$$$0")
+        XCTAssertTrue(tex.options.autoExpand)
     }
 
     func testTextSnippetIsMathOnlyAndWholeWord() throws {
@@ -68,6 +72,8 @@ final class HSnipsCatalogTests: XCTestCase {
     func testCapturesSectionHeaders() throws {
         let snippets = try bundledSnippets()
         XCTAssertEqual(snippets.first { $0.key == ";m" }?.section, "Greek alphabet")
+        XCTAssertEqual(snippets.first { $0.key == ";m [prose]" }?.section,
+                       "LaTeX environments (no math context required)")
         XCTAssertEqual(snippets.first { $0.key == "pmat" }?.section, "Linear algebra")
         XCTAssertEqual(snippets.first { $0.key == "case" }?.section, "Environments")
         // Every bundled snippet lands in a section; an unsectioned one would
@@ -112,8 +118,8 @@ final class HSnipsCatalogTests: XCTestCase {
     }
 
     func testExtractsMultiLineBodies() throws {
-        let display = try XCTUnwrap(bundledSnippets().first { $0.key == "dm" })
-        XCTAssertEqual(display.replacement, "\\begin{align}\n$0\n\\end{align}")
+        let display = try XCTUnwrap(bundledSnippets().first { $0.key == ";a [prose]" })
+        XCTAssertEqual(display.replacement, "\\begin{align}\n    $0\n\\end{align}")
     }
 
     func testSkipsGlobalBlocksAndBodies() {

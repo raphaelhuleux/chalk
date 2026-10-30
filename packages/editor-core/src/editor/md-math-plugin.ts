@@ -733,3 +733,14 @@ export function isInMathContextMd(state: EditorState, pos: number): boolean {
   }
   return false;
 }
+
+/** True when `pos` is inside a code span or block. */
+export function isInCodeMd(state: EditorState, pos: number): boolean {
+  const node = syntaxTree(state).resolveInner(pos, -1);
+  let n: { name: string; parent: typeof node | null } | null = node;
+  while (n) {
+    if (n.name === 'InlineCode' || n.name === 'FencedCode' || n.name === 'CodeBlock') return true;
+    n = n.parent;
+  }
+  return false;
+}

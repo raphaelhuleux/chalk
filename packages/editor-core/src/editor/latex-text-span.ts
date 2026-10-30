@@ -1,7 +1,7 @@
 /**
  * Detects `\text{…}` and friends: prose inside a math region, where math
- * snippets must not fire (as in upstream HyperSnips), or `$\text{number}$`
- * expands `nu`. Used only to narrow the hsnips `math(context)` filter in
+ * snippets must not fire (as in upstream HyperSnips), or `$\text{summary}$`
+ * expands `sum`. Used only to narrow the hsnips `math(context)` filter in
  * setup.ts; `isInMathContextTex` stays unchanged because tabout, math-wrap and
  * item-newline mean "inside math delimiters".
  */

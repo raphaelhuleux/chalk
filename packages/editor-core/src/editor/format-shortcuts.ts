@@ -1,5 +1,6 @@
 import { EditorSelection, Prec, type EditorState } from '@codemirror/state';
 import { keymap, type Command } from '@codemirror/view';
+import { insertSnippetBody } from './hsnips-plugin';
 
 /**
  * Cmd+B / Cmd+I toggle: unwrap when the markers sit inside the selection
@@ -70,6 +71,14 @@ function wrapCommand(
   };
 }
 
+/** Cmd+Option+E: `\begin{|}…\end{}` around the selection, name first. */
+const wrapEnvironment: Command = (view) => {
+  const { from, to, empty } = view.state.selection.main;
+  const selected = view.state.sliceDoc(from, to).replace(/[\\${}]/g, '\\$&');
+  const body = empty ? '    $0' : selected;
+  return insertSnippetBody(view, from, to, `\\begin{$1}\n${body}\n\\end{$1}${empty ? '' : '$0'}`);
+};
+
 // Prec.high: defaultKeymap's Mod-i (selectParentSyntax) succeeds wherever a
 // parse tree exists, so it would swallow Cmd+I in markdown.
 
@@ -94,6 +103,9 @@ export const mdFormatKeymap = Prec.high(
   keymap.of([
     { key: 'Mod-b', run: wrapCommand('**', '**', (s, f, t) => starRun(s, f, t) >= 2) },
     { key: 'Mod-i', run: wrapCommand('*', '*', (s, f, t) => starRun(s, f, t) % 2 === 1) },
+    { key: 'Mod-e', run: wrapCommand('$', '$') },
+    { key: 'Mod-Shift-e', run: wrapCommand('$$\n', '\n$$') },
+    { key: 'Mod-Alt-e', run: wrapEnvironment },
   ]),
 );
 
@@ -102,5 +114,8 @@ export const texFormatKeymap = Prec.high(
   keymap.of([
     { key: 'Mod-b', run: wrapCommand('\\textbf{', '}') },
     { key: 'Mod-i', run: wrapCommand('\\textit{', '}') },
+    { key: 'Mod-e', run: wrapCommand('$', '$') },
+    { key: 'Mod-Shift-e', run: wrapCommand('\\[\n', '\n\\]') },
+    { key: 'Mod-Alt-e', run: wrapEnvironment },
   ]),
 );

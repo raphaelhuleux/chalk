@@ -69,7 +69,7 @@ import { texFramePlugin, texFrameFenceKeymap } from './tex-frame-plugin';
 import { texListPlugin, texListFenceKeymap, texListLineCollapsed } from './tex-list-plugin';
 import { deadKeyCommitDedupe } from './dead-key-commit';
 
-import { mathPlugin, mathSyntax, isInMathContextMd, mdMathArrowKeymap } from './md-math-plugin';
+import { mathPlugin, mathSyntax, isInCodeMd, isInMathContextMd, mdMathArrowKeymap } from './md-math-plugin';
 import { highlightSyntax } from './md-highlight-plugin';
 import { livePreviewPlugin } from './md-live-preview';
 import { calloutPlugin, mdCalloutFenceKeymap } from './md-callout-plugin';
@@ -254,7 +254,7 @@ function buildExtensions(
       // move, snapped out of widget-rendered regions so transit never reveals
       // them. Inactive in source mode.
       texVerticalArrowKeymap(isSourceMode),
-      hsnipsExtension({ isInMathContext: snippetMathContext(isInMathContextTex) }),
+      hsnipsExtension({ isInMathContext: snippetMathContext(isInMathContextTex), language: 'tex' }),
       latexCompletionExtension(),
       taboutKeymap(isInMathContextTex, 'tex'),
       itemNewlineKeymap(isInMathContextTex),
@@ -316,7 +316,11 @@ function buildExtensions(
     // AFTER the stop keymaps (same Prec.high, later = lower): keeps the goal
     // column across fence/math stops. Inactive in source mode.
     mdVerticalArrowKeymap(isSourceMode),
-    hsnipsExtension({ isInMathContext: snippetMathContext(isInMathContextMd) }),
+    hsnipsExtension({
+      isInMathContext: snippetMathContext(isInMathContextMd),
+      language: 'md',
+      isInCode: isInCodeMd,
+    }),
     mdCompletionExtension(),
     taboutKeymap(isInMathContextMd, 'md'),
     // After Tabout (math keeps its Tab) and before indentWithTab.

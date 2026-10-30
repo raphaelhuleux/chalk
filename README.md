@@ -16,7 +16,7 @@ It comes as a native Mac app and as a VS Code extension, built on one editor eng
 - Theorems, lemmas, definitions, proofs and callouts render as cards, from LaTeX environments or Quarto fenced divs (`::: {#thm-…}`, `::: {.proof}`, `::: {.callout-note}`).
 - Beamer frames render as numbered slide cards.
 - Markdown: tables you edit in place, images, and Mermaid diagrams under their source.
-- HyperSnips-style snippets: `dm` opens an `align` block, `1/` starts a fraction, `;m` is `\mu`, Tab jumps to the next field. Your own `.hsnips` files work unchanged.
+- HyperSnips-style snippets: `mk` opens inline math, `dm` display math, `1/` starts a fraction, `;m` is `\mu` in math and inline math outside it, Tab jumps to the next field. Your own `.hsnips` files work unchanged.
 - Three view modes (preview, mixed, source), zen, typewriter and focus modes, and four colour themes in light and dark.
 
 ![A .tex file with a theorem, a proof, numbered equations and the outline panel](docs/images/mac-tex.png)

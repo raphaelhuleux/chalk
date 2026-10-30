@@ -7,14 +7,22 @@ import {
 import { EditorView } from '@codemirror/view';
 
 /**
- * Typing `(` or `[` over a non-empty selection inside math wraps it in
- * `\left(…\right)` instead of closeBrackets' plain pair. Empty selections and
+ * Typing one of these over a non-empty selection inside math wraps it instead
+ * of replacing it: `(` and `[` in `\left(…\right)` rather than closeBrackets'
+ * plain pair, `/` in a fraction, `^` and `_` in a script, `U` and `O` in an
+ * underbrace or overbrace with the caret on its label. Empty selections and
  * non-math positions fall through, so autopairing and the `;(` / `;[` hsnips
- * still fire. The selection stays on the original text, like closeBrackets.
+ * still fire. The selection stays on the original text, like closeBrackets;
+ * `next` instead puts the caret that far before the end, in the next slot.
  */
-const WRAPS: Record<string, [string, string]> = {
-  '(': ['\\left(', '\\right)'],
-  '[': ['\\left[', '\\right]'],
+const WRAPS: Record<string, { open: string; close: string; next?: number }> = {
+  '(': { open: '\\left(', close: '\\right)' },
+  '[': { open: '\\left[', close: '\\right]' },
+  '/': { open: '\\frac{', close: '}{}', next: 1 },
+  '^': { open: '^{', close: '}', next: 0 },
+  _: { open: '_{', close: '}', next: 0 },
+  U: { open: '\\underbrace{', close: '}_{}', next: 1 },
+  O: { open: '\\overbrace{', close: '}^{}', next: 1 },
 };
 
 /**
@@ -38,13 +46,16 @@ export function tryMathWrap(
   if (!isInMathContext(view.state, to - 1)) return false;
 
   const original = view.state.sliceDoc(from, to);
-  const inserted = wrap[0] + original + wrap[1];
-  const innerFrom = from + wrap[0].length;
+  const inserted = wrap.open + original + wrap.close;
+  const innerFrom = from + wrap.open.length;
   const innerTo = innerFrom + original.length;
 
   view.dispatch({
     changes: { from, to, insert: inserted },
-    selection: EditorSelection.range(innerFrom, innerTo),
+    selection:
+      wrap.next === undefined
+        ? EditorSelection.range(innerFrom, innerTo)
+        : EditorSelection.cursor(from + inserted.length - wrap.next),
     userEvent: 'input.type',
   });
   return true;

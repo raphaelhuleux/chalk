@@ -136,7 +136,7 @@ describe('tab-stop ranges grow with what is typed into them', () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const view = new EditorView({
-      state: EditorState.create({ extensions: [hsnipsExtension({ isInMathContext: () => false })] }),
+      state: EditorState.create({ extensions: [hsnipsExtension({ isInMathContext: () => false, language: 'tex' })] }),
       parent,
     });
     insertSnippetBody(view, 0, 0, body);

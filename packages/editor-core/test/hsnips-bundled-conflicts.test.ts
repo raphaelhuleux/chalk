@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EditorState, EditorSelection } from '@codemirror/state';
-import { parseHSnips, type HSnippet } from '../src/editor/hsnips-parser';
+import { parseHSnips, PROSE_FILTERS, snippetKey, type HSnippet } from '../src/editor/hsnips-parser';
 import { _testing } from '../src/editor/hsnips-plugin';
 
 /**
@@ -23,7 +23,7 @@ import { _testing } from '../src/editor/hsnips-plugin';
 const BUNDLED = readFileSync(join(__dirname, '../assets/latex.hsnips'), 'utf8');
 const snippets = parseHSnips(BUNDLED);
 
-const keyOf = (s: HSnippet) => s.regexpSource ?? s.trigger;
+const keyOf = snippetKey;
 
 /**
  * A string the pattern should match, covering the constructs this file uses.
@@ -53,10 +53,17 @@ function winnerFor(s: HSnippet): HSnippet | null | undefined {
   const state = EditorState.create({
     doc: text,
     selection: EditorSelection.cursor(text.length),
+    extensions: [
+      _testing.proseHostFacet.of({
+        language: s.contextFilter === 'mdprose(context)' ? 'md' : 'tex',
+        isInCode: () => false,
+      }),
+    ],
   });
   // Evaluate in the context the snippet itself asks for, and let Tab-only
   // snippets compete, so neither is excluded for the wrong reason.
-  const inMath = s.contextFilter !== '!math(context)';
+  const prose = s.contextFilter === '!math(context)' || PROSE_FILTERS.includes(s.contextFilter ?? '');
+  const inMath = !prose;
   return _testing.findMatch(state, snippets, () => inMath, true)?.snippet ?? null;
 }
 

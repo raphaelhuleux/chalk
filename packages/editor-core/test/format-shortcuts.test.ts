@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EditorSelection } from '@codemirror/state';
-import type { EditorView } from '@codemirror/view';
+import { runScopeHandlers, type EditorView } from '@codemirror/view';
 import type { Language } from '../src/editor/setup';
 import { destroyViews, langView } from './helpers/views';
 
@@ -155,5 +155,44 @@ describe('format-shortcuts: latex', () => {
     press(view, 'b');
     expect(view.state.doc.toString()).toBe('a b c');
     expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe('b');
+  });
+});
+
+describe('math and environment keys', () => {
+  const press = (view: EditorView, init: KeyboardEventInit) =>
+    runScopeHandlers(
+      view,
+      new KeyboardEvent('keydown', { key: 'e', keyCode: 69, ctrlKey: true, ...init }),
+      'editor',
+    );
+  const selectAll = (view: EditorView) =>
+    view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+
+  it('Cmd+E wraps and unwraps inline math', () => {
+    const view = mount('b', 'tex');
+    selectAll(view);
+    press(view, {});
+    expect(view.state.doc.toString()).toBe('$b$');
+    press(view, {});
+    expect(view.state.doc.toString()).toBe('b');
+  });
+
+  it("Cmd+Shift+E uses each language's display form", () => {
+    const tex = mount('b', 'tex');
+    selectAll(tex);
+    press(tex, { key: 'E', shiftKey: true });
+    expect(tex.state.doc.toString()).toBe('\\[\nb\n\\]');
+    const md = mount('b', 'md');
+    selectAll(md);
+    press(md, { key: 'E', shiftKey: true });
+    expect(md.state.doc.toString()).toBe('$$\nb\n$$');
+  });
+
+  it('Cmd+Option+E wraps the selection and asks for the name first', () => {
+    const view = mount('$x$ {y}', 'tex');
+    selectAll(view);
+    press(view, { altKey: true });
+    expect(view.state.doc.toString()).toBe('\\begin{}\n$x$ {y}\n\\end{}');
+    expect(view.state.selection.main.head).toBe('\\begin{'.length);
   });
 });

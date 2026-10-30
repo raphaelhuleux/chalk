@@ -31,7 +31,7 @@ function makeView(doc: string, cursor: number, snippets: HSnippet[]): EditorView
   const state = EditorState.create({
     doc,
     selection: EditorSelection.cursor(cursor),
-    extensions: [hsnipsExtension({ isInMathContext: () => true })],
+    extensions: [hsnipsExtension({ isInMathContext: () => true, language: 'tex' })],
   });
   const view = new EditorView({ state, parent });
   view.dispatch({ effects: setSnippets.of(snippets) });

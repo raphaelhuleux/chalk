@@ -27,13 +27,27 @@ export interface HSnippet {
   wordboundary: boolean;
   /** `b` flag: only whitespace may precede the trigger on its line. */
   beginofline: boolean;
-  /** Context filter source. Never eval'd: only `math(context)` and
-   *  `!math(context)` are recognised (see hsnips-plugin.ts). */
+  /** Context filter source. Never eval'd: only the filters in
+   *  `passesContextFilter` (hsnips-plugin.ts) are recognised. */
   contextFilter?: string;
   priority: number;
 }
 
 // ── Parser ──────────────────────────────────────────────────────────
+
+/**
+ * Filters that make a trigger mean something else outside math, so `;a` can be
+ * both α and align. They are part of the snippet's identity: HSnipsCatalog's
+ * `key` mirrors `snippetKey`, or disabling one row would disable both.
+ */
+export const PROSE_FILTERS = ['prose(context)', 'texprose(context)', 'mdprose(context)'];
+
+/** The `# chalk-disable:` key: trigger or regex source, plus any prose filter. */
+export function snippetKey(s: HSnippet): string {
+  const base = s.regexpSource ?? s.trigger;
+  if (!s.contextFilter || !PROSE_FILTERS.includes(s.contextFilter)) return base;
+  return `${base} [${s.contextFilter.replace('(context)', '')}]`;
+}
 
 const HEADER_RE = /^snippet ?(?:`([^`]+)`|(\S+))?(?: "([^"]+)")?(?: ([AMiwb]*))?/;
 
@@ -199,9 +213,7 @@ export function parseHSnips(content: string): HSnippet[] {
   }
 
   const kept = disabled.size
-    ? snippets.filter(
-        (s) => !disabled.has(s.regexpSource ?? s.trigger),
-      )
+    ? snippets.filter((s) => !disabled.has(snippetKey(s)))
     : snippets;
   return kept.sort((a, b) => b.priority - a.priority);
 }

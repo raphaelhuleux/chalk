@@ -53,11 +53,11 @@ public enum SampleContent {
     Inside maths, short triggers expand as you type:
 
     - `//` becomes a fraction, with the cursor waiting in the numerator
-    - `;a` becomes α, `;b` becomes β, `;t` becomes θ
+    - `;a` becomes α, `;b` becomes β, `;th` becomes θ
     - `sq` a square root, `ooo` infinity, `->` an arrow
-    - `sum`, `int` and `lim` arrive with their limits attached
+    - `int` and `lim` arrive with their slots ready
 
-    Anywhere in the document, `;$` opens a display maths block.
+    Outside maths, `mk` opens inline maths and `dm` a display block. The `;` keys open structures there, so `;a` starts an `align`. With text selected, **Cmd E** wraps it in maths.
 
     Chalk reads `.hsnips` files, so the expansions you have built up elsewhere come across unchanged. Settings (**Cmd ,**) lists every snippet and lets you write your own.
 

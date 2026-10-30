@@ -25,7 +25,7 @@ import {
   Annotation,
 } from '@codemirror/state';
 import { acceptCompletion, completionStatus, startCompletion } from '@codemirror/autocomplete';
-import type { HSnippet } from './hsnips-parser';
+import { PROSE_FILTERS, type HSnippet } from './hsnips-parser';
 
 // ── Snippet data ────────────────────────────────────────────────────
 
@@ -49,6 +49,15 @@ const mathContextFacet = Facet.define<MathContextFn, MathContextFn>({
   combine: (values) => values[0] ?? (() => false),
 });
 
+interface ProseHost {
+  language: 'tex' | 'md';
+  /** Code spans and blocks are not prose: `mkdir` must not open math. */
+  isInCode: MathContextFn;
+}
+const proseHostFacet = Facet.define<ProseHost, ProseHost>({
+  combine: (values) => values[0] ?? { language: 'tex', isInCode: () => false },
+});
+
 // ── Tab-stop state ──────────────────────────────────────────────────
 
 interface TabStop {
@@ -65,6 +74,19 @@ interface SnippetSession {
 }
 
 const setSession = StateEffect.define<SnippetSession | null>();
+
+/** Where the last expansion ended. The one place a `\\name` before a trigger is
+ *  a finished command, so `;a` then `sr` still gives `\\alpha^{2}`. */
+const setExpansionEnd = StateEffect.define<number>();
+const expansionEndField = StateField.define<number | null>({
+  create: () => null,
+  update(end, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setExpansionEnd)) return e.value;
+    }
+    return end === null ? null : tr.changes.mapPos(end, -1);
+  },
+});
 
 /** Tags the mirror filter's own echo so it doesn't re-fire on it. */
 const isMirrorEcho = Annotation.define<boolean>();
@@ -215,11 +237,18 @@ function passesContextFilter(
   if (snippet.contextFilter === '!math(context)') {
     return !isInMathContext(state, pos);
   }
+  if (PROSE_FILTERS.includes(snippet.contextFilter)) {
+    if (isInMathContext(state, pos)) return false;
+    const host = state.facet(proseHostFacet);
+    if (host.isInCode(state, pos)) return false;
+    return snippet.contextFilter === 'prose(context)' ||
+      snippet.contextFilter === `${host.language}prose(context)`;
+  }
   // Unknown filter: warn once so users notice their snippets vanished.
   if (!loggedUnknownContexts.has(snippet.contextFilter)) {
     loggedUnknownContexts.add(snippet.contextFilter);
     console.warn(
-      `[chalk hsnips] unknown context filter ${JSON.stringify(snippet.contextFilter)} — snippet skipped. Only "math(context)" and "!math(context)" are supported.`,
+      `[chalk hsnips] unknown context filter ${JSON.stringify(snippet.contextFilter)} — snippet skipped. Supported: "math(context)", "!math(context)", ${PROSE_FILTERS.map((f) => `"${f}"`).join(', ')}.`,
     );
   }
   return false;
@@ -241,6 +270,22 @@ interface MatchResult {
  */
 const slowSnippets = new WeakSet<HSnippet>();
 const SLOW_EXEC_MS = 100;
+
+/** Arguments that name things: `pmat` must not expand in `\\begin{pmatrix}`. */
+const NAME_ARGUMENT_RE =
+  /\\(?:begin|end|label|ref|eqref|[cC]ref|[a-zA-Z]*cite[a-zA-Z]*|input|include|includegraphics(?:\[[^\]]*\])?|usepackage)\{[^{}]*$/;
+
+/**
+ * True when the text being typed is LaTeX source, not a trigger: inside a
+ * name argument, or a letter continuing `\\name` (`eta` in `\\theta`, `sum` in
+ * `\\sum`). A trigger that opens with `\\` starts before the command, so it
+ * passes, as does anything typed right after an expansion.
+ */
+function isTypingSource(state: EditorState, before: string, start: number, first: string): boolean {
+  if (NAME_ARGUMENT_RE.test(before)) return true;
+  if (!/[a-zA-Z]/.test(first) || !/\\[a-zA-Z]*$/.test(before)) return false;
+  return state.field(expansionEndField, false) !== start;
+}
 
 function findMatch(
   state: EditorState,
@@ -293,7 +338,11 @@ function findMatch(
             textUpToCursor.endsWith(trigger) &&
             (startIdx === 0 || /\W/.test(lineText[startIdx - 1]))
           : wordBeforeCursor() === trigger;
-      if (hit) return { snippet, from: pos - trigger.length, to: pos, groups: [] };
+      if (hit) {
+        const from = pos - trigger.length;
+        if (isTypingSource(state, textUpToCursor.slice(0, startIdx), from, trigger[0])) continue;
+        return { snippet, from, to: pos, groups: [] };
+      }
     } else if (snippet.regexp) {
       if (slowSnippets.has(snippet)) continue;
       const t0 = Date.now();
@@ -310,6 +359,7 @@ function findMatch(
       if (m && m[0].length > 0) {
         if (snippet.beginofline && textUpToCursor.slice(0, m.index).trim() !== '') continue;
         const matchStart = line.from + m.index;
+        if (isTypingSource(state, textUpToCursor.slice(0, m.index), matchStart, m[0][0])) continue;
         return {
           snippet,
           from: matchStart,
@@ -330,6 +380,21 @@ interface ProcessedSnippet {
   tabStops: TabStop[];
 }
 
+/**
+ * Chalk extension: `#grid(#2,#3)` in a regex snippet's body becomes a table of
+ * rows by columns taken from those captures, one tab stop per cell. Bodies run
+ * no code, so the size can't be computed in the snippet itself.
+ */
+function expandGrids(body: string, groups: string[]): string {
+  return body.replace(/#grid\(#(\d+),#(\d+)\)/g, (_full, rowGroup: string, colGroup: string) => {
+    const columns = Number(groups[Number(colGroup)]);
+    let stop = 1;
+    return Array.from({ length: Number(groups[Number(rowGroup)]) }, () =>
+      Array.from({ length: columns }, () => `$${stop++}`).join(' & '),
+    ).join(' \\\\\\\\\n');
+  });
+}
+
 function processBody(
   body: string,
   insertPos: number,
@@ -339,6 +404,7 @@ function processBody(
   // Only regex matches have groups, so `#N` stays literal in literal-trigger
   // snippets, where it is likely a real LaTeX macro argument.
   const hasCaptures = groups.length > 0;
+  body = expandGrids(body, groups);
 
   const tabStops: TabStop[] = [];
   let text = '';
@@ -495,7 +561,7 @@ function insertProcessedBody(
   isExpanding = true;
   const { text, tabStops } = processBody(body, from, groups, trimmedCaptures);
 
-  const effects: StateEffect<unknown>[] = [];
+  const effects: StateEffect<unknown>[] = [setExpansionEnd.of(from + text.length)];
 
   // A lone $0 starts no session: the cursor lands there and the next Tab
   // reaches tabout / manual expansion instead of a no-op exit.
@@ -613,9 +679,11 @@ function nextTabStop(view: EditorView): boolean {
   const nextIdx = indices[curPos + 1];
   const nextLeader = findGroupLeader(session.tabStops, nextIdx);
   if (!nextLeader) return false;
+  // $0 is the exit, not a field: a live session there would absorb everything
+  // typed next into the stop and highlight it.
   view.dispatch({
     selection: { anchor: nextLeader.from, head: nextLeader.to },
-    effects: [setSession.of({ ...session, currentIndex: nextIdx })],
+    effects: [setSession.of(nextIdx === 0 ? null : { ...session, currentIndex: nextIdx })],
   });
   offerCompletionsAtStop(view);
   return true;
@@ -668,15 +736,19 @@ interface HsnipsOptions {
   /** Evaluates the `math(context)` filter. setup.ts passes each language's
    *  math test wrapped in `snippetMathContext` (which excludes `\text{}`). */
   isInMathContext: (state: EditorState, pos: number) => boolean;
+  language: ProseHost['language'];
+  isInCode?: ProseHost['isInCode'];
 }
 
 export function hsnipsExtension(opts: HsnipsOptions): Extension {
   return [
     snippetsField,
     sessionField,
+    expansionEndField,
     sessionDecorations,
     mirrorFilter,
     mathContextFacet.of(opts.isInMathContext),
+    proseHostFacet.of({ language: opts.language, isInCode: opts.isInCode ?? (() => false) }),
     autoExpandFor(opts.isInMathContext),
     hsnipsTheme,
   ];
@@ -695,4 +767,5 @@ export const _testing = {
   snippetsField,
   findMatch,
   manualExpand,
+  proseHostFacet,
 };

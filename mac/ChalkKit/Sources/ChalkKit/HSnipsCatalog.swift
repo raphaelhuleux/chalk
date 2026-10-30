@@ -100,11 +100,12 @@ public enum HSnipsCatalog {
             let mode: SnippetOptions.Mode
             switch pendingContext {
             case "math(context)": mode = .math
-            case "!math(context)": mode = .text
+            case "!math(context)", "prose(context)", "texprose(context)", "mdprose(context)":
+                mode = .text
             default: mode = .any
             }
             result.append(BuiltinSnippet(
-                key: trigger,
+                key: Self.disableKey(trigger: trigger, context: pendingContext),
                 display: trigger,
                 description: group(3) ?? "",
                 replacement: body,
@@ -120,6 +121,13 @@ public enum HSnipsCatalog {
             pendingContext = nil
         }
         return result
+    }
+
+    /// Mirrors `snippetKey` in hsnips-parser.ts: a prose filter is part of the
+    /// key, so `;a` the structure can be disabled apart from `;a` the letter.
+    private static func disableKey(trigger: String, context: String?) -> String {
+        guard let context, context.hasSuffix("prose(context)") else { return trigger }
+        return "\(trigger) [\(context.dropLast("(context)".count))]"
     }
 
     private static func consumeBody(_ lines: inout ArraySlice<String>) -> String {

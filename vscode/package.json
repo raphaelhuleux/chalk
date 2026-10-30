@@ -132,6 +132,24 @@
       },
       {
         "command": "chalk.editorHandledKey",
+        "key": "ctrl+e",
+        "mac": "cmd+e",
+        "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"
+      },
+      {
+        "command": "chalk.editorHandledKey",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"
+      },
+      {
+        "command": "chalk.editorHandledKey",
+        "key": "ctrl+alt+e",
+        "mac": "cmd+alt+e",
+        "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"
+      },
+      {
+        "command": "chalk.editorHandledKey",
         "key": "ctrl+z",
         "mac": "cmd+z",
         "when": "(activeCustomEditorId == chalk.texEditor || activeCustomEditorId == chalk.markdownEditor) && editorAreaFocus"

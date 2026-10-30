@@ -93,3 +93,18 @@ describe('tryMathWrap — boundary straddling', () => {
     view.destroy();
   });
 });
+
+describe('tryMathWrap — fractions and scripts', () => {
+  it.each([
+    ['/', '\\frac{ab}{}', '\\frac{ab}{'.length],
+    ['^', '^{ab}', '^{ab}'.length],
+    ['_', '_{ab}', '_{ab}'.length],
+    ['U', '\\underbrace{ab}_{}', '\\underbrace{ab}_{'.length],
+    ['O', '\\overbrace{ab}^{}', '\\overbrace{ab}^{'.length],
+  ])('%s', (key, doc, caret) => {
+    const view = makeView('ab', 0, 2);
+    expect(tryMathWrap(view, 0, 2, key, () => true)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(view.state.selection.main.head).toBe(caret);
+  });
+});

@@ -155,7 +155,7 @@ endsnippet
     const state = EditorState.create({
       doc,
       selection: EditorSelection.cursor(cursor),
-      extensions: [hsnipsExtension({ isInMathContext: () => true })],
+      extensions: [hsnipsExtension({ isInMathContext: () => true, language: 'tex' })],
     });
     const view = new EditorView({ state });
     view.dispatch({ effects: setSnippetsEffect.of(parseHSnips(NON_AUTO)) });
