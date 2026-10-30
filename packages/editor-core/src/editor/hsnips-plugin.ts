@@ -71,6 +71,9 @@ interface SnippetSession {
    *  document order so the first is the leader. */
   tabStops: TabStop[];
   currentIndex: number;
+  /** No placeholder tint: the field is the document itself (`mk`, `dm`, `;e`),
+   *  so tinting it would only colour what the writer is typing. */
+  quiet: boolean;
 }
 
 const setSession = StateEffect.define<SnippetSession | null>();
@@ -144,7 +147,7 @@ const sessionDecorations = EditorView.decorations.compute(
   [sessionField],
   (state) => {
     const session = state.field(sessionField);
-    if (!session) return Decoration.none;
+    if (!session || session.quiet) return Decoration.none;
     const leader = findGroupLeader(session.tabStops, session.currentIndex);
     if (!leader || leader.from === leader.to) return Decoration.none;
     return Decoration.set([placeholderMark.range(leader.from, leader.to)]);
@@ -526,6 +529,7 @@ function expandSnippet(view: EditorView, match: MatchResult): boolean {
     match.snippet.trimmedCaptures,
     // CM6's typing userEvent, so one Cmd+Z undoes expansion and keystroke.
     'input.type',
+    PROSE_FILTERS.includes(match.snippet.contextFilter ?? ''),
   );
 }
 
@@ -557,6 +561,7 @@ function insertProcessedBody(
   groups: string[],
   trimmedCaptures: Set<number> | undefined,
   userEvent: 'input.type' | 'input.complete',
+  quiet = false,
 ): boolean {
   isExpanding = true;
   const { text, tabStops } = processBody(body, from, groups, trimmedCaptures);
@@ -573,6 +578,7 @@ function insertProcessedBody(
       setSession.of({
         tabStops,
         currentIndex: tabStops[0].index,
+        quiet,
       }),
     );
   }

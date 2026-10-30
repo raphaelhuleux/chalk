@@ -77,6 +77,7 @@ describe('mirrorFilter — echoes leader edits to siblings', () => {
           { from: mirrorRange[0], to: mirrorRange[1], index: 1 },
         ],
         currentIndex: 1,
+        quiet: false,
       }),
     });
     return view;

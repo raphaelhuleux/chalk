@@ -201,3 +201,22 @@ it('Tab out of a snippet ends it, so later typing is not a highlighted field', (
   expect(view.dom.querySelector('.cm-hsnips-placeholder')).toBeNull();
   view.destroy();
 });
+
+describe('placeholder tint', () => {
+  const tinted = (doc: string, cursor: number, keys: string) => {
+    const view = texView(doc, { cursor });
+    view.dispatch({ effects: setSnippets.of(snippets) });
+    for (const ch of keys) typeOne(view, ch);
+    const found = view.dom.querySelector('.cm-hsnips-placeholder') !== null;
+    view.destroy();
+    return found;
+  };
+
+  it.each(['mkx', 'dmx', ';ex', ';dx'])('%s opens the document, untinted', (keys) => {
+    expect(tinted('', 0, keys)).toBe(false);
+  });
+
+  it('a multi-slot math snippet keeps it', () => {
+    expect(tinted('$$', 1, '//x')).toBe(true);
+  });
+});
