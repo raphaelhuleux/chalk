@@ -6,9 +6,9 @@ struct TabItem: Hashable {
     let id: UUID
     let name: String
     let isDirty: Bool
+    /// Shown in its group's pane (every group shows one tab; only the focused group's carries
+    /// the accent underline, see `HeaderTabStrip.isFocusedGroup`).
     let isActive: Bool
-    /// Shown in the split's other pane: named like the active tab, without its weight or underline.
-    let isShownInSplit: Bool
     /// A "preview" tab (iA Writer): opened but never edited, so a sidebar click
     /// will replace it in place. Only the ACTIVE one is ever replaced, which is
     /// why only the active one carries the slant (TabStripPolicy.isOblique).
@@ -18,21 +18,21 @@ struct TabItem: Hashable {
     /// (TabStripPolicy.needsFolderPrefix); nil otherwise.
     let folder: String?
 
-    init(id: UUID, name: String, isDirty: Bool, isActive: Bool, isShownInSplit: Bool = false,
+    init(id: UUID, name: String, isDirty: Bool, isActive: Bool,
          isPreview: Bool, folder: String? = nil) {
         self.id = id
         self.name = name
         self.isDirty = isDirty
         self.isActive = isActive
-        self.isShownInSplit = isShownInSplit
         self.isPreview = isPreview
         self.folder = folder
     }
 }
 
-/// The tab name row: a quiet mono text row on the editor surface. The active
-/// tab is weight plus a short accent underline; background tabs are muted. No
-/// band of its own, no chip fill, marker, divider or rounding.
+/// The tab name row of one tab group: a quiet mono text row on the editor
+/// surface. The shown tab is weight plus a short underline, accent in the
+/// focused group; background tabs are muted. No band of its own, no chip fill,
+/// marker, divider or rounding.
 ///
 /// The underline belongs to the row, not to a tab, so it can slide to the new
 /// name on `motionFast` (docs/motion.md "Tab switch"): every model change
@@ -49,14 +49,28 @@ final class HeaderTabStrip: ThemedView {
     var onNew: (() -> Void)?
     /// Drag-reorder drop: tab `id` should move to row position `index`.
     var onMove: ((UUID, Int) -> Void)?
-    /// The context menu's "Open in Split": show tab `id` in the split's other pane.
-    var onOpenInSplit: ((UUID) -> Void)?
+    /// ⌥-click and the context menu: move tab `id` to the neighbouring group on the trailing
+    /// (true) or leading side, making one when there is none.
+    var onMoveToNeighborGroup: ((UUID, Bool) -> Void)?
+    /// The context menu's "Close Group".
+    var onCloseGroup: (() -> Void)?
+    /// The tab group this row shows.
+    var groupID: UUID?
+    /// Whether there are groups beside this one, for the context menu.
+    var hasLeadingGroup = false
+    var hasTrailingGroup = false
+    /// A lifted tab leaving this row is routed here (other rows, the editor's drop zones).
+    weak var dragCoordinator: TabDragCoordinator?
+    /// The group the shell's commands act on: its shown tab's underline carries the accent.
+    var isFocusedGroup = true {
+        didSet { if isFocusedGroup != oldValue { refreshColors() } }
+    }
 
     private let scroll = NSScrollView()
     private let content = FlippedView()
     private let stack = NSStackView()
     private let newTabButton = StripGlyphButton(symbol: "plus", pointSize: ChalkMetrics.newTabGlyphSize,
-                                                weight: .light, label: "New File")
+                                                weight: .regular, label: "New File")
     private let overflowButton = StripGlyphButton(symbol: "chevron.down",
                                                   pointSize: ChalkMetrics.overflowGlyphSize,
                                                   weight: .medium, label: "More Tabs")
@@ -72,6 +86,9 @@ final class HeaderTabStrip: ThemedView {
     private var underlineSliding = false
 
     private var items: [TabItem] = []
+    /// The tabs in this row's newest model.
+    var tabCount: Int { latestItems.count }
+    var currentItems: [TabItem] { latestItems }
     /// The newest model this row was asked to show. The close-fade completion
     /// in `update(_:)` must rebuild from this, never from the `items` it
     /// captured, or a second update inside the fade would be reverted (closed
@@ -80,13 +97,24 @@ final class HeaderTabStrip: ThemedView {
     /// newest model.
     private var latestItems: [TabItem] = []
     private var isOverflowShown = false
-    private var overflowWidthZero: NSLayoutConstraint!
+    /// The chevron's width: zero while collapsed, `ChalkMetrics.overflowButtonWidth` while shown.
+    /// Never left unset: an unconstrained chevron made the row ambiguous and Auto Layout could
+    /// give it every point, collapsing the names to nothing
+    /// (docs/issues/2026-11-16-tab-row-regressions.md).
+    private var overflowWidth: NSLayoutConstraint!
 
     /// Chip drag-reorder in flight: the id being dragged, and any `update(_:)`
     /// snapshots that arrived mid-drag (a rebuild would destroy the dragged
     /// item), parked until the session ends.
     private var draggingID: UUID?
+    /// The live drag is over something outside this row (another row, the editor), so the row
+    /// shows no reorder feedback and the drop is the coordinator's.
+    private var dragIsExternal = false
+    /// Escape ended the drag; the rest of the gesture is ignored.
+    private var dragIsCancelled = false
     private var pendingItems: [TabItem]?
+    /// Where a tab dragged in from another row would land.
+    private let insertionMarker = FlippedView()
     /// The dragged item's position in the row when the lift began, so the end
     /// of the session can tell a reorder from a click with jitter.
     private var dragStartIndex: Int?
@@ -105,8 +133,9 @@ final class HeaderTabStrip: ThemedView {
     /// reserved, mirroring the constraint chain.
     private static let reservedTail: CGFloat = ChalkMetrics.tabGap + newTabSize + overflowGap
 
-    /// The narrowest the row gets: the names scrolled out, the tail left.
-    static var minimumWidth: CGFloat { reservedTail }
+    /// The narrowest row a trailing slot may leave: the tail plus room for about one name. The
+    /// bare tail shows "+" and no tabs at all.
+    static var readableWidth: CGFloat { reservedTail + 160 }
 
     /// The row's names, in row order.
     private var names: [HeaderTabName] {
@@ -149,6 +178,9 @@ final class HeaderTabStrip: ThemedView {
         underline.layer?.cornerRadius = ChalkMetrics.tabUnderlineHeight / 2
         underline.isHidden = true
         content.addSubview(underline)
+        insertionMarker.wantsLayer = true
+        insertionMarker.isHidden = true
+        content.addSubview(insertionMarker)
 
         fadeMask.startPoint = CGPoint(x: 0, y: 0.5)
         fadeMask.endPoint = CGPoint(x: 1, y: 0.5)
@@ -167,8 +199,13 @@ final class HeaderTabStrip: ThemedView {
         overflowButton.onClick = { [weak self] in self?.showOverflowMenu() }
         addSubview(overflowButton)
 
-        overflowWidthZero = overflowButton.widthAnchor.constraint(equalToConstant: 0)
-        overflowWidthZero.isActive = true
+        overflowWidth = overflowButton.widthAnchor.constraint(equalToConstant: 0)
+        // Just below the band's trailing cap on the row (`HeaderBarView.trailingCap`): in a column
+        // too narrow for the tail the chevron gives up its width before the row runs into the
+        // next group. The names' clip never goes negative, so the squeeze is still unique.
+        overflowWidth.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue - 2)
+        overflowWidth.isActive = true
+        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
 
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: topAnchor),
@@ -205,7 +242,8 @@ final class HeaderTabStrip: ThemedView {
     }
 
     override func refreshColors() {
-        paint(underline, background: .chalkTabUnderline)
+        paint(underline, background: isFocusedGroup ? .chalkTabUnderline : .chalkTabUnderlineUnfocused)
+        paint(insertionMarker, background: .chalkTabUnderline)
     }
 
     func update(_ items: [TabItem]) {
@@ -277,8 +315,63 @@ final class HeaderTabStrip: ThemedView {
     }
 
     /// The "+" glyph as configured, so a test can measure its ink against
-    /// the label type it sits beside (Paper: a 13px svg with 8.5px arms).
+    /// the label type and the close × it sits beside.
     var newTabGlyphImageForTesting: NSImage? { newTabButton.image }
+    static var closeGlyphImageForTesting: NSImage? { HeaderTabName.closeGlyph }
+
+    /// One tab's close slot in the row's own coordinates, where it is laid out whether or not
+    /// it is showing (a clean background tab's hangs past the item, shown on hover).
+    func slotFrameForTesting(_ id: UUID) -> CGRect? {
+        layoutSubtreeIfNeeded()
+        guard let item = self.item(for: id) else { return nil }
+        return convert(item.slotFrame, from: item)
+    }
+
+    /// The first name's line in the row's own coordinates: the y of the middle of a capital,
+    /// read off the label's own font, where the eye places the text. Nil with no names.
+    var nameLineForTesting: CGFloat? {
+        layoutSubtreeIfNeeded()
+        guard let first = names.first, let y = first.capCentreInLabel else { return nil }
+        return convert(CGPoint(x: 0, y: y), from: first.labelView).y
+    }
+
+    /// The first name's label frame in the row's own coordinates; nil while the names are
+    /// scrolled, when the first one is not where the row starts.
+    var firstLabelFrameForTesting: CGRect? {
+        layoutSubtreeIfNeeded()
+        guard let first = names.first, scroll.documentVisibleRect.minX < 0.5 else { return nil }
+        return convert(first.labelView.bounds, from: first.labelView)
+    }
+
+    /// Show tab `id` as the pointer would leave it resting on it (hover × and tone), for the
+    /// gallery; the next rebuild clears it.
+    func setHoverForTesting(_ id: UUID) {
+        item(for: id)?.setHoveringForTesting()
+    }
+
+    /// The part of the names' content the clip shows, in the row's own coordinates.
+    var visibleNamesFrameForTesting: CGRect {
+        convert(scroll.documentVisibleRect, from: content)
+    }
+
+    /// Every view in the row whose layout Auto Layout could not pin down: each one is a
+    /// layout the solver may resolve differently on the next pass.
+    var ambiguousViewsForTesting: [NSView] {
+        layoutSubtreeIfNeeded()
+        var found: [NSView] = []
+        func walk(_ view: NSView) {
+            if view.hasAmbiguousLayout { found.append(view) }
+            view.subviews.forEach(walk)
+        }
+        walk(self)
+        return found
+    }
+
+    /// Where the names can draw: their scroll view's frame, in the row's own coordinates.
+    var namesClipFrameForTesting: CGRect { scroll.frame }
+
+    /// The "+" button's frame in the row's own coordinates.
+    var newTabButtonFrameForTesting: CGRect { newTabButton.frame }
 
     /// Whether the underline is mid-slide, for the motion contract.
     var underlineIsAnimatingForTesting: Bool { underlineSliding }
@@ -434,7 +527,7 @@ final class HeaderTabStrip: ThemedView {
         guard clipped != isOverflowShown else { return }
         isOverflowShown = clipped
         overflowButton.isHidden = !clipped
-        overflowWidthZero.isActive = !clipped
+        overflowWidth.constant = clipped ? ChalkMetrics.overflowButtonWidth : 0
     }
 
     private func updateFade() {
@@ -490,31 +583,69 @@ final class HeaderTabStrip: ThemedView {
         return names.first { $0.itemID == id }
     }
 
-    /// The pointer moved past the lift threshold on `id`: a reorder session begins.
+    /// The pointer moved past the lift threshold on `id`: a drag session begins.
     func beginReorder(_ id: UUID) {
         guard draggingID == nil else { return }
         draggingID = id
+        dragIsExternal = false
+        dragIsCancelled = false
         dragStartIndex = item(for: id).flatMap { stack.arrangedSubviews.firstIndex(of: $0) }
         item(for: id)?.alphaValue = 0.25
+        dragCoordinator?.tabDragBegan(from: self)
     }
 
     /// The pointer moved to `x` (this view's coordinates) mid-session.
     func reorderMoved(toX x: CGFloat) {
-        guard draggingID != nil else { return }
+        guard draggingID != nil, !dragIsCancelled else { return }
         walkItem(probeX: content.convert(CGPoint(x: x, y: 0), from: self).x)
         autoscroll(x: x)
     }
 
-    /// The pointer went up. A session that ended in its starting slot is a
-    /// click: the item selects. One that moved commits `onMove`.
+    /// The pointer moved to `windowPoint` mid-session. Over this row it reorders; anywhere else
+    /// the coordinator decides, and the item waits in its starting slot.
+    func dragMoved(toWindowPoint windowPoint: NSPoint) {
+        guard let id = draggingID, !dragIsCancelled else { return }
+        let external = dragCoordinator?.tabDrag(id, from: self, movedTo: windowPoint) ?? false
+        if external {
+            if !dragIsExternal { returnDraggedItemToStart() }
+            dragIsExternal = true
+            return
+        }
+        dragIsExternal = false
+        reorderMoved(toX: convert(windowPoint, from: nil).x)
+    }
+
+    /// Escape mid-drag: everything goes back and the drop does nothing.
+    func cancelDrag() {
+        guard draggingID != nil, !dragIsCancelled else { return }
+        dragIsCancelled = true
+        returnDraggedItemToStart()
+    }
+
+    private func returnDraggedItemToStart() {
+        guard let name = item(for: draggingID), let start = dragStartIndex,
+              stack.arrangedSubviews.firstIndex(of: name) != start else { return }
+        stack.removeArrangedSubview(name)
+        stack.insertArrangedSubview(name, at: min(start, stack.arrangedSubviews.count))
+        stack.layoutSubtreeIfNeeded()
+    }
+
+    /// The pointer went up. A drop the coordinator takes (another row, the editor) is its commit; otherwise a session that ended in its starting slot is a click: the
+    /// item selects. One that moved commits `onMove`. A cancelled session does nothing.
     func endReorder() {
         guard let id = draggingID else { return }
+        let cancelled = dragIsCancelled
+        let external = dragIsExternal
         let startIndex = dragStartIndex
         let endIndex = item(for: id).flatMap { stack.arrangedSubviews.firstIndex(of: $0) }
         item(for: id)?.alphaValue = 1
         draggingID = nil
         dragStartIndex = nil
-        if let endIndex, endIndex != startIndex {
+        dragIsExternal = false
+        dragIsCancelled = false
+        // Before any commit: the coordinator clears its indicators either way.
+        let taken = dragCoordinator?.tabDragEnded(id, committing: external && !cancelled) ?? false
+        if !taken, !cancelled, let endIndex, endIndex != startIndex {
             onMove?(id, endIndex)
         }
         if pendingItems != nil {
@@ -525,7 +656,34 @@ final class HeaderTabStrip: ThemedView {
         }
         // After the rebuild: the select round-trips through the host, which
         // pushes a fresh model back into update().
-        if endIndex == startIndex { onSelect?(id) }
+        if !taken, !cancelled, endIndex == startIndex { onSelect?(id) }
+    }
+
+    /// A tab from another row hovers at `windowPoint` (anywhere in this row's region): show where
+    /// it would land and return that position.
+    func showInsertion(atWindowPoint windowPoint: NSPoint) -> Int? {
+        layoutSubtreeIfNeeded()
+        let local = convert(windowPoint, from: nil)
+        let probe = content.convert(local, from: self).x
+        let arranged = stack.arrangedSubviews
+        let index = TabStripPolicy.insertionIndex(probeX: probe, midXs: arranged.map(\.frame.midX))
+        let x: CGFloat
+        if arranged.isEmpty {
+            x = 0
+        } else if index < arranged.count {
+            x = arranged[index].frame.minX - ChalkMetrics.tabGap / 2
+        } else {
+            x = arranged[arranged.count - 1].frame.maxX + ChalkMetrics.tabGap / 2
+        }
+        let height = ChalkMetrics.tabFontSize + 6
+        insertionMarker.frame = CGRect(x: max(0, x - 1), y: (content.bounds.height - height) / 2,
+                                       width: 2, height: height)
+        insertionMarker.isHidden = false
+        return index
+    }
+
+    func hideInsertion() {
+        insertionMarker.isHidden = true
     }
 
     /// Move the dimmed source item through the arranged row as the pointer
@@ -626,6 +784,22 @@ private final class HeaderTabName: FlippedView {
     private let slotDotView = FlippedView()
     private let slotCloseIcon = NSImageView()
     private let slotButton = FlippedView()
+    #if DEBUG
+    func setHoveringForTesting() {
+        hovering = true
+        applyStyle()
+    }
+    var slotFrame: CGRect { slotButton.frame }
+    var labelView: NSView { label }
+    /// The middle of a capital, in the label's flipped coordinates: the text is drawn from the
+    /// top with its first baseline one ascender down.
+    var capCentreInLabel: CGFloat? {
+        guard label.attributedText.length > 0,
+              let font = label.attributedText.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        else { return nil }
+        return font.ascender - font.capHeight / 2
+    }
+    #endif
     private var hovering = false
     private var slotHovering = false
     private var trackingArea: NSTrackingArea?
@@ -703,7 +877,7 @@ private final class HeaderTabName: FlippedView {
             size: ChalkMetrics.tabFontSize,
             weight: item.isActive ? .medium : .regular,
             oblique: TabStripPolicy.isOblique(isActive: item.isActive, isPreview: item.isPreview))
-        let shown = item.isActive || item.isShownInSplit
+        let shown = item.isActive
         let pathColor: NSColor = shown ? .chalkTabPathActive : .chalkTabPathInactive
         let nameColor: NSColor = shown || hovering
             ? .chalkTabLabelActive : .chalkTabLabelInactive
@@ -724,7 +898,7 @@ private final class HeaderTabName: FlippedView {
     }
 
     /// One × for every chip: the row is rebuilt on each model change.
-    private static let closeGlyph = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab")?
+    fileprivate static let closeGlyph = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab")?
         .withSymbolConfiguration(.init(pointSize: ChalkMetrics.closeGlyphSize, weight: .semibold))
 
     /// The slot: dot OR × per TabStripPolicy.slotContent, cross-faded on slot
@@ -808,13 +982,15 @@ private final class HeaderTabName: FlippedView {
     override func mouseDragged(with event: NSEvent) {
         guard let origin = pressOrigin, let strip else { return }
         let local = convert(event.locationInWindow, from: nil)
-        if !lifted, abs(local.x - origin.x) > 4 {
+        if !lifted, hypot(local.x - origin.x, local.y - origin.y) > 4 {
             lifted = true
             alphaValue = 1
             strip.beginReorder(itemID)
         }
+        // AppKit keeps sending the drag to the view that took the mouse-down, wherever the
+        // pointer goes, so the web views under it never see this gesture.
         if lifted {
-            strip.reorderMoved(toX: strip.convert(event.locationInWindow, from: nil).x)
+            strip.dragMoved(toWindowPoint: event.locationInWindow)
         }
     }
 
@@ -840,9 +1016,9 @@ private final class HeaderTabName: FlippedView {
                 return
             }
         }
-        // ⌥-click: beside the focused document rather than in its place.
-        if event.modifierFlags.contains(.option), !isActiveItem, let open = strip.onOpenInSplit {
-            open(itemID)
+        // ⌥-click: into the group to the right (VS Code's open to the side).
+        if event.modifierFlags.contains(.option), let move = strip.onMoveToNeighborGroup {
+            move(itemID, true)
             return
         }
         strip.onSelect?(itemID)
@@ -862,14 +1038,34 @@ private final class HeaderTabName: FlippedView {
         }
         close.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
         menu.addItem(close)
-        if !item.isActive && !item.isShownInSplit {
-            let split = MenuActionItem(title: "Open in Split") { [weak self] in
+        guard let strip else { return menu }
+        menu.addItem(.separator())
+        if strip.hasLeadingGroup {
+            let left = MenuActionItem(title: "Move to Left Group") { [weak self] in
                 guard let self else { return }
-                self.strip?.onOpenInSplit?(self.itemID)
+                self.strip?.onMoveToNeighborGroup?(self.itemID, false)
             }
-            split.image = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: nil)
-            menu.addItem(split)
+            left.image = NSImage(systemSymbolName: "arrow.left.square", accessibilityDescription: nil)
+            menu.addItem(left)
         }
+        // With no group to the right, the move makes one: that needs a tab to stay behind.
+        if strip.hasTrailingGroup || strip.tabCount > 1 {
+            let title = strip.hasTrailingGroup ? "Move to Right Group" : "Split Right"
+            let right = MenuActionItem(title: title) { [weak self] in
+                guard let self else { return }
+                self.strip?.onMoveToNeighborGroup?(self.itemID, true)
+            }
+            right.image = NSImage(systemSymbolName: strip.hasTrailingGroup ? "arrow.right.square"
+                                  : "rectangle.split.2x1", accessibilityDescription: nil)
+            menu.addItem(right)
+        }
+        if strip.hasLeadingGroup || strip.hasTrailingGroup {
+            menu.addItem(.separator())
+            menu.addItem(MenuActionItem(title: "Close Group") { [weak self] in
+                self?.strip?.onCloseGroup?()
+            })
+        }
+        if menu.items.last?.isSeparatorItem == true { menu.removeItem(at: menu.items.count - 1) }
         return menu
     }
 
@@ -883,7 +1079,10 @@ private final class HeaderTabName: FlippedView {
     /// Label tone and slot alphas for the current state. Colour/alpha only,
     /// never a size change.
     private func applyStyle() {
-        label.attributedText = hovering ? hoverTitle : restTitle
+        // The parked slot hangs outside the item's bounds, so reaching for its ×
+        // exits the item's tracking area: either hover keeps the slot engaged.
+        let engaged = hovering || slotHovering
+        label.attributedText = engaged ? hoverTitle : restTitle
         slotDotView.chalkSetLayerBackground(isActiveItem ? .chalkTabDirtyDotActive : .chalkTabDirtyDotInactive,
                                             under: effectiveAppearance)
         switch TabStripPolicy.slotContent(isDirty: isDirtyItem) {
@@ -894,11 +1093,11 @@ private final class HeaderTabName: FlippedView {
             // The × rests visible only on the active tab; a background tab's
             // appears on hover.
             slotDotView.alphaValue = 0
-            slotCloseIcon.alphaValue = isActiveItem || hovering ? 1 : 0
+            slotCloseIcon.alphaValue = isActiveItem || engaged ? 1 : 0
         }
         // A background tab's whole slot lives in the gap and appears on hover.
         if !TabStripPolicy.slotIsReserved(isActive: isActiveItem, isDirty: isDirtyItem) {
-            slotButton.alphaValue = hovering ? 1 : 0
+            slotButton.alphaValue = engaged ? 1 : 0
         }
         slotCloseIcon.contentTintColor = slotHovering
             ? .chalkTabLabelActive

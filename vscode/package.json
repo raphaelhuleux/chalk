@@ -207,6 +207,11 @@
           ],
           "default": "preview",
           "description": "The view mode a Chalk editor opens in. Cmd+: (Ctrl+: elsewhere) cycles the current editor without changing this default."
+        },
+        "chalk.snippetHints": {
+          "type": "boolean",
+          "default": false,
+          "description": "While typing math, list the snippets that match what you typed, with their output and shortcut. Tab inserts the highlighted one, Up/Down choose, Escape hides the list."
         }
       }
     }

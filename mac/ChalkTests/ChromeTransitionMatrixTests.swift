@@ -26,7 +26,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
     override func setUp() {
         super.setUp()
         host = ChromeMatrixHost()
-        host.seedsTwoTabs = true
+        host.seedsGroupTabs = true
         Preferences.sidebarWidth = Self.pinnedSidebarWidth
     }
 
@@ -45,20 +45,22 @@ final class ChromeTransitionMatrixTests: XCTestCase {
 
     private func freshLayout(for state: UIState) -> ChromeLayout {
         if let cached = Self.freshLayouts[state.id] { return cached }
-        let root = host.makeRoot(for: state)
-        root.motionPolicyForTesting = .instant
-        // The oracle gets the SAME settle as the paths it will be compared
-        // against, and a stricter one than the resting-state suites need: this
-        // layout is cached for the whole run, so a cell captured one turn early
-        // is every later comparison against that cell.
-        host.settleToFixedPoint(root, state: state, budget: 2.0, stableTurns: 3) { root in
-            root.isSidebarVisible == (state.sidebar == .shown)
-                && root.trailingPanelStateForTesting == state.outline
-                && root.editor.isSplit == (state.split == .split)
+        return autoreleasepool {
+            let root = host.makeRoot(for: state)
+            root.motionPolicyForTesting = .instant
+            // The oracle gets the SAME settle as the paths it will be compared
+            // against, and a stricter one than the resting-state suites need: this
+            // layout is cached for the whole run, so a cell captured one turn early
+            // is every later comparison against that cell.
+            host.settleToFixedPoint(root, state: state, budget: 2.0, stableTurns: 3) { root in
+                root.isSidebarVisible == (state.sidebar == .shown)
+                    && root.trailingPanelStateForTesting == state.outline
+                    && (root.editor.groupCount > 1) == (state.groups == .multiple)
+            }
+            let layout = root.chromeLayout(for: state)
+            Self.freshLayouts[state.id] = layout
+            return layout
         }
-        let layout = root.chromeLayout(for: state)
-        Self.freshLayouts[state.id] = layout
-        return layout
     }
 
     /// Fill the whole cache BEFORE hosting a root under test: building a
@@ -134,7 +136,20 @@ final class ChromeTransitionMatrixTests: XCTestCase {
                 rect("editorPanes[\(index)]", a, b)
             }
         }
-        optRect("splitDivider", reached.splitDivider, fresh.splitDivider)
+        if reached.groupDividers.count != fresh.groupDividers.count {
+            out.append("groupDividers: reached=\(reached.groupDividers) fresh=\(fresh.groupDividers)")
+        } else {
+            for (index, (a, b)) in zip(reached.groupDividers, fresh.groupDividers).enumerated() {
+                rect("groupDividers[\(index)]", a, b)
+            }
+        }
+        if reached.groupStrips.count != fresh.groupStrips.count {
+            out.append("groupStrips: reached=\(reached.groupStrips) fresh=\(fresh.groupStrips)")
+        } else {
+            for (index, (a, b)) in zip(reached.groupStrips, fresh.groupStrips).enumerated() {
+                rect("groupStrips[\(index)]", a, b)
+            }
+        }
         if reached.outlinePanelIsOverlay != fresh.outlinePanelIsOverlay {
             out.append("outlinePanelIsOverlay: reached=\(reached.outlinePanelIsOverlay) "
                        + "fresh=\(fresh.outlinePanelIsOverlay)")
@@ -165,7 +180,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         host.settle(root, state: state, budget: 2.0, stableTurns: 3) { root in
             root.isSidebarVisible == (expected.sidebar == .shown)
                 && root.trailingPanelStateForTesting == expected.outline
-                && root.editor.isSplit == (expected.split == .split)
+                && (root.editor.groupCount > 1) == (expected.groups == .multiple)
         }
 
         var complaints: [String] = []
@@ -182,8 +197,8 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         if slot != expected.outline {
             complaints.append("\(path): trailing slot \(slot.rawValue), expected \(expected.outline.rawValue)")
         }
-        if root.editor.isSplit != (expected.split == .split) {
-            complaints.append("\(path): split \(root.editor.isSplit), expected \(expected.split.rawValue)")
+        if (root.editor.groupCount > 1) != (expected.groups == .multiple) {
+            complaints.append("\(path): \(root.editor.groupCount) groups, expected \(expected.groups.rawValue)")
         }
 
         for invariant in ChromeInvariant.catalogue where invariant.isEvidence(about: layout) {
@@ -205,7 +220,7 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         case 0: return .sidebar(state.sidebar == .hidden)
         case 1: return .window(state.window == .windowed ? .fullscreen : .windowed)
         case 2: return .zen(state.mode == .normal)
-        case 3: return .split(state.split == .single)
+        case 3: return .groups(state.groups == .single)
         default: return .outline(state.outline == .hidden)
         }
     }
@@ -240,14 +255,16 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         var complaints: [String] = []
         for start in startStates {
             for dimension in 0..<Self.dimensions {
-                let root = makeStartRoot(start)
-                var state = start
-                let first = flip(dimension, of: state)
-                complaints += applyAndAudit(first, on: root, state: &state,
-                                            path: "\(start.id) -> \(first)")
-                let inverse = flip(dimension, of: state)
-                complaints += applyAndAudit(inverse, on: root, state: &state,
-                                            path: "\(start.id) -> \(first) -> \(inverse)")
+                autoreleasepool {
+                    let root = makeStartRoot(start)
+                    var state = start
+                    let first = flip(dimension, of: state)
+                    complaints += applyAndAudit(first, on: root, state: &state,
+                                                path: "\(start.id) -> \(first)")
+                    let inverse = flip(dimension, of: state)
+                    complaints += applyAndAudit(inverse, on: root, state: &state,
+                                                path: "\(start.id) -> \(first) -> \(inverse)")
+                }
             }
         }
         XCTAssertTrue(complaints.isEmpty,
@@ -261,15 +278,17 @@ final class ChromeTransitionMatrixTests: XCTestCase {
         for start in startStates {
             for a in 0..<Self.dimensions {
                 for b in 0..<Self.dimensions where a != b {
-                    let root = makeStartRoot(start)
-                    var state = start
-                    var path = start.id
-                    // The pair, then the inverse pair in reverse order; each
-                    // flip is computed against the state it actually finds.
-                    for dimension in [a, b, b, a] {
-                        let step = flip(dimension, of: state)
-                        path += " -> \(step)"
-                        complaints += applyAndAudit(step, on: root, state: &state, path: path)
+                    autoreleasepool {
+                        let root = makeStartRoot(start)
+                        var state = start
+                        var path = start.id
+                        // The pair, then the inverse pair in reverse order; each
+                        // flip is computed against the state it actually finds.
+                        for dimension in [a, b, b, a] {
+                            let step = flip(dimension, of: state)
+                            path += " -> \(step)"
+                            complaints += applyAndAudit(step, on: root, state: &state, path: path)
+                        }
                     }
                 }
             }
@@ -280,6 +299,19 @@ final class ChromeTransitionMatrixTests: XCTestCase {
     }
 
     // MARK: - Named regressions
+
+    /// The matrix builds hundreds of roots: one that kept its web views ran the Mac out of
+    /// WebContent processes before the suite could finish.
+    func testAReplacedRootReleasesItsWebViews() {
+        let state = startStates[0]
+        autoreleasepool { _ = host.makeRoot(for: state) }
+        let live = WebEditorSurface.liveCountForTesting
+        for _ in 0..<3 {
+            autoreleasepool { _ = host.makeRoot(for: state) }
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        }
+        XCTAssertLessThanOrEqual(WebEditorSurface.liveCountForTesting, live)
+    }
 
     /// Seed the Library with enough real rows to scroll, without touching the
     /// owner's LocationStore.

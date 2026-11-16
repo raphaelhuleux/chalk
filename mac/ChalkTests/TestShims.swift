@@ -1,18 +1,15 @@
 import AppKit
 import ChalkKit
+@testable import Chalk
 
 /// The hosted-test window, and the short names the suites read it through
-/// (`isHidden`, `rootViewController`, `layoutIfNeeded`). The window is a real
-/// titled, full-size-content window like the app's; `isReleasedWhenClosed`
-/// is off because the tests hold the reference.
+/// (`isHidden`, `rootViewController`, `layoutIfNeeded`). The window is the app's own
+/// (`EditorWindowController.makeChromeWindow`): same tall titlebar, same traffic lights, so
+/// chrome geometry measured here is the shipped geometry. `isReleasedWhenClosed` is off
+/// because the tests hold the reference.
 extension NSWindow {
     static func hostedForTesting(frame: CGRect) -> NSWindow {
-        let window = NSWindow(
-            contentRect: frame,
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
-            backing: .buffered, defer: false)
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
+        let window = EditorWindowController.makeChromeWindow(contentRect: frame)
         window.isReleasedWhenClosed = false
         window.animationBehavior = .none
         return window

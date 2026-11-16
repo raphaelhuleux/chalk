@@ -31,13 +31,13 @@ final class SettingsRailTests: XCTestCase {
                        "an empty catalog collapses the whole LaTeX Shortcuts rail")
     }
 
-    /// The General pane's Editor section: seven rows, each rendering its label.
+    /// The General pane's Editor section: eight rows, each rendering its label.
     func testEditorSectionListsEverySetting() {
         let vc = GeneralSettingsViewController()
         XCTAssertEqual(vc.rowTitlesForTesting(section: 1),
                        ["Text Size", "Text Width", "Line Spacing", "Alignment",
-                        "Color Markdown Headings", "New Documents", "View Mode"])
-        XCTAssertEqual(vc.rowTitlesForTesting(section: 0), ["Appearance", "Theme", "Auto-hide Tabs"])
+                        "Color Markdown Headings", "New Documents", "View Mode", "Shortcut Hints"])
+        XCTAssertEqual(vc.rowTitlesForTesting(section: 0), ["Appearance", "Theme", "Auto-hide Tabs", "Mark Outside Writes"])
     }
 
     func testRailOffersGeneralAndEveryCategory() {

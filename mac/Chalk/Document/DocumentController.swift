@@ -126,8 +126,17 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         document != nil && conflictWatchedDocument === document
     }
 
-    init(surface: EditorSurface) {
+    private let provenance: ProvenanceStore
+    /// This document's AI marks as last pushed by the editor; what a re-seed restores.
+    private var aiRecord: AiMarkRecord?
+    /// Set when a file loads with a stored record: the first seed may find the disk moved on from
+    /// it, and that difference is an outside write. No later seed qualifies: a crash re-seed's
+    /// difference from the record is the user's own typing.
+    private var awaitsDiskCatchUp = false
+
+    init(surface: EditorSurface, provenance: ProvenanceStore = .shared) {
         self.surface = surface
+        self.provenance = provenance
         super.init()
         surface.delegate = self
     }
@@ -143,6 +152,8 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
         isDraft = true
         self.language = language
         buffer = DocumentBuffer(initial: "")
+        aiRecord = nil
+        awaitsDiskCatchUp = false
         bufferSourceURL = nil // a draft has no file yet
         loadTargetURL = nil
         if !recoveredText.isEmpty {
@@ -193,6 +204,8 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     private func adoptLoaded(_ doc: ChalkDocument) {
         buffer = DocumentBuffer(initial: doc.text)
         bufferSourceURL = doc.fileURL
+        aiRecord = provenance.load(path: doc.fileURL.fileIdentity)
+        awaitsDiskCatchUp = aiRecord != nil
         if let recovered = unappliedRecoveredText {
             unappliedRecoveredText = nil
             // Recovered edits layer on the disk baseline as a pending edit (tab opens dirty).
@@ -317,7 +330,12 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
                 }
                 // pushText, not `surface.update`: a web process killed in the background and not yet
                 // re-seeded would drop an `update`.
-                if merged != mine { self.pushText(merged, language: self.language) }
+                if merged != mine {
+                    // Another window's save takes this path too, and that text is the user's.
+                    let outside = Preferences.markOutsideWrites
+                        && !OwnSaves.shared.contains(text, path: doc.fileURL.fileIdentity)
+                    self.pushText(merged, language: self.language, origin: outside ? .external : nil)
+                }
                 if self.buffer.isDirty != hasLocalEdits {
                     self.delegate?.documentController(self, didChangeDirty: self.buffer.isDirty)
                 }
@@ -391,6 +409,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
             delegate?.documentController(self, hasSaveConflictAt: doc.fileURL, backupAt: backup)
         }
         doc.text = text
+        OwnSaves.shared.record(text, path: doc.fileURL.fileIdentity)
         doc.save { [weak self] ok in
             guard let self else { return }
             self.saveInFlight = false
@@ -555,6 +574,10 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     /// so closing the old handle never rewrites the vacated path. A rename that flips
     /// `.md`/`.tex` re-inits the surface from the live buffer, resetting CM6 undo history.
     func rebind(to newURL: URL) {
+        if let oldPath = document?.fileURL.fileIdentity {
+            provenance.move(from: oldPath, to: newURL.fileIdentity)
+        }
+        aiRecord?.path = newURL.fileIdentity
         document?.close()
         let doc = ChalkDocument(fileURL: newURL)
         document = doc
@@ -627,7 +650,7 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
                 return
             }
             self.adoptLoaded(doc)
-            self.pushText(self.buffer.currentText, language: doc.language)
+            self.pushLoadedText(self.buffer.currentText, language: doc.language)
             self.delegate?.documentController(self, didChangeDirty: self.buffer.isDirty)
         }
     }
@@ -654,25 +677,70 @@ final class DocumentController: NSObject, EditorSurfaceDelegate {
     /// Send a fresh `init`, rebuilding the CM6 view in `language` mode. No editor config or hsnips: the
     /// surface sends config on `ready`, and the page keeps both across re-inits.
     private func reinitializeSurface(text: String, language: EditorLanguage) {
-        surface.initialize(text: text, language: language, editorConfig: nil)
+        // Marks index the text they were recorded with, so that text goes in first.
+        surface.initialize(text: aiRecord?.text ?? text, language: language, editorConfig: nil,
+                           aiMarks: aiRecord?.marks)
         seededLanguage = language
         // Every init path funnels through here, so `hasSeeded` is the one signal that a bare `update` is
         // safe (the surface's queue keeps FIFO order behind this init).
         hasSeeded = true
+        catchUpFromRecord(to: text)
+    }
+
+    /// Carry the editor from the record's text to `text`, mapping its marks. On a fresh load a clean
+    /// buffer is the disk, so what differs was written while Chalk was closed.
+    private func catchUpFromRecord(to text: String) {
+        let outside = awaitsDiskCatchUp && !buffer.isDirty && Preferences.markOutsideWrites
+        awaitsDiskCatchUp = false
+        guard let record = aiRecord, record.text != text else { return }
+        surface.update(text: text, origin: outside ? .external : nil, aiMarks: nil)
     }
 
     /// Send `init` unless this editor generation is seeded in the same language, else a minimal-diff
     /// `update`. An `update` to a viewless editor is silently dropped (a permanently empty tab), and CM6
     /// only switches tex/md mode on `init`.
-    private func pushText(_ text: String, language: EditorLanguage) {
+    private func pushText(_ text: String, language: EditorLanguage, origin: TextOrigin? = nil) {
         if !hasSeeded || language != seededLanguage {
             reinitializeSurface(text: text, language: language)
         } else {
-            surface.update(text: text)
+            surface.update(text: text, origin: origin, aiMarks: nil)
         }
     }
 
+    /// `pushText` for a file just loaded into a live editor: the previous file's marks must not map
+    /// onto it, so this always states the marks.
+    private func pushLoadedText(_ text: String, language: EditorLanguage) {
+        guard hasSeeded, language == seededLanguage else {
+            reinitializeSurface(text: text, language: language)
+            return
+        }
+        surface.update(text: aiRecord?.text ?? text, origin: nil, aiMarks: aiRecord?.marks ?? [])
+        catchUpFromRecord(to: text)
+    }
+
     // MARK: EditorSurfaceDelegate
+
+    func editor(_ surface: EditorSurface, didChangeAiMarks marks: [AiMark], text: String) {
+        // A push from before a tab reuse describes the previous file. The editor's text is LF.
+        let current = buffer.currentText
+        guard text == (current.contains("\r") ? Self.lineFeedNormalized(current) : current) else { return }
+        guard let path = document?.fileURL.fileIdentity else {
+            aiRecord = marks.isEmpty ? nil : AiMarkRecord(path: "", text: text, marks: marks)
+            return
+        }
+        if marks.isEmpty {
+            aiRecord = nil
+            provenance.remove(path: path)
+        } else {
+            let record = AiMarkRecord(path: path, text: text, marks: marks)
+            aiRecord = record
+            provenance.save(record)
+        }
+    }
+
+    private static func lineFeedNormalized(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    }
 
     func editorDidBecomeReady(_ surface: EditorSurface) {
         isReady = true

@@ -378,10 +378,13 @@ final class GeneralSettingsViewController: NSViewController {
         appearanceControl = appearance
         let theme = makeThemeMenu()
         let autoHide = makeSwitch(isOn: Preferences.autoHideChrome, action: #selector(autoHideChromeToggled))
+        let markWrites = makeSwitch(isOn: Preferences.markOutsideWrites, action: #selector(markOutsideWritesToggled))
         return [
             SettingsRowView(title: "Appearance", control: appearance),
             SettingsRowView(title: "Theme", control: theme),
             SettingsRowView(title: "Auto-hide Tabs", detail: "While scrolling", control: autoHide),
+            SettingsRowView(title: "Mark Outside Writes", detail: "Tint text from AI agents, git and other apps",
+                            control: markWrites),
         ]
     }
 
@@ -423,6 +426,10 @@ final class GeneralSettingsViewController: NSViewController {
     }
 
     /// Also broadcast: every window's chrome must hear it.
+    @objc private func markOutsideWritesToggled(_ toggle: NSSwitch) {
+        Preferences.markOutsideWrites = toggle.state == .on
+    }
+
     @objc private func autoHideChromeToggled(_ toggle: NSSwitch) {
         Preferences.autoHideChrome = toggle.state == .on
         NotificationCenter.default.post(name: Preferences.autoHideChromeDidChange, object: nil)
@@ -468,7 +475,15 @@ final class GeneralSettingsViewController: NSViewController {
             control: makeSegmented(titles: viewCases.map(\.title),
                                    selected: viewCases.firstIndex(of: Preferences.viewMode) ?? 0,
                                    action: #selector(viewModeChanged)))
-        return [font, measure, lineHeight, alignment, headings, newDocuments, viewMode]
+        let hints = SettingsRowView(
+            title: "Shortcut Hints", detail: "Suggest snippets while typing math",
+            control: makeSwitch(isOn: Preferences.showSnippetHints, action: #selector(snippetHintsToggled)))
+        return [font, measure, lineHeight, alignment, headings, newDocuments, viewMode, hints]
+    }
+
+    @objc private func snippetHintsToggled(_ toggle: NSSwitch) {
+        Preferences.showSnippetHints = toggle.state == .on
+        onChange?()
     }
 
     /// `onChange` is enough: the broadcast already reaches every window's editors.

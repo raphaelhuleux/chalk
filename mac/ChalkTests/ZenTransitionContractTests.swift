@@ -115,6 +115,23 @@ final class ZenTransitionContractTests: XCTestCase {
         XCTAssertFalse(root.isSidebarTransitionInFlightForTesting)
     }
 
+    /// Zen off inside zen-on's fade: the band must stay, not vanish when the stale fade lands
+    /// (docs/issues/2026-10-31-tabs-hide-without-scrolling.md).
+    func testZenOffInsideTheFadeLeavesTheBandOnScreen() throws {
+        try XCTSkipIf(TestAccessibility.isReduceMotionEnabled, "the race is on the animated lane")
+        let root = host.makeRoot(for: bandState)
+        injectFastSettle(on: root)
+        host.settleToFixedPoint(root, state: bandState)
+
+        root.applyTransitionForTesting(.zen(true))
+        XCTAssertFalse(root.isHeaderHiddenForTesting, "precondition: the fade is still running")
+        root.applyTransitionForTesting(.zen(false))
+        pumpUntilZenSettled(root)
+
+        XCTAssertFalse(root.isHeaderHiddenForTesting, "the stale fade-out hid the band outside zen")
+        XCTAssertFalse(root.isChromeAutoHiddenForTesting)
+    }
+
     // MARK: - Settled equality with fresh layouts
 
     func testAnimatedZenRoundTripLandsOnTheFreshLayouts() throws {

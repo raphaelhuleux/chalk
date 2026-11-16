@@ -26,13 +26,14 @@ import {
 } from '@codemirror/state';
 import { acceptCompletion, completionStatus, startCompletion } from '@codemirror/autocomplete';
 import { PROSE_FILTERS, type HSnippet } from './hsnips-parser';
+import { taboutTargetFacet } from './tabout';
 
 // ── Snippet data ────────────────────────────────────────────────────
 
 /** Replaces the loaded snippets at runtime. */
 export const setSnippets = StateEffect.define<HSnippet[]>();
 
-const snippetsField = StateField.define<HSnippet[]>({
+export const snippetsField = StateField.define<HSnippet[]>({
   create: () => [],
   update(snippets, tr) {
     for (const e of tr.effects) {
@@ -45,7 +46,7 @@ const snippetsField = StateField.define<HSnippet[]>({
 /** A facet so the static `hsnipsKeymap` can evaluate `math(context)`
  *  during manual Tab expansion. */
 type MathContextFn = (state: EditorState, pos: number) => boolean;
-const mathContextFacet = Facet.define<MathContextFn, MathContextFn>({
+export const mathContextFacet = Facet.define<MathContextFn, MathContextFn>({
   combine: (values) => values[0] ?? (() => false),
 });
 
@@ -74,9 +75,16 @@ interface SnippetSession {
   /** No placeholder tint: the field is the document itself (`mk`, `dm`, `;e`),
    *  so tinting it would only colour what the writer is typing. */
   quiet: boolean;
+  /** The snippet this one was expanded inside, resumed when this one ends,
+   *  so `//` then `sq` in the numerator still reaches the denominator. */
+  outer?: SnippetSession | null;
 }
 
+/** Replaces the whole chain of sessions (null ends them all). */
 const setSession = StateEffect.define<SnippetSession | null>();
+/** A fresh expansion: nests inside the live session when it landed in one of
+ *  its stops, else replaces it. Stops are in the new document's positions. */
+const startSession = StateEffect.define<SnippetSession>();
 
 /** Where the last expansion ended. The one place a `\\name` before a trigger is
  *  a finished command, so `;a` then `sr` still gives `\\alpha^{2}`. */
@@ -90,6 +98,12 @@ const expansionEndField = StateField.define<number | null>({
     return end === null ? null : tr.changes.mapPos(end, -1);
   },
 });
+
+/** Whether `tr` is a snippet expansion (typed trigger, Tab, or an applied
+ *  completion or hint). */
+export function isExpansion(tr: Transaction): boolean {
+  return tr.effects.some((e) => e.is(setExpansionEnd));
+}
 
 /** Tags the mirror filter's own echo so it doesn't re-fire on it. */
 const isMirrorEcho = Annotation.define<boolean>();
@@ -109,33 +123,71 @@ function uniqueIndices(stops: TabStop[]): number[] {
   return out;
 }
 
+function spanOf(stops: readonly TabStop[]): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const s of stops) {
+    if (s.from < min) min = s.from;
+    if (s.to > max) max = s.to;
+  }
+  return { min, max };
+}
+
+/** A deletion inside the snippet that no stop contains (undoing the
+ *  expansion, Backspace over a brace, typing over the whole thing): the stops
+ *  no longer describe the text, so Tab would land on stale positions. */
+function breaksSnippet(session: SnippetSession, tr: Transaction): boolean {
+  const { min, max } = spanOf(session.tabStops);
+  let broken = false;
+  tr.changes.iterChangedRanges((fromA, toA) => {
+    if (broken || toA === fromA || toA <= min || fromA >= max) return;
+    broken = !session.tabStops.some((s) => fromA >= s.from && toA <= s.to);
+  });
+  return broken;
+}
+
+/** Map a chain of sessions through `tr`, dropping each one the edit broke or
+ *  the caret left. */
+function mapSession(session: SnippetSession, tr: Transaction): SnippetSession | null {
+  const outer = session.outer ? mapSession(session.outer, tr) : null;
+  if (tr.docChanged && breaksSnippet(session, tr)) return outer;
+  // The active group absorbs insertions at its edges (typing into an empty
+  // stop fills it); other stops exclude them, so `$1$2` doesn't hand $1's
+  // text to $2.
+  const mapped = session.tabStops.map((ts) => {
+    const inclusive = ts.index === session.currentIndex;
+    const from = tr.changes.mapPos(ts.from, inclusive ? -1 : 1);
+    const to = tr.changes.mapPos(ts.to, inclusive ? 1 : -1);
+    return { ...ts, from, to: Math.max(from, to) };
+  });
+  // End once the cursor leaves the span of all stops, or the stale ranges
+  // drift over whatever text now occupies them.
+  const { min, max } = spanOf(mapped);
+  const head = tr.newSelection.main.head;
+  if (head < min || head > max) return outer;
+  return { ...session, tabStops: mapped, outer };
+}
+
+/** `inner` inside a stop of `outer` nests, with that stop made current. */
+function nestSession(inner: SnippetSession, outer: SnippetSession | null): SnippetSession {
+  if (!outer) return inner;
+  const { min, max } = spanOf(inner.tabStops);
+  const host = outer.tabStops.find((s) => s.from <= min && max <= s.to);
+  if (!host) return inner;
+  return { ...inner, outer: { ...outer, currentIndex: host.index } };
+}
+
 const sessionField = StateField.define<SnippetSession | null>({
   create: () => null,
   update(session, tr) {
     for (const e of tr.effects) {
       if (e.is(setSession)) return e.value;
     }
-    if (!session) return null;
-    // The active group absorbs insertions at its edges (typing into an empty
-    // stop fills it); other stops exclude them, so `$1$2` doesn't hand $1's
-    // text to $2.
-    const mapped = session.tabStops.map((ts) => {
-      const inclusive = ts.index === session.currentIndex;
-      const from = tr.changes.mapPos(ts.from, inclusive ? -1 : 1);
-      const to = tr.changes.mapPos(ts.to, inclusive ? 1 : -1);
-      return { ...ts, from, to: Math.max(from, to) };
-    });
-    // End the session once the cursor leaves the span of all stops, or the
-    // stale ranges drift over whatever text now occupies them.
-    let min = Infinity;
-    let max = -Infinity;
-    for (const s of mapped) {
-      if (s.from < min) min = s.from;
-      if (s.to > max) max = s.to;
+    const mapped = session ? mapSession(session, tr) : null;
+    for (const e of tr.effects) {
+      if (e.is(startSession)) return nestSession(e.value, mapped);
     }
-    const head = tr.newSelection.main.head;
-    if (head < min || head > max) return null;
-    return { ...session, tabStops: mapped };
+    return mapped;
   },
 });
 
@@ -225,7 +277,7 @@ export function __resetContextEvalCount(): void {
 
 const loggedUnknownContexts = new Set<string>();
 
-function passesContextFilter(
+export function passesContextFilter(
   snippet: HSnippet,
   state: EditorState,
   pos: number,
@@ -275,7 +327,7 @@ const slowSnippets = new WeakSet<HSnippet>();
 const SLOW_EXEC_MS = 100;
 
 /** Arguments that name things: `pmat` must not expand in `\\begin{pmatrix}`. */
-const NAME_ARGUMENT_RE =
+export const NAME_ARGUMENT_RE =
   /\\(?:begin|end|label|ref|eqref|[cC]ref|[a-zA-Z]*cite[a-zA-Z]*|input|include|includegraphics(?:\[[^\]]*\])?|usepackage)\{[^{}]*$/;
 
 /**
@@ -398,7 +450,7 @@ function expandGrids(body: string, groups: string[]): string {
   });
 }
 
-function processBody(
+export function processBody(
   body: string,
   insertPos: number,
   groups: string[],
@@ -574,13 +626,7 @@ function insertProcessedBody(
   const onlyFinalStop = indices.length === 1 && indices[0] === 0;
 
   if (tabStops.length > 0 && !onlyFinalStop) {
-    effects.push(
-      setSession.of({
-        tabStops,
-        currentIndex: tabStops[0].index,
-        quiet,
-      }),
-    );
+    effects.push(startSession.of({ tabStops, currentIndex: tabStops[0].index, quiet }));
   }
 
   const firstLeader = tabStops.length > 0 ? tabStops[0] : null;
@@ -604,8 +650,20 @@ function insertProcessedBody(
 
 function autoExpandFor(
   isInMathContext: (state: EditorState, pos: number) => boolean,
-) {
-  return EditorView.updateListener.of((update: ViewUpdate) => {
+): Extension {
+  /** Views where an open composition typed what may end a trigger. */
+  const deferred = new WeakSet<EditorView>();
+
+  const tryExpand = (view: EditorView): void => {
+    const snippets = view.state.field(snippetsField);
+    if (snippets.length === 0) return;
+    const match = findMatch(view.state, snippets, isInMathContext);
+    // Synchronous (not rAF) so it shares the keystroke's history group;
+    // `isExpanding` blocks re-entry.
+    if (match) expandSnippet(view, match);
+  };
+
+  const onChange = EditorView.updateListener.of((update: ViewUpdate) => {
     if (!update.docChanged) return;
     if (isExpanding) return;
     // Host-sync updates (Transaction.remote) are not keystrokes.
@@ -623,18 +681,29 @@ function autoExpandFor(
 
     if (!isKeystroke) return;
 
-    const snippets = update.state.field(snippetsField);
-    if (snippets.length === 0) {
+    // Text an open composition wrote still belongs to the input method, which
+    // commits it again at the caret when the composition ends; check then
+    // (docs/issues/2026-11-06-azerty-dead-key-doubles-superscript.md).
+    if (update.view.compositionStarted) {
+      deferred.add(update.view);
       return;
     }
-
-    const match = findMatch(update.state, snippets, isInMathContext);
-    if (match) {
-      // Synchronous (not rAF) so it shares the keystroke's history group;
-      // `isExpanding` blocks re-entry.
-      expandSnippet(update.view, match);
-    }
+    tryExpand(update.view);
   });
+
+  const onCompositionEnd = EditorView.domEventHandlers({
+    compositionend(_event, view) {
+      if (!deferred.delete(view)) return false;
+      // After CM6's own compositionend bookkeeping, and before the key that
+      // ended the composition types its own character.
+      queueMicrotask(() => {
+        if (!view.compositionStarted && !isExpanding) tryExpand(view);
+      });
+      return false;
+    },
+  });
+
+  return [onChange, onCompositionEnd];
 }
 
 // ── Tab / Shift-Tab keymap ──────────────────────────────────────────
@@ -662,55 +731,90 @@ function manualExpand(view: EditorView): boolean {
   return expandSnippet(view, match);
 }
 
+interface Step {
+  /** Where the caret goes; null leaves it. */
+  stop: TabStop | null;
+  session: SnippetSession | null;
+}
+
+/** One Tab: the next stop, or past the last one the exit ($0), handing back
+ *  to the outer snippet. $0 is the exit, not a field: a live session there
+ *  would absorb everything typed next into the stop and highlight it. */
+function stepForward(session: SnippetSession): Step {
+  const outer = session.outer ?? null;
+  const indices = uniqueIndices(session.tabStops);
+  const curPos = indices.indexOf(session.currentIndex);
+  if (curPos !== -1 && curPos < indices.length - 1) {
+    const nextIdx = indices[curPos + 1];
+    return {
+      stop: findGroupLeader(session.tabStops, nextIdx),
+      session: nextIdx === 0 ? outer : { ...session, currentIndex: nextIdx },
+    };
+  }
+  const zero = findGroupLeader(session.tabStops, 0);
+  if (zero) return { stop: zero, session: outer };
+  // No exit of its own: this Tab moves the outer snippet on.
+  return outer ? stepForward(outer) : { stop: null, session: null };
+}
+
+/** One Shift-Tab: the previous stop, or from the first one the outer
+ *  snippet's previous stop. */
+function stepBack(session: SnippetSession): Step | null {
+  const indices = uniqueIndices(session.tabStops);
+  const curPos = indices.indexOf(session.currentIndex);
+  if (curPos > 0) {
+    const prevIdx = indices[curPos - 1];
+    return {
+      stop: findGroupLeader(session.tabStops, prevIdx),
+      session: { ...session, currentIndex: prevIdx },
+    };
+  }
+  return session.outer ? stepBack(session.outer) : null;
+}
+
+function applyStep(view: EditorView, step: Step): void {
+  view.dispatch({
+    effects: [setSession.of(step.session)],
+    ...(step.stop
+      ? { selection: { anchor: step.stop.from, head: step.stop.to }, scrollIntoView: true }
+      : {}),
+  });
+  offerCompletionsAtStop(view);
+}
+
+/** A scope the caret can tab out of without leaving the current stop: `]` in
+ *  `[x_{t}]` typed into `dm`'s body. That Tab is tabout's, or the next stop
+ *  (`dm`'s exit past `$$`) would skip every closer still ahead. */
+function exitInsideStop(state: EditorState, session: SnippetSession): boolean {
+  const target = state.facet(taboutTargetFacet)(state);
+  if (target === null) return false;
+  const head = state.selection.main.head;
+  return session.tabStops.some(
+    (s) => s.index === session.currentIndex && s.from <= head && target <= s.to,
+  );
+}
+
 function nextTabStop(view: EditorView): boolean {
   const session = view.state.field(sessionField);
   if (!session) return manualExpand(view);
   // An open popup takes Tab first: a stop like `\ref{$1}` offers labels on
   // arrival (offerCompletionsAtStop), and Tab picks the highlighted one.
   if (completionStatus(view.state) === 'active' && acceptCompletion(view)) return true;
-
-  const indices = uniqueIndices(session.tabStops);
-  const curPos = indices.indexOf(session.currentIndex);
-  if (curPos === -1 || curPos >= indices.length - 1) {
-    // Past the last stop: end the session at $0 if there is one.
-    const zero = findGroupLeader(session.tabStops, 0);
-    view.dispatch({
-      effects: [setSession.of(null)],
-      ...(zero ? { selection: { anchor: zero.from, head: zero.to } } : {}),
-    });
-    offerCompletionsAtStop(view);
-    return true;
-  }
-
-  const nextIdx = indices[curPos + 1];
-  const nextLeader = findGroupLeader(session.tabStops, nextIdx);
-  if (!nextLeader) return false;
-  // $0 is the exit, not a field: a live session there would absorb everything
-  // typed next into the stop and highlight it.
-  view.dispatch({
-    selection: { anchor: nextLeader.from, head: nextLeader.to },
-    effects: [setSession.of(nextIdx === 0 ? null : { ...session, currentIndex: nextIdx })],
-  });
-  offerCompletionsAtStop(view);
+  // A Tab-only trigger typed into a stop (`pmat` in `dm`'s body) expands, as
+  // it would with no session; the new snippet nests in this one. Never over a
+  // selected placeholder.
+  if (view.state.selection.main.empty && manualExpand(view)) return true;
+  // Falls through to tabout, which reads the same target.
+  if (exitInsideStop(view.state, session)) return false;
+  applyStep(view, stepForward(session));
   return true;
 }
 
 function prevTabStop(view: EditorView): boolean {
   const session = view.state.field(sessionField);
-  if (!session) return false;
-
-  const indices = uniqueIndices(session.tabStops);
-  const curPos = indices.indexOf(session.currentIndex);
-  if (curPos <= 0) return false;
-
-  const prevIdx = indices[curPos - 1];
-  const prevLeader = findGroupLeader(session.tabStops, prevIdx);
-  if (!prevLeader) return false;
-  view.dispatch({
-    selection: { anchor: prevLeader.from, head: prevLeader.to },
-    effects: [setSession.of({ ...session, currentIndex: prevIdx })],
-  });
-  offerCompletionsAtStop(view);
+  const step = session && stepBack(session);
+  if (!step) return false;
+  applyStep(view, step);
   return true;
 }
 

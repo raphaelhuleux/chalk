@@ -47,6 +47,10 @@ export interface EditorConfig {
    *  in a proportional font; md-typeset.ts). The native LaTeX theme sends
    *  'typeset'. */
   markdownStyle: 'source' | 'typeset';
+  /** Paint AI marks. 'hide' keeps tracking them (provenance.ts). */
+  aiMarks: 'show' | 'hide';
+  /** Shortcut hints under the caret while typing math (snippet-hints.ts). */
+  snippetHints: 'on' | 'off';
 }
 
 /** Defaults before any config arrives. `wordWrap: 'on'` (not VS Code's 'off')
@@ -62,6 +66,8 @@ export const defaultEditorConfig: EditorConfig = {
   lineNumbers: 'off',
   scrollbarVertical: 'auto',
   markdownStyle: 'source',
+  aiMarks: 'show',
+  snippetHints: 'off',
 };
 
 /**
@@ -115,6 +121,8 @@ export function sanitizeEditorConfig(raw: unknown): EditorConfig {
       defaultEditorConfig.scrollbarVertical,
     ),
     markdownStyle: oneOf(r.markdownStyle, ['source', 'typeset'], defaultEditorConfig.markdownStyle),
+    aiMarks: oneOf(r.aiMarks, ['show', 'hide'], defaultEditorConfig.aiMarks),
+    snippetHints: oneOf(r.snippetHints, ['on', 'off'], defaultEditorConfig.snippetHints),
   };
 }
 
@@ -393,6 +401,71 @@ const chromeTheme: Extension = EditorView.theme({
   // per trigger, so the icon column adds nothing.
   '.cm-completionIcon': {
     display: 'none',
+  },
+
+  // ── Shortcut hints (snippet-hints.ts): the autocomplete popup's look ──
+  // CM6 adds `cm-tooltip` to the hint list's own root.
+  '.cm-tooltip.cm-snippet-hints': {
+    overflow: 'hidden',
+    padding: '0',
+  },
+  '.cm-snippet-hints > ul': {
+    fontFamily: 'var(--vscode-editor-font-family)',
+    fontSize: 'var(--vscode-editor-font-size)',
+    minWidth: '14em',
+    maxWidth: 'min(34em, 92vw)',
+    margin: '0',
+    padding: '5px',
+    listStyle: 'none',
+  },
+  '.cm-snippet-hints > ul > li': {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '0.8em',
+    padding: '3px 8px',
+    borderRadius: '7px',
+    lineHeight: '1.45',
+    cursor: 'pointer',
+  },
+  '.cm-snippet-hints > ul > li[aria-selected]': {
+    backgroundColor:
+      'color-mix(in srgb, var(--vscode-editorCursor-foreground, #e2955c) 13%, var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground, #2a2825)))',
+    color:
+      'var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground))',
+  },
+  '.cm-snippet-hint-preview': {
+    // One width for short outputs, so the descriptions line up.
+    flex: '0 1 auto',
+    minWidth: '2.6em',
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+  },
+  '.cm-snippet-hint-raw': {
+    textOverflow: 'ellipsis',
+    maxWidth: '14em',
+  },
+  '.cm-snippet-hint-description': {
+    flex: '1 1 auto',
+    minWidth: '0',
+    fontFamily: 'var(--vscode-font-family)',
+    fontSize: '0.68em',
+    color: 'var(--vscode-descriptionForeground)',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  '.cm-snippet-hint-trigger': {
+    flex: '0 0 auto',
+    fontFamily: 'var(--vscode-editor-font-family, ui-monospace, monospace)',
+    fontSize: '0.8em',
+    padding: '0 0.4em',
+    borderRadius: '4px',
+    border: '1px solid color-mix(in srgb, var(--vscode-editorSuggestWidget-foreground, #e6e2da) 22%, transparent)',
+    whiteSpace: 'pre',
+  },
+  '.cm-snippet-hint-typed': {
+    color: 'var(--vscode-editorSuggestWidget-highlightForeground)',
+    fontWeight: '600',
   },
 
   // ── Find / replace panel (Cmd+F), see search-panel.ts ──

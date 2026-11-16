@@ -87,10 +87,10 @@ final class OutlinePanelLayoutTests: XCTestCase {
     func testResizeClampsAndPersists() {
         let (_, container) = hosted(width: 1200)
         container.setOutlinePanelVisible(true, animated: false)
-        container.setOutlinePanelWidth(10_000, persist: true)
+        container.setPanelWidth(.outline, 10_000, persist: true)
         XCTAssertEqual(container.outlinePanelWidthForTesting, Preferences.sidebarWidthRange.upperBound)
         XCTAssertEqual(Preferences.outlinePanelWidth, Preferences.sidebarWidthRange.upperBound)
-        container.setOutlinePanelWidth(1, persist: false)
+        container.setPanelWidth(.outline, 1, persist: false)
         XCTAssertEqual(container.outlinePanelWidthForTesting, Preferences.sidebarWidthRange.lowerBound)
         XCTAssertEqual(Preferences.outlinePanelWidth, Preferences.sidebarWidthRange.upperBound,
                        "persist: false must not write")

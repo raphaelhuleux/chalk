@@ -12,7 +12,7 @@ final class TabReorderTests: XCTestCase {
     override func setUp() {
         super.setUp()
         editor = EditorContainerViewController()
-        editor.onTabsChanged = { [weak self] in self?.published.append($0) }
+        editor.onTabsChanged = { [weak self] in self?.published.append($0.flatMap(\.tabs)) }
         editor.loadViewIfNeeded()
         // Three draft tabs: "Untitled", "Untitled 2", "Untitled 3".
         editor.newFile()

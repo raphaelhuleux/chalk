@@ -118,6 +118,9 @@ public enum Preferences {
     private static let editingModeKey = "chalk.editingMode"
     private static let viewModeKey = "chalk.viewMode"
     private static let autoHideChromeKey = "chalk.autoHideChrome"
+    private static let showAiMarksKey = "chalk.showAiMarks"
+    private static let snippetHintsKey = "chalk.snippetHints"
+    private static let markOutsideWritesKey = "chalk.markOutsideWrites"
     private static let editorMeasureKey = "chalk.editorMeasure"
     private static let editorLineHeightKey = "chalk.editorLineHeight"
     private static let textAlignmentKey = "chalk.textAlignment"
@@ -196,7 +199,28 @@ public enum Preferences {
             "editingMode": .string(editingMode.rawValue),
             "viewMode": .string(viewMode.rawValue),
             "markdownStyle": .string(colorTheme.markdownStyle),
+            "aiMarks": .string(showAiMarks ? "show" : "hide"),
+            "snippetHints": .string(showSnippetHints ? "on" : "off"),
         ])
+    }
+
+    /// Shortcut hints under the caret while typing math (editor-core snippet-hints.ts).
+    public static var showSnippetHints: Bool {
+        get { storedBool(snippetHintsKey, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: snippetHintsKey) }
+    }
+
+    /// Paint AI marks. Off only hides them: they stay tracked, for reading without the tint.
+    public static var showAiMarks: Bool {
+        get { storedBool(showAiMarksKey, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: showAiMarksKey) }
+    }
+
+    /// Mark text that arrives from outside Chalk. All writers count, git and sync included: the
+    /// app can't tell who wrote a file. Off leaves existing marks in place and adds none.
+    public static var markOutsideWrites: Bool {
+        get { storedBool(markOutsideWritesKey, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: markOutsideWritesKey) }
     }
 
     /// Scrolling down slides the tab band and the utility pill away, scrolling up returns them.
@@ -317,6 +341,11 @@ public enum Preferences {
     }
 
     // MARK: - Clamped numbers
+
+    /// A stored flag, `fallback` when unset (UserDefaults reads a missing Bool as false).
+    private static func storedBool(_ key: String, default fallback: Bool) -> Bool {
+        UserDefaults.standard.object(forKey: key) == nil ? fallback : UserDefaults.standard.bool(forKey: key)
+    }
 
     /// A stored number, `fallback` when unset (UserDefaults reads a missing
     /// Double as 0), clamped into `range` so a stale or out-of-range value from

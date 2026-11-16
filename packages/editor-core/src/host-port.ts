@@ -6,6 +6,7 @@
  * message means changing both hosts and the Swift mirror together.
  */
 import type { Language } from './editor/setup';
+import type { AiMark } from './editor/provenance';
 
 export type ThemeColors = Partial<{
   keyword: string | null;
@@ -27,10 +28,25 @@ export type HeadingColors = Partial<Record<1 | 2 | 3 | 4 | 5 | 6, string>>;
  * on each `edit` so the host can drop edits made against a buffer it has since
  * replaced (a keystroke racing a tab switch). Hosts that never send it get
  * `edit` without it.
+ *
+ * `origin` (optional, native host only): set on an `update` that came from
+ * outside the app, so its text gets AI marks (editor/provenance.ts). Without
+ * it the text is simply unmarked.
+ *
+ * `aiMarks` (optional, native host only): the marks to show once this message's
+ * text is in, from the host's store. On the message rather than a call of its
+ * own so it keeps FIFO order with the text it indexes.
  */
 export type HostToEditorMessage =
-  | { type: 'init'; text: string; language: Language; editorConfig?: unknown; epoch?: number }
-  | { type: 'update'; text: string; epoch?: number }
+  | {
+      type: 'init';
+      text: string;
+      language: Language;
+      editorConfig?: unknown;
+      epoch?: number;
+      aiMarks?: AiMark[];
+    }
+  | { type: 'update'; text: string; epoch?: number; origin?: 'external'; aiMarks?: AiMark[] }
   | { type: 'theme-colors'; colors: ThemeColors }
   | { type: 'heading-colors'; colors: HeadingColors }
   | { type: 'editor-config'; config: unknown }

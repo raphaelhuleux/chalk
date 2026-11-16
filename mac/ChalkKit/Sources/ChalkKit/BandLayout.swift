@@ -70,8 +70,9 @@ public enum BandLayout {
         return Result(
             bandHeight: band,
             // The row's `tabStripLeading` clears the traffic lights; past
-            // the divider, swap it for the divider gap.
-            chipLeadingInset: dividerX > 0
+            // the divider, swap it for the divider gap. Full screen hides the
+            // lights, so with no Library the window's edge is the divider.
+            chipLeadingInset: dividerX > 0 || fullscreen
                 ? dividerX + metrics.tabRowDividerGap - metrics.tabStripLeading : 0,
             editorChromeTopInset: restsBelow + metrics.editorRestingPad,
             recordedBandHeight: recorded)

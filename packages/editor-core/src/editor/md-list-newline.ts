@@ -1,6 +1,6 @@
-import { syntaxTree } from '@codemirror/language';
-import { EditorState, Extension, Prec } from '@codemirror/state';
+import { Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
+import { listItemAt, siblingPrefix, type MathContext } from './md-outline-tree';
 
 /**
  * Tight Enter for Markdown bullet lists. `markdown()`'s
@@ -11,23 +11,7 @@ import { EditorView, keymap } from '@codemirror/view';
  * line in code or frontmatter, falls through to the default command.
  */
 
-// indent | bullet | gap | body. Whitespace after the marker is required, so
-// `-foo`, `*emphasis*` and `***` don't match.
-export const MD_BULLET_RE = /^([ \t]*)([-*+])([ \t]+)(.*)$/;
-const TASK_BOX_RE = /^\[[ xX]\](?:[ \t]+|$)/;
-const NOT_A_LIST = new Set(['FencedCode', 'CodeBlock', 'Frontmatter']);
-
-function inCodeOrFrontmatter(state: EditorState, pos: number): boolean {
-  const tree = syntaxTree(state);
-  let node: ReturnType<typeof tree.resolveInner> | null = tree.resolveInner(pos, -1);
-  for (; node; node = node.parent) if (NOT_A_LIST.has(node.name)) return true;
-  return false;
-}
-
-function mdBulletEnterRun(
-  view: EditorView,
-  isInMathContext: (state: EditorState, pos: number) => boolean,
-): boolean {
+function mdBulletEnterRun(view: EditorView, isInMathContext: MathContext): boolean {
   const { state } = view;
   const sel = state.selection.main;
   if (!sel.empty) return false;
@@ -35,12 +19,9 @@ function mdBulletEnterRun(
   if (isInMathContext(state, pos)) return false;
 
   const line = state.doc.lineAt(pos);
-  const m = line.text.match(MD_BULLET_RE);
-  if (!m) return false;
-  if (inCodeOrFrontmatter(state, pos)) return false;
-  const [, indent, bullet, gap] = m;
-  const box = m[4].match(TASK_BOX_RE)?.[0] ?? '';
-  const body = m[4].slice(box.length);
+  const item = listItemAt(state, line.number);
+  if (item?.kind !== 'bullet') return false;
+  const body = line.text.slice(item.bodyOffset);
 
   // Empty item: clear the line to exit the list (the default would keep the
   // bullet and insert a blank line).
@@ -54,11 +35,10 @@ function mdBulletEnterRun(
     return true;
   }
 
-  const markerEnd = line.from + indent.length + bullet.length + gap.length + box.length;
-  if (pos < markerEnd) return false;
+  if (pos < line.from + item.bodyOffset) return false;
 
   // Mid-line Enter splits the item, like the default minus the blank line.
-  const insert = `\n${indent}${bullet} ${box ? '[ ] ' : ''}`;
+  const insert = `\n${siblingPrefix(item)}`;
   view.dispatch({
     changes: { from: pos, to: pos, insert },
     selection: { anchor: pos + insert.length },
@@ -68,9 +48,7 @@ function mdBulletEnterRun(
   return true;
 }
 
-export function mdListNewlineKeymap(
-  isInMathContext: (state: EditorState, pos: number) => boolean,
-): Extension {
+export function mdListNewlineKeymap(isInMathContext: MathContext): Extension {
   // Above markdown()'s own Enter binding, which is Prec.high.
   return Prec.highest(
     keymap.of([

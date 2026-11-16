@@ -18,6 +18,7 @@ Written 2026-08-23 (the polish night). Companion to [ui-correctness.md](ui-corre
 | `motionTab` | 0.10 | ease-out | tab hover fills, dirty-dot/close swap |
 | `motionFast` | 0.15 | ease-out | tab close, tab switch cross-fade, the active underline's slide, band fade-in after fullscreen, cover fades |
 | `motionStandard` | 0.20 | ease-in-out | zen chrome fade, appearance cross-dissolve, sheets |
+| `motionDropTarget` | 0.07 | ease-out | the tab-drag drop indicator moving between zones (VS Code's value) |
 | `motionSidebar` | 0.22 | ease-out | sidebar slide: column, editor content translation, AppKit strip, chip inset (new token; replaces the hardcoded 0.13/0.18 pair) |
 | auto-hide | 0.22 | ease-out | band/pill auto-hide (existing; aligns with `motionSidebar`) |
 
@@ -108,13 +109,20 @@ Test: transition matrix equality windowed<->fullscreen; the screenshot diff lane
 
 Slides from the trailing edge over `motionSidebar`, the content column pushing or the panel overlaying per `outlinePanelPushMinimumEditorWidth`. AppKit (2026-10-16): the panel's view is layer-backed and laid out at its off-screen start before the animated pass; without the layer its own frame snapped to the final place while its layer-backed children slid in, a dark block one frame ahead of them.
 
+The outline and the PDF share that slide when the slot is closed. In an open slot, the second panel arrives on the same clock: the slot widens against the editor and clips, so the outline slides in from the window edge pushing the PDF left, and the PDF is uncovered from under the slot's leading edge. Closing one runs it backwards.
+
+### Tab drag between groups
+
+The drop indicator (an accent wash at 0.12 with a 0.45 border, `GroupDropOverlay`) fades in over `motionFast` and glides between zones over `motionDropTarget`, both ease-out, as VS Code's `editordroptarget.css`. Leaving every zone fades it out. The dragged name stays dimmed in its starting slot while the pointer is outside its row; another row shows a 2 pt marker with no motion. The drop itself moves no chrome: the groups re-lay at once. Reduce Motion snaps the indicator.
+Test: `TabDragSessionTests` (indicator shown, cleared on drop and on cancel).
+
 ### Palettes (Quick Open, outline)
 
 Existing 0.10 fade + 6 pt rise + 0.97 scale is kept; Reduce Motion instant.
 
 ### Auto-hide chrome
 
-Existing 0.22 translate+fade is kept; zen stands the band down, so auto-hide never slides it there (`applyChromeAutoHideState`).
+Existing 0.22 translate+fade is kept; zen stands the band down, so auto-hide never slides it there (`applyChromeAutoHideState`). Only wheel and trackpad scrolling hides the chrome. Scrolling back up reveals it when it is quick (`ChromeAutoHidePolicy.flickDistance` within `flickWindow`, 100 pt in 0.25 s) or long (`revealDistance`, 300 pt); a pause of `pauseReset` (0.4 s) starts a new gesture, so the slow drift of re-reading never adds up to a reveal.
 
 ## Verification
 

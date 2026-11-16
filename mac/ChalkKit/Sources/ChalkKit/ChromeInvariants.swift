@@ -65,13 +65,15 @@ public struct ChromeInvariant: Sendable {
     // COVERAGE-DOC-BEGIN
     // ## Where each rule is actually asserted
     //
-    // `ChromeInvariantMatrixTests` walks all 96 cells of the state matrix (`ChalkTests`).
+    // `ChromeInvariantMatrixTests` walks all 128 cells of the state matrix (`ChalkTests`).
     // In each cell it asserts every rule that both APPLIES there and is FALSIFIABLE there.
     // A rule evaluated against absent geometry passes whatever the app did, so it is not counted as coverage and never reported as a pass.
     //
-    // The matrix carries a trailing-slot axis: every cell exists with the slot closed, showing the outline, and showing the PDF. The PDF shares the outline's frame, so the four `outlinePanel*` rules are evidence in every open cell, whichever content fills it.
+    // The matrix carries a trailing-slot axis: every cell exists with the slot closed, showing the outline, showing the PDF, and showing both. One frame holds them, so the four `outlinePanel*` rules are evidence in every open cell, whichever content fills it.
     //
-    // It also carries a split axis: every cell exists with one editor pane and with two. A split cell opens two draft tabs, so two real web views share the column. `editorPanesTileTheContent` is evidence in every cell; the two `split*` rules only where the split is open.
+    // It also carries a groups axis: every cell exists with one tab group and with three. A three-group cell opens three draft tabs and splits twice, so three real web views share the column and the band holds three rows (the first row's inset, an interior row and the last row's outline cut). `editorPanesTileTheContent` is evidence in every cell; the four group rules (`editorGroupsKeepTheirFloor`, `groupDividersSitOnTheSeams`, `groupStripsLieOverTheirColumns`, `groupRowsShareOneLine`) only where the band and the groups both show.
+    //
+    // The roots are hosted in the app's own window (`EditorWindowController.makeChromeWindow`), so the traffic lights are real. The two lights rules are evidence only windowed: the matrix's full screen is a flag on a window that keeps its lights, so it says nothing about them there.
     //
     // EVERY cell asserts something falsifiable, and the blind-cell guard in the matrix test PASSES.
     // The utility pill stands in every state, so `pillRestsInTheCorner` is evidence everywhere rather than only where the pill happened to be showing.
@@ -79,19 +81,27 @@ public struct ChromeInvariant: Sendable {
     //
     // Coverage is still not uniform, and the differences are structural.
     // The counts below are the ones the suite PRINTS (`ChromeInvariantMatrixTests falsifiable coverage`), read off a run rather than reasoned about.
-    // Windowed and full screen are the same chrome (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
-    // Each row holds its one-pane cells; the same cells split assert the two `split*` rules on top, so add 2.
+    // Each row holds its one-group cells; the same cells with three groups assert the group rules on top: add 4 where the band shows, 2 in zen (no rows to measure).
     //
-    // | Cells (one pane; as many again split) | Falsifiable rules, one pane / split | Why |
+    // | Cells (one group; as many again with three) | Falsifiable rules, one group / three | Why |
     // | --- | --- | --- |
-    // | normal, Library open, slot open: outline or PDF (8) | 16 / 18 of 18 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the panes, the underline, window containment, and the four `outlinePanel*` rules |
-    // | normal, Library open, slot closed (4) | 12 / 14 of 18 | as above, minus the four `outlinePanel*` rules |
-    // | normal, Library closed, slot open: outline or PDF (8) | 12 / 14 of 18 | as the first row, minus the three Library rules and the name row |
-    // | normal, Library closed, slot closed (4) | 8 / 10 of 18 | the band and its paint, the resting line, the pill, the content column, the panes, the underline, window containment |
-    // | zen, slot closed (8) | 5 / 7 of 18 | resting reserve, pill, content column, panes, window containment: zen hides the band and closes the Library |
-    // | zen, slot open: outline or PDF (16) | 5 / 7 of 18 | zen forces the slot closed regardless of the request, so its four rules are never evidence here |
+    // | windowed, Library open, slot open: outline, PDF or both (6) | 17 / 21 of 22 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the panes, the underline, window containment, the four `outlinePanel*` rules, and the names on the lights' line |
+    // | full screen, Library open, slot open (6) | 16 / 20 of 22 | as above, minus the lights |
+    // | windowed, Library open, slot closed (2) | 13 / 17 of 22 | as the first row, minus the four `outlinePanel*` rules |
+    // | full screen, Library open, slot closed (2) | 12 / 16 of 22 | as above, minus the lights |
+    // | windowed, Library closed, slot open (6) | 14 / 18 of 22 | as the first row, minus the three Library rules and the name row, plus the first name's gap from the lights |
+    // | full screen, Library closed, slot open (6) | 12 / 16 of 22 | as above, minus both lights rules |
+    // | windowed, Library closed, slot closed (2) | 10 / 14 of 22 | the band and its paint, the resting line, the pill, the content column, the panes, the underline, window containment, both lights rules |
+    // | full screen, Library closed, slot closed (2) | 8 / 12 of 22 | as above, minus the lights |
+    // | zen, any slot (32) | 5 / 7 of 22 | resting reserve, pill, content column, panes, window containment: zen hides the band, closes the Library and forces the slot closed |
     //
     // COVERAGE-DOC-END
+
+    /// Every chrome rect that must stay inside the window. `groupStrips[0]` is `tabStrip`.
+    private static func chromeRects(_ layout: ChromeLayout) -> [CGRect] {
+        [layout.band, layout.tabStrip, layout.libraryPanel, layout.footerPill, layout.outlinePanel]
+            .compactMap { $0 } + layout.groupStrips.dropFirst()
+    }
 
     /// Every rule the chrome must satisfy.
     public static let catalogue: [ChromeInvariant] = [
@@ -197,16 +207,17 @@ public struct ChromeInvariant: Sendable {
 
         ChromeInvariant(
             name: "libraryListStartsAtTheChromeFloor",
-            rationale: "The Library's first area header begins on the line the system titlebar ends on. The band is the titlebar, which spans the whole window, so the Library has nowhere to go but below it — the two columns start their content together on that line.",
+            rationale: "Windowed, the Library's first area header begins on the line the system titlebar ends on: the band is the titlebar, which spans the whole window and holds the traffic lights above the Library, so the two columns start their content together on that line. In full screen there are no traffic lights, so the list rises into the band and starts at the top of its panel instead of leaving the lights' empty strip.",
             appliesTo: { hasLibrary($0) },
-            // Needs a measured header (an empty Library has none) and a
-            // reserve that was actually read.
-            isFalsifiable: { $0.libraryFirstHeaderTop != nil && $0.reserveTop > 0 },
+            // Needs a measured header (an empty Library has none) and, while
+            // windowed, a reserve that was actually read.
+            isFalsifiable: { $0.libraryFirstHeaderTop != nil && ($0.state.window == .fullscreen || $0.reserveTop > 0) },
             holds: { layout in
                 guard let header = layout.libraryFirstHeaderTop else { return true }
+                let floor = layout.state.window == .fullscreen ? layout.root.minY : layout.reserveTop
                 // At the floor or up to one row below (the list keeps some
                 // top padding); above it is a header under the chrome.
-                let delta = header - layout.reserveTop
+                let delta = header - floor
                 return delta > -crossSourceEpsilon && delta < layout.libraryRowHeight
             }),
 
@@ -245,16 +256,10 @@ public struct ChromeInvariant: Sendable {
             rationale: "No chrome element hangs outside the window's bounds, which is how an off-screen column or a clipped strip first shows up.",
             // Applies everywhere, but with every rect absent it reduces to
             // `root.contains(nothing)`, true by construction.
-            isFalsifiable: { layout in
-                [layout.band, layout.tabStrip, layout.libraryPanel, layout.footerPill, layout.outlinePanel]
-                    .compactMap { $0 }
-                    .contains { !$0.isEmpty }
-            },
+            isFalsifiable: { chromeRects($0).contains { !$0.isEmpty } },
             holds: { layout in
-                let outside = [layout.band, layout.tabStrip, layout.libraryPanel, layout.footerPill, layout.outlinePanel]
-                    .compactMap { $0 }
-                    .contains { !layout.root.insetBy(dx: -epsilon, dy: -epsilon).contains($0) }
-                return !outside
+                let window = layout.root.insetBy(dx: -epsilon, dy: -epsilon)
+                return chromeRects(layout).allSatisfy { window.contains($0) }
             }),
 
         ChromeInvariant(
@@ -294,13 +299,14 @@ public struct ChromeInvariant: Sendable {
 
         ChromeInvariant(
             name: "editorPanesTileTheContent",
-            rationale: "The editor panes cover the content column exactly: one pane fills it, a split's two panes meet at one seam with no gap or overlap and share its top and bottom. A pane that stops short shows bare background beside the text; panes that overlap hide one document's edge under the other.",
+            rationale: "The editor panes cover the content column exactly: one pane per tab group, neighbours meeting at one seam with no gap or overlap, all sharing its top and bottom. A pane that stops short shows bare background beside the text; panes that overlap hide one document's edge under another.",
             isFalsifiable: { !$0.editorContent.isEmpty && !$0.editorPanes.isEmpty },
             holds: { layout in
                 let content = layout.editorContent
                 let panes = layout.editorPanes
                 guard !content.isEmpty, let first = panes.first, let last = panes.last else { return true }
-                guard panes.count == (layout.state.split == .split ? 2 : 1) else { return false }
+                let expected = layout.state.groups == .multiple ? UIState.GroupsState.multipleCount : 1
+                guard panes.count == expected else { return false }
                 let spans = panes.allSatisfy {
                     abs($0.minY - content.minY) < epsilon && abs($0.maxY - content.maxY) < epsilon
                 }
@@ -311,31 +317,83 @@ public struct ChromeInvariant: Sendable {
             }),
 
         ChromeInvariant(
-            name: "splitPanesKeepTheirFloor",
-            rationale: "Each pane of a split keeps the metrics table's minimum width, so a dragged divider can never squeeze one document into an unreadable sliver. A column too narrow for two minimum panes splits in equal halves instead.",
-            appliesTo: { $0.state.split == .split },
-            isFalsifiable: { $0.editorPanes.count == 2 && $0.splitMinimumPane > 0 },
+            name: "editorGroupsKeepTheirFloor",
+            rationale: "Each tab group keeps the metrics table's minimum width, so a dragged divider can never squeeze one document into an unreadable sliver. A column too narrow for every group's minimum shares itself evenly instead.",
+            appliesTo: { $0.state.groups == .multiple },
+            isFalsifiable: { $0.editorPanes.count > 1 && $0.groupMinimumWidth > 0 },
             holds: { layout in
-                guard layout.editorPanes.count == 2 else { return true }
-                let (leading, trailing) = (layout.editorPanes[0], layout.editorPanes[1])
-                let floor = layout.splitMinimumPane
-                let bothKeepFloor = leading.width > floor - epsilon && trailing.width > floor - epsilon
-                // Halves are rounded to whole points, so they may differ by one.
-                let halves = abs(leading.width - trailing.width) < crossSourceEpsilon + epsilon
-                return bothKeepFloor || (layout.editorContent.width < 2 * floor && halves)
+                let panes = layout.editorPanes
+                guard panes.count > 1 else { return true }
+                let floor = layout.groupMinimumWidth
+                let allKeepFloor = panes.allSatisfy { $0.width > floor - epsilon }
+                // Even shares are whole points, the last taking the remainder: up to one point per
+                // other group.
+                let widths = panes.map(\.width)
+                let even = (widths.max()! - widths.min()!) < CGFloat(panes.count - 1) + epsilon
+                return allKeepFloor || (layout.editorContent.width < CGFloat(panes.count) * floor && even)
             }),
 
         ChromeInvariant(
-            name: "splitDividerSitsOnTheSeam",
-            rationale: "The split's drag handle straddles the seam between the panes and runs their full height. A handle left at a stale x catches drags where no edge is drawn, and the visible edge stops responding.",
-            appliesTo: { $0.state.split == .split },
-            isFalsifiable: { $0.editorPanes.count == 2 && ($0.splitDivider.map { !$0.isEmpty } ?? false) },
+            name: "groupDividersSitOnTheSeams",
+            rationale: "Each drag handle straddles the seam between two neighbouring groups and runs their full height, one per seam. A handle left at a stale x catches drags where no edge is drawn, and the visible edge stops responding.",
+            appliesTo: { $0.state.groups == .multiple },
+            isFalsifiable: { $0.editorPanes.count > 1 && !$0.groupDividers.isEmpty },
             holds: { layout in
-                guard layout.editorPanes.count == 2, let divider = layout.splitDivider else { return true }
-                let seam = layout.editorPanes[0].maxX
-                return abs(divider.midX - seam) < epsilon
-                    && abs(divider.minY - layout.editorContent.minY) < epsilon
-                    && abs(divider.maxY - layout.editorContent.maxY) < epsilon
+                let panes = layout.editorPanes
+                guard panes.count > 1 else { return true }
+                guard layout.groupDividers.count == panes.count - 1 else { return false }
+                return zip(panes, layout.groupDividers).allSatisfy { pane, divider in
+                    abs(divider.midX - pane.maxX) < epsilon
+                        && abs(divider.minY - layout.editorContent.minY) < epsilon
+                        && abs(divider.maxY - layout.editorContent.maxY) < epsilon
+                }
+            }),
+
+        ChromeInvariant(
+            name: "groupStripsLieOverTheirColumns",
+            rationale: "Each tab group's row of names sits over its own column: one row per group, in pane order, none starting before its group's leading seam nor reaching past the next group's. A row that strays reads as the neighbour's tabs, and a click on it acts on the wrong group.",
+            appliesTo: { $0.state.groups == .multiple },
+            isFalsifiable: { $0.editorPanes.count > 1 && !$0.groupStrips.isEmpty },
+            holds: { layout in
+                let panes = layout.editorPanes
+                let strips = layout.groupStrips
+                guard panes.count > 1, !strips.isEmpty else { return true }
+                guard strips.count == panes.count else { return false }
+                for (i, strip) in strips.enumerated() {
+                    if i > 0, strip.minX < panes[i].minX - epsilon { return false }
+                    if i < panes.count - 1, strip.maxX > panes[i + 1].minX + epsilon { return false }
+                }
+                return true
+            }),
+
+        ChromeInvariant(
+            name: "namesShareTheLightsLine",
+            rationale: "Windowed, the tab names sit on the traffic lights' centre line: the middle of a capital is level with the middle of the lights. The band is centred on the titlebar, so this breaks whenever the titlebar is not the tall one the band was built for (a full-screen exit once brought it back short and left the lights 7pt above the names).",
+            appliesTo: { bandIsHosted($0) && $0.state.window == .windowed && $0.trafficLights != nil },
+            isFalsifiable: { $0.trafficLights != nil && !$0.nameLines.isEmpty },
+            holds: { layout in
+                guard let lights = layout.trafficLights, let line = layout.nameLines.first else { return true }
+                return abs(lights.midY - line) <= crossSourceEpsilon
+            }),
+
+        ChromeInvariant(
+            name: "firstNameClearsTheLights",
+            rationale: "With no Library, the first name starts one fixed gap past the zoom button, read off the window's own lights. Closer and the name crowds the buttons; further and the row looks detached from the window's corner.",
+            appliesTo: { bandIsHosted($0) && $0.state.window == .windowed && !hasLibrary($0) && $0.trafficLights != nil },
+            isFalsifiable: { $0.trafficLights != nil && $0.firstNameMinX != nil && $0.trafficLightGap > 0 },
+            holds: { layout in
+                guard let lights = layout.trafficLights, let x = layout.firstNameMinX else { return true }
+                return abs(x - lights.maxX - layout.trafficLightGap) <= crossSourceEpsilon
+            }),
+
+        ChromeInvariant(
+            name: "groupRowsShareOneLine",
+            rationale: "Every tab group's row of names sits on one line across the band. A row a point off reads as a second, unrelated bar.",
+            appliesTo: { bandIsHosted($0) && $0.state.groups == .multiple },
+            isFalsifiable: { $0.nameLines.count > 1 },
+            holds: { layout in
+                guard let first = layout.nameLines.first else { return true }
+                return layout.nameLines.allSatisfy { abs($0 - first) <= epsilon }
             }),
     ]
 }

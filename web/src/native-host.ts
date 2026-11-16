@@ -67,6 +67,11 @@ interface ChalkEditorBridge {
   /** Turn the debounced `{type: 'outline', items, cursorLine}` push on or
    *  off (transport-internal, like `scroll`). */
   setOutlineSubscription(on: boolean): void;
+  /** Clear the AI marks in the selection, or all of them with none. */
+  acceptAiMarks(): void;
+  /** Drop the AI text in the selection (or all of it), restoring what it
+   *  deleted. */
+  rejectAiMarks(): void;
 }
 
 declare global {
@@ -151,6 +156,10 @@ export const SHELL_COMMANDS = [
   'toggle-outline',
   'toggle-outline-panel',
   'quick-open',
+  'next-tab',
+  'previous-tab',
+  'accept-ai-marks',
+  'reject-ai-marks',
 ] as const;
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[number];
@@ -179,19 +188,49 @@ const META_COMMANDS: ReadonlyMap<string, ShellCommand> = new Map<string, ShellCo
  * Capture phase on `root` because scroll doesn't bubble and every `init`
  * replaces the scroller; filtered to the scroller so tooltip/autocomplete
  * scrolling doesn't drive the chrome. Throttled to one post per frame.
+ * `wheel` marks a scroll the reader drove: a jump to a line or a reflow also
+ * moves `scrollTop`, and must not hide the tabs
+ * (docs/issues/2026-10-31-tabs-hide-without-scrolling.md).
+ * Mid-wheel, CM6 swapping estimated line heights for measured ones moves
+ * `scrollTop` against the wheel (~300px down while wheeling up through
+ * display math), so only a frame that moved the wheel's way counts.
  */
 function attachScrollReporter(root: HTMLElement): void {
+  const wheelWindowMs = 200;
+  let lastWheel = -Infinity;
+  /** Sign of the latest vertical wheel delta; +1 scrolls toward the end. */
+  let wheelDirection = 0;
+  root.addEventListener(
+    'wheel',
+    (event) => {
+      lastWheel = performance.now();
+      if (event.deltaY !== 0) wheelDirection = Math.sign(event.deltaY);
+    },
+    { passive: true, capture: true },
+  );
   let queued = false;
+  let wheel = false;
+  /** The last posted frame, to tell which way this one moved. */
+  let lastScroller: HTMLElement | null = null;
+  let lastY = 0;
   root.addEventListener(
     'scroll',
     (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement) || !target.classList.contains('cm-scroller')) return;
+      // Read here, not in the frame callback, which a busy page can delay past the window.
+      wheel ||= performance.now() - lastWheel < wheelWindowMs;
       if (queued) return;
       queued = true;
       requestAnimationFrame(() => {
         queued = false;
-        postToHost({ type: 'scroll', y: target.scrollTop });
+        const y = target.scrollTop;
+        // A fresh scroller has no previous frame to take a direction from.
+        const withWheel = target === lastScroller && Math.sign(y - lastY) === wheelDirection;
+        postToHost({ type: 'scroll', y, wheel: wheel && withWheel });
+        lastScroller = target;
+        lastY = y;
+        wheel = false;
       });
     },
     { passive: true, capture: true },
@@ -214,6 +253,8 @@ function boot(): void {
     // Outline panel feed; flows only while subscribed
     // (WebEditorSurface.setOutlineSubscription).
     onOutline: (snapshot) => postToHost({ type: 'outline', ...snapshot }),
+    // For the host's store (DocumentController.editor(_:didChangeAiMarks:text:)).
+    onAiMarks: (marks, text) => postToHost({ type: 'ai-marks', marks, text }),
     // WebKit on Mac Catalyst re-inserts a committed dead key (`^` then `2`
     // gives `^^2`); see editor-core/src/editor/dead-key-commit.ts. Chromium
     // (VS Code) doesn't, so only this host turns it on.
@@ -234,18 +275,30 @@ function boot(): void {
     gotoLine: (line: number) => editor.gotoLine(line),
     focus: () => editor.focus(),
     setOutlineSubscription: (on: boolean) => editor.setOutlineSubscription(on),
+    acceptAiMarks: () => editor.acceptAiMarks(),
+    rejectAiMarks: () => editor.rejectAiMarks(),
   };
 
-  // On Mac Catalyst the focused WKWebView claims Cmd+S/P/K/O in
-  // performKeyEquivalent before the menu or pressesBegan, but still dispatches
-  // the JS keydown, so forward them from here. Capture phase, so this runs
-  // before editor-core's Mod-p swallow in setup.ts.
+  // The focused WKWebView claims key equivalents before the menu and hands back
+  // only those the page leaves alone, so forward the shell's keys from here.
+  // Capture phase, so this runs before editor-core's Mod-p swallow in setup.ts.
   window.addEventListener(
     'keydown',
     (e: KeyboardEvent) => {
+      if (e.metaKey && e.shiftKey && (e.key === 'Enter' || e.key === 'Backspace')) {
+        e.preventDefault();
+        postCommand(e.key === 'Enter' ? 'accept-ai-marks' : 'reject-ai-marks');
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         postCommand('save');
+        return;
+      }
+      // Ctrl+Tab never reached the menu from a focused editor.
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') {
+        e.preventDefault();
+        postCommand(e.shiftKey ? 'previous-tab' : 'next-tab');
         return;
       }
       const command = e.metaKey && !e.shiftKey ? META_COMMANDS.get(e.key) : undefined;

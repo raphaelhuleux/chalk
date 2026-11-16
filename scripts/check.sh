@@ -61,7 +61,8 @@ browser-tests    Tests/browser/run.mjs, pointer and motion over real geometry
 geometric-matrix Tests/matrix/run-geometric.mjs, the caret/reveal discovery matrix
 snapshots        Tests/__Snapshots__, the 16-case layout matrix
 pref-guard       no earlier run left a test preference in the Debug domain
-ui-invariants    chrome geometry asserted across the 48-state matrix
+ui-invariants    chrome geometry asserted across the 128-state matrix
+tab-row          the tab row's drawn geometry, glyph ink and a real full-screen round trip
 mac-tests        the rest of ChalkTests
 bench            scripts/bench.sh against thresholds.json
 STEPS
@@ -105,6 +106,9 @@ xcode_test() {
     -derivedDataPath "$DD" \
     $WARN_FLAGS \
     CODE_SIGNING_ALLOWED=NO \
+    -test-timeouts-enabled YES \
+    -default-test-execution-time-allowance 900 \
+    -maximum-test-execution-time-allowance 900 \
     "$@"
 }
 
@@ -153,14 +157,22 @@ if [ "$RUN_XCTEST" = "1" ]; then
   # should name it before more suites fail because of it.
   run_step pref-guard xcode_test -only-testing:ChalkTests/PreferencePollutionGuardTests
   run_step ui-invariants xcode_test -only-testing:ChalkTests/ChromeInvariantMatrixTests
-  # The whole bundle minus the two classes the steps above already ran:
-  # running them again doubles the matrix's cost and reports any failure of
+  # Its own step so a tab-row regression is named as one (docs/ui-correctness.md "Tab row").
+  run_step tab-row xcode_test \
+    -only-testing:ChalkTests/TabRowGeometryTests \
+    -only-testing:ChalkTests/NewTabGlyphSizeTests \
+    -only-testing:ChalkTests/WindowModeRoundTripTests
+  # The whole bundle minus the classes the steps above already ran:
+  # running them again doubles their cost and reports any failure of
   # theirs twice.
   run_step mac-tests xcode_test \
     -skip-testing:ChalkTests/PreferencePollutionGuardTests \
-    -skip-testing:ChalkTests/ChromeInvariantMatrixTests
+    -skip-testing:ChalkTests/ChromeInvariantMatrixTests \
+    -skip-testing:ChalkTests/TabRowGeometryTests \
+    -skip-testing:ChalkTests/NewTabGlyphSizeTests \
+    -skip-testing:ChalkTests/WindowModeRoundTripTests
 else
-  echo "  (skipping pref-guard, ui-invariants, mac-tests: --fast)"
+  echo "  (skipping pref-guard, ui-invariants, tab-row, mac-tests: --fast)"
 fi
 
 if [ "$RUN_BENCH" = "1" ]; then
@@ -282,7 +294,7 @@ extract_for_step() {
     browser-tests) extract_browser "$2" ;;
     engine-tests) extract_vitest "$2" ;;
     chalkkit-tests) extract_swift "$2" ;;
-    mac-tests|pref-guard|ui-invariants|build-mac) extract_xcode "$2" ;;
+    mac-tests|pref-guard|ui-invariants|tab-row|build-mac) extract_xcode "$2" ;;
     geometric-matrix) extract_geometric "$2" ;;
     snapshots) extract_snapshots "$2" ;;
     bench) extract_bench "$2" ;;

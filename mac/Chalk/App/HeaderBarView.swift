@@ -15,8 +15,24 @@ import ChalkKit
 ///
 /// RootSplitViewController pins it across the whole window, above both
 /// columns, and the chips take the divider's inset (`setStripLeadingInset`).
+///
+/// One row per tab group, leading to trailing (`setGroupColumns`). The first
+/// row keeps the band's leading rules (traffic lights, Library divider); each
+/// later row starts past its group's leading seam; each row stops before the
+/// next group, and the last before the outline hole.
 final class HeaderBarView: ThemedView {
-    let tabStrip = HeaderTabStrip()
+    /// The first group's row.
+    var tabStrip: HeaderTabStrip { strips[0] }
+    /// Every group's row, leading to trailing.
+    private(set) var strips: [HeaderTabStrip] = []
+    /// A row was made for a new group: the host wires its callbacks.
+    var onStripCreated: ((HeaderTabStrip) -> Void)?
+    /// Leading pins of rows after the first: their group's leading seam.
+    private var groupLeadings: [NSLayoutConstraint] = []
+    /// Trailing caps of every row but the last: the next group's leading seam.
+    private var groupTrailings: [NSLayoutConstraint] = []
+    /// Each later group's leading edge, in this view.
+    private var groupSeams: [CGFloat] = []
 
     private let backdrop = FlippedView()
     private var stripLeading: NSLayoutConstraint!
@@ -30,7 +46,8 @@ final class HeaderBarView: ThemedView {
     /// window's own zoom button rather than the spec constant, which was
     /// measured on a short titlebar and sits 16pt short under the unified
     /// one. Measured only while the button shows: full screen hides the
-    /// buttons, the last windowed reading stands, and the row does not jump.
+    /// buttons and the last windowed reading stands (there `BandLayout`
+    /// starts the row at the window's edge instead).
     var restingStart: CGFloat {
         if let zoom = window?.standardWindowButton(.zoomButton), !zoom.isHidden,
            let container = zoom.superview {
@@ -58,19 +75,10 @@ final class HeaderBarView: ThemedView {
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         addSubview(backdrop)
 
-        tabStrip.translatesAutoresizingMaskIntoConstraints = false
-        // Clipping (and thus the strip's own scroll/overflow affordance)
-        // always wins over pushing itself past the window's trailing edge.
-        tabStrip.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        addSubview(tabStrip)
-        stripLeading = tabStrip.leadingAnchor.constraint(
+        let first = makeStrip()
+        stripLeading = first.leadingAnchor.constraint(
             equalTo: leadingAnchor, constant: ChalkMetrics.tabStripLeading)
-        stripTrailing = tabStrip.trailingAnchor.constraint(
-            lessThanOrEqualTo: trailingAnchor, constant: -ChalkMetrics.headerPadding)
-        // Below the window's own size: when the outline hole leaves the strip less than its fixed
-        // tail, the strip overlaps the hole instead of growing the window, which moved the hole
-        // and looped layout until AppKit aborted (docs/issues/2026-10-28-wide-pdf-slot-loops-layout.md).
-        stripTrailing.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue - 1)
+        stripTrailing = trailingCap(for: first, to: trailingAnchor)
 
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -79,15 +87,67 @@ final class HeaderBarView: ThemedView {
             backdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
             stripLeading,
             stripTrailing,
-            // The row is centred on the band: the traffic lights sit on the
-            // titlebar's centre line and the names must share it. Bottom-anchoring
-            // read 3pt low under the 52pt unified titlebar. Whatever the band
-            // gains above and below the row stays backdrop-only; where the
-            // band is the row's own height (full screen) the two coincide.
-            tabStrip.centerYAnchor.constraint(equalTo: centerYAnchor),
-            tabStrip.heightAnchor.constraint(equalToConstant: ChalkMetrics.tabStripHeight),
         ])
         refreshColors()
+    }
+
+    /// A row, added and centred on the band. The row is centred: the traffic lights sit on the
+    /// titlebar's centre line and the names must share it. Bottom-anchoring read 3pt low under
+    /// the 52pt unified titlebar. Whatever the band gains above and below the row stays
+    /// backdrop-only; where the band is the row's own height (full screen) the two coincide.
+    private func makeStrip() -> HeaderTabStrip {
+        let strip = HeaderTabStrip()
+        strip.translatesAutoresizingMaskIntoConstraints = false
+        // Clipping (and thus the strip's own scroll/overflow affordance)
+        // always wins over pushing itself past the window's trailing edge.
+        strip.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(strip)
+        NSLayoutConstraint.activate([
+            strip.centerYAnchor.constraint(equalTo: centerYAnchor),
+            strip.heightAnchor.constraint(equalToConstant: ChalkMetrics.tabStripHeight),
+        ])
+        strips.append(strip)
+        return strip
+    }
+
+    /// A row's trailing cap, below the window's own size: when a hole or the next group leaves the
+    /// row less than its fixed tail, the row overlaps instead of growing the window, which moved
+    /// the hole and looped layout until AppKit aborted
+    /// (docs/issues/2026-10-28-wide-pdf-slot-loops-layout.md).
+    private func trailingCap(for strip: HeaderTabStrip, to anchor: NSLayoutXAxisAnchor,
+                             constant: CGFloat = -ChalkMetrics.headerPadding) -> NSLayoutConstraint {
+        let cap = strip.trailingAnchor.constraint(lessThanOrEqualTo: anchor, constant: constant)
+        cap.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue - 1)
+        return cap
+    }
+
+    /// One row per group: `seams` holds each later group's leading edge in this view, so the
+    /// band shows `seams.count + 1` rows. Rows are kept in order and only added or dropped at the
+    /// trailing end; the host re-assigns their groups on every update.
+    func setGroupColumns(seams: [CGFloat]) {
+        let seams = seams.map { $0.rounded() }
+        guard seams != groupSeams || strips.count != seams.count + 1 else { return }
+        groupSeams = seams
+        // Same rows, moved seams (a drag, a resize): only the constants change.
+        if strips.count == seams.count + 1, groupLeadings.count == seams.count {
+            for (i, x) in seams.enumerated() {
+                groupLeadings[i].constant = x + ChalkMetrics.tabRowDividerGap
+                groupTrailings[i].constant = x - ChalkMetrics.headerPadding
+            }
+            return
+        }
+        NSLayoutConstraint.deactivate(groupLeadings + groupTrailings + [stripTrailing])
+        while strips.count > seams.count + 1 { strips.removeLast().removeFromSuperview() }
+        while strips.count < seams.count + 1 { onStripCreated?(makeStrip()) }
+        groupLeadings = seams.enumerated().map { i, x in
+            strips[i + 1].leadingAnchor.constraint(equalTo: leadingAnchor, constant: x + ChalkMetrics.tabRowDividerGap)
+        }
+        groupTrailings = seams.enumerated().map { i, x in
+            trailingCap(for: strips[i], to: leadingAnchor, constant: x - ChalkMetrics.headerPadding)
+        }
+        let outline = stripTrailing.constant
+        stripTrailing = trailingCap(for: strips[strips.count - 1], to: trailingAnchor, constant: outline)
+        NSLayoutConstraint.activate(groupLeadings + groupTrailings + [stripTrailing])
     }
 
     /// The window's lights may sit elsewhere than the seed assumed.
@@ -163,10 +223,11 @@ final class HeaderBarView: ThemedView {
         applyHoles()
     }
 
-    /// Where the chips' narrowest strip ends, with the band's trailing padding, in this view: an
-    /// outline hole that starts before this overlaps the strip.
-    var stripMinimumExtent: CGFloat {
-        stripLeading.constant + HeaderTabStrip.minimumWidth + ChalkMetrics.headerPadding
+    /// Where the first row's narrowest readable strip ends, with the band's trailing padding, in
+    /// this view: an outline hole that starts before this hides the tab names. Never read off the
+    /// group seams: the seams follow the slot, so a limit from them would feed back into itself.
+    var stripReadableExtent: CGFloat {
+        stripLeading.constant + HeaderTabStrip.readableWidth + ChalkMetrics.headerPadding
     }
 
     override func layout() {

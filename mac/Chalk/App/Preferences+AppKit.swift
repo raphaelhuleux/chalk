@@ -42,10 +42,10 @@ extension Preferences {
     }
 
     static let pdfPanelWidthKey = "chalk.pdfPanelWidth.appkit"
-    /// The PDF shares the outline's slot but reads at a page's width, so it has its own range.
+    /// The PDF reads at a page's width, so it has its own range, wider than the outline's.
     static let pdfPanelWidthRange: ClosedRange<CGFloat> = 320...1400
 
-    /// Last-used width of the trailing slot while it shows the PDF.
+    /// Last-used width of the PDF panel.
     static var pdfPanelWidth: CGFloat {
         get {
             CGFloat(storedDouble(pdfPanelWidthKey, default: 560,
@@ -55,15 +55,6 @@ extension Preferences {
             setStoredDouble(Double(newValue), pdfPanelWidthKey,
                             in: Double(pdfPanelWidthRange.lowerBound)...Double(pdfPanelWidthRange.upperBound))
         }
-    }
-
-    static let splitFractionKey = "chalk.splitFraction.appkit"
-
-    /// Where the split editor's seam sits, as the leading pane's share of the column. A share, not
-    /// a width, so the seam keeps its place when the window or the Library changes the column.
-    static var splitFraction: CGFloat {
-        get { CGFloat(storedDouble(splitFractionKey, default: 0.5, in: 0.1...0.9)) }
-        set { setStoredDouble(Double(SplitLayout.clampedFraction(newValue)), splitFractionKey, in: 0.1...0.9) }
     }
 
     private static var widthRange: ClosedRange<Double> {

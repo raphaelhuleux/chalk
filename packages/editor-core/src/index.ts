@@ -19,6 +19,7 @@ export type { RequestChannel } from './host-request';
 export type { Language, EditorActions } from './editor/setup';
 export type { OutlineItem } from './editor/outline';
 export type { EditorConfig, ViewMode } from './editor/theme';
+export type { AiMark } from './editor/provenance';
 export type { WorkspaceAccess, WorkspaceFileKind } from './editor/workspace-files';
 export { scriptMermaidLoader } from './editor/md-mermaid-plugin';
 export type { MermaidLoader } from './editor/md-mermaid-plugin';

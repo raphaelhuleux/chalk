@@ -44,8 +44,17 @@ final class FakeEditorSurface: EditorSurface {
     private var viewExists = false
     private var pending: [() -> Void] = []
 
-    func initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?) {
+    /// `(text, origin, aiMarks)` of every applied push, in order. `init` is origin nil.
+    private(set) var textPushes: [(text: String, origin: TextOrigin?, aiMarks: [AiMark]?)] = []
+    private(set) var acceptAiMarksCount = 0
+    private(set) var rejectAiMarksCount = 0
+
+    func acceptAiMarks() { acceptAiMarksCount += 1 }
+    func rejectAiMarks() { rejectAiMarksCount += 1 }
+
+    func initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?, aiMarks: [AiMark]?) {
         send { [weak self] in
+            self?.textPushes.append((text, nil, aiMarks))
             self?.viewExists = true
             self?.initializeLanguages.append(language)
             self?.displayedText = text
@@ -53,10 +62,11 @@ final class FakeEditorSurface: EditorSurface {
         }
     }
 
-    func update(text: String) {
+    func update(text: String, origin: TextOrigin?, aiMarks: [AiMark]?) {
         send { [weak self] in
             guard let self else { return }
             if self.viewExists {
+                self.textPushes.append((text, origin, aiMarks))
                 self.updateTexts.append(text)
                 self.displayedText = text
                 self.onDisplayedTextChange?(text)
@@ -92,7 +102,7 @@ final class FakeEditorSurface: EditorSurface {
     func setMeasure(_ px: Double) {}
     func setLineHeight(_ multiplier: Double) {}
     func setTextAlign(_ alignment: EditorTextAlignment) {}
-    var onScroll: ((Double) -> Void)?
+    var onScroll: ((Double, Bool) -> Void)?
     var onFailedToBecomeReady: (() -> Void)?
 
     /// Snapshot handed to `fetchOutline` callers; tests seed it to model a

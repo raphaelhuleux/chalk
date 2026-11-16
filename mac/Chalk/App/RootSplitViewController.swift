@@ -63,6 +63,8 @@ final class RootSplitViewController: NSViewController {
     // The tab name row. Hosted here, not in either column, so nothing moves
     // when the sidebar opens.
     private let headerBar = HeaderBarView()
+    /// A tab dragged out of its row: onto another group's row or an editor's drop zones.
+    private let tabDrag = TabDragSession()
     private var headerHeight: NSLayoutConstraint?
     private var headerTop: NSLayoutConstraint?
 
@@ -139,6 +141,10 @@ final class RootSplitViewController: NSViewController {
     }
 
     private static let log = Logger(subsystem: "com.huleux.chalk", category: "root")
+    /// Every change to whether the tab band is on screen, with its cause, so a band that
+    /// "disappears for no reason" names the reason:
+    /// `log stream --predicate 'subsystem == "com.huleux.chalk" AND category == "chrome"' --info`.
+    private static let chromeLog = Logger(subsystem: "com.huleux.chalk", category: "chrome")
 
     /// `locationStore` is this window's own folder list.
     init(locationStore: LocationStore = .detached(), initialContent: WindowContent = .openWelcome) {
@@ -148,8 +154,8 @@ final class RootSplitViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
 
         // iA-style auto-hide: the active editor's scroll offsets drive the chrome.
-        editor.onActiveEditorScroll = { [weak self] y in
-            self?.editorDidScroll(offset: y)
+        editor.onActiveEditorScroll = { [weak self] y, wheel in
+            self?.editorDidScroll(offset: y, canHide: wheel)
         }
         // Wire the band before the first open() so the initial tab shows up in it.
         editor.onTabsChanged = { [weak self] items in
@@ -158,11 +164,12 @@ final class RootSplitViewController: NSViewController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleAutoHidePreferenceChange),
             name: Preferences.autoHideChromeDidChange, object: nil)
-        headerBar.tabStrip.onSelect = { [weak self] id in self?.editor.activate(id: id) }
-        headerBar.tabStrip.onClose = { [weak self] id in self?.editor.closeTab(id: id) }
-        headerBar.tabStrip.onNew = { [weak self] in self?.cmdNewFile() }
-        headerBar.tabStrip.onMove = { [weak self] id, index in self?.editor.moveTab(id: id, to: index) }
-        headerBar.tabStrip.onOpenInSplit = { [weak self] id in self?.editor.openInSplit(id: id) }
+        tabDrag.editor = editor
+        tabDrag.rows = { [weak self] in self?.tabRowRegions() ?? [] }
+        headerBar.onStripCreated = { [weak self] strip in self?.wire(strip) }
+        wire(headerBar.tabStrip)
+        // The panes moved (resize, seam drag, a group added or closed): the rows follow.
+        editor.onGroupFramesChanged = { [weak self] in self?.syncGroupColumns() }
         // The pill routes to the same shell commands the menu uses.
         footerBar.onToggleSidebar = { [weak self] in self?.cmdToggleSidebar() }
         footerBar.onQuickOpen = { [weak self] in self?.cmdQuickOpen() }
@@ -185,6 +192,10 @@ final class RootSplitViewController: NSViewController {
             case .toggleOutline: self?.cmdToggleOutline()
             case .toggleOutlinePanel: self?.cmdToggleOutlinePanel()
             case .quickOpen: self?.cmdQuickOpen()
+            case .nextTab: self?.cmdNextTab()
+            case .previousTab: self?.cmdPrevTab()
+            case .acceptAiMarks: self?.cmdAcceptAiMarks()
+            case .rejectAiMarks: self?.cmdRejectAiMarks()
             case .save, nil: break
             }
         }
@@ -209,15 +220,65 @@ final class RootSplitViewController: NSViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// One group's row: its callbacks act on whatever group the row shows at the time.
+    private func wire(_ strip: HeaderTabStrip) {
+        strip.dragCoordinator = tabDrag
+        strip.onSelect = { [weak self] id in self?.editor.activate(id: id) }
+        strip.onClose = { [weak self] id in self?.editor.closeTab(id: id) }
+        // A row's "+" opens the new file in that row's group.
+        strip.onNew = { [weak self, weak strip] in
+            if let group = strip?.groupID { self?.editor.focusGroup(id: group) }
+            self?.cmdNewFile()
+        }
+        strip.onMove = { [weak self] id, index in self?.editor.moveTab(id: id, to: index) }
+        strip.onMoveToNeighborGroup = { [weak self] id, trailing in
+            self?.editor.moveToNeighborGroup(id: id, trailing: trailing)
+        }
+        strip.onCloseGroup = { [weak self, weak strip] in
+            guard let group = strip?.groupID else { return }
+            self?.editor.closeGroup(id: group)
+        }
+    }
+
+    /// Each later group's leading edge, in the band's coordinates: the rows start there.
+    private func syncGroupColumns() {
+        guard editor.isViewLoaded else { return }
+        let seams = editor.groupFrames.dropFirst().map { headerBar.convert($0.frame, from: editor.view).minX }
+        headerBar.setGroupColumns(seams: seams)
+    }
+
+    /// Each row with the region a tab drag counts as it, in window coordinates: the band's
+    /// height over the row's group column (from the band's leading edge for the first row).
+    private func tabRowRegions() -> [(strip: HeaderTabStrip, region: CGRect)] {
+        guard !headerBar.isHidden, editor.isViewLoaded else { return [] }
+        let band = headerBar.convert(headerBar.bounds, to: nil)
+        let columns = editor.groupFrames.map { editor.view.convert($0.frame, to: nil) }
+        return zip(headerBar.strips, columns).enumerated().map { i, pair in
+            let minX = i == 0 ? band.minX : pair.1.minX
+            let maxX = i == columns.count - 1 ? band.maxX : pair.1.maxX
+            return (pair.0, CGRect(x: minX, y: band.minY, width: maxX - minX, height: band.height))
+        }
+    }
+
     /// Single sink for `editor.onTabsChanged`: redraws the band and tracks the
     /// active tab id. A tab the reader just opened, closed, or switched to
     /// must be visible; keyed on identity, not on the whole item, so typing
     /// (a dirty-marker flip) never pops the chrome back into view.
-    func handleTabsChanged(_ items: [TabItem]) {
-        headerBar.tabStrip.update(items)
+    func handleTabsChanged(_ groups: [TabGroupItem]) {
+        syncGroupColumns()
+        // Rows are positional: a group added or closed re-deals them.
+        for (i, strip) in headerBar.strips.enumerated() where groups.indices.contains(i) {
+            strip.groupID = groups[i].id
+            strip.isFocusedGroup = groups[i].isFocused
+            strip.hasLeadingGroup = i > 0
+            strip.hasTrailingGroup = i < groups.count - 1
+            // A focus change between groups leaves every row's items as they were.
+            if strip.currentItems != groups[i].tabs { strip.update(groups[i].tabs) }
+        }
+        let items = groups.first(where: \.isFocused)?.tabs ?? []
         // The Library marks where you are, not just what exists.
         sidebar.setOpenDocument(editor.activeDocumentURL)
-        let identities = items.map(\.id)
+        let identities = groups.flatMap { $0.tabs.map(\.id) }
         if identities != lastTabIdentities
             || items.first(where: \.isActive)?.id != currentActiveTabID {
             lastTabIdentities = identities
@@ -383,7 +444,17 @@ final class RootSplitViewController: NSViewController {
     /// Driven by the window controller from the window's full-screen notifications.
     func setMacFullscreen(_ on: Bool) {
         guard on != isMacFullscreen else { return }
+        Self.chromeLog.info("window mode \(on ? "full screen" : "windowed", privacy: .public)")
         isMacFullscreen = on
+        // A window-mode switch is an explicit chrome interaction: a band that had scrolled away
+        // must not stay hidden across it.
+        revealChrome()
+        applyMacChromePresentation()
+    }
+
+    /// The full-screen exit finished and the titlebar has its final height: lay the band out
+    /// against it, not against the transition's interim one.
+    func windowModeDidSettle() {
         applyMacChromePresentation()
     }
 
@@ -397,6 +468,9 @@ final class RootSplitViewController: NSViewController {
         applyChromeAutoHideState(animated: false)
         applyBandLayout()
         setBandHidden(isZen, fadeOver: pendingZenBandFade)
+        // `libraryTreeTop` follows the window mode, and a mode flip need not
+        // resize the Library, so it would not re-read the line on its own.
+        if sidebar.isViewLoaded { sidebar.view.needsLayout = true }
     }
 
     /// The system titlebar's height under the content: with
@@ -440,6 +514,9 @@ final class RootSplitViewController: NSViewController {
 
         if abs((headerHeight?.constant ?? -1) - layout.bandHeight) > 0.5 {
             headerHeight?.constant = layout.bandHeight
+            // A band scrolled away hides by its own height: a new height needs a new offset, or
+            // part of it hangs into the window.
+            if isChromeAutoHidden { applyBandHidden(!isZen) }
         }
         // The band never moves and its cover reaches the window's leading
         // edge; the Library is cut out of that paint rather than drawn over
@@ -452,7 +529,7 @@ final class RootSplitViewController: NSViewController {
         headerBar.setLibraryHole(measured.libraryColumn.map { libraryHole(upTo: $0) })
         headerBar.setOutlineHole(outlineHole())
         if editor.isViewLoaded {
-            let chipsEnd = editor.view.convert(NSPoint(x: headerBar.stripMinimumExtent, y: 0), from: headerBar)
+            let chipsEnd = editor.view.convert(NSPoint(x: headerBar.stripReadableExtent, y: 0), from: headerBar)
             editor.setSlotLeadingLimit(chipsEnd.x)
         }
         editor.setChromeTopInset(Double(layout.editorChromeTopInset))
@@ -466,8 +543,16 @@ final class RootSplitViewController: NSViewController {
         return isMacFullscreen ? 0 : systemTitlebarHeight
     }
 
-    /// Where the Library's list begins: the chrome floor.
-    var libraryTreeTop: CGFloat { chromeReserve }
+    /// Where the Library's list begins: the chrome floor while windowed. Full
+    /// screen has no traffic lights over the Library, so 0 lets the list rise
+    /// into the band to its own `SidebarViewController.treeTopPadding`.
+    /// The band's RESTING floor: auto-hide slides the band away but the
+    /// titlebar stays, and the Library re-reads this on any layout (a fold).
+    var libraryTreeTop: CGFloat {
+        if isMacFullscreen { return 0 }
+        guard !headerBar.isHidden else { return systemTitlebarHeight }
+        return headerBar.frame.maxY - (headerTop?.constant ?? 0)
+    }
 
     /// That line in the Library's own coordinates, or nil when it has no view
     /// in a window to convert into. Its own, not the window's: a window-space
@@ -525,8 +610,9 @@ final class RootSplitViewController: NSViewController {
     var isChromeAutoHiddenForTesting: Bool { isChromeAutoHidden }
 
     /// The web bundle's scroll telemetry, one post per scrolled frame.
-    func editorDidScroll(offset: Double) {
-        applyAutoHide(scroll: autoHidePolicy.observe(offset: offset))
+    func editorDidScroll(offset: Double, canHide: Bool) {
+        applyAutoHide(scroll: autoHidePolicy.observe(
+            offset: offset, at: ProcessInfo.processInfo.systemUptime, canHide: canHide))
     }
 
     /// Re-run the gate after an input OTHER than scrolling changed (the
@@ -558,7 +644,7 @@ final class RootSplitViewController: NSViewController {
     }
 
     /// Force the chrome back and restart the policy from a fresh baseline:
-    /// explicit chrome interactions (sidebar toggle, zen exit) must always
+    /// explicit chrome interactions (sidebar toggle, zen exit, window mode) must always
     /// leave the user with visible controls.
     private func revealChrome() {
         autoHidePolicy = ChromeAutoHidePolicy()
@@ -567,6 +653,7 @@ final class RootSplitViewController: NSViewController {
 
     private func setChromeAutoHidden(_ hidden: Bool) {
         guard isChromeAutoHidden != hidden else { return }
+        Self.chromeLog.info("band \(hidden ? "auto-hidden" : "auto-shown", privacy: .public)")
         isChromeAutoHidden = hidden
         applyChromeAutoHideState()
     }
@@ -718,45 +805,40 @@ final class RootSplitViewController: NSViewController {
         // A bookmark per tab: it makes restoration independent of
         // Location-resolution order, and it is the only thing that reopens
         // an external file's sandbox scope after relaunch.
-        let snapshot = editor.sessionSnapshot()
+        let snapshot = editor.sessionGroups()
         return WindowSession(
-            tabs: editor.sessionTabRecords(), activeIndex: snapshot.activeIndex,
+            groups: snapshot.groups, activeGroupIndex: snapshot.activeGroupIndex,
             isSidebarVisible: isSidebarVisible,
             // The window's outline intent; a tab's PDF reopens on its next compile.
-            isOutlineVisible: editor.isOutlineWanted,
-            splitIndex: snapshot.splitIndex, splitIsLeading: snapshot.splitIsLeading)
+            isOutlineVisible: editor.isOutlineWanted)
     }
 
     /// Reopen a restored window's tabs. Unresolvable or unreadable files (moved
     /// or deleted between quit and relaunch) are dropped silently.
     private func applyRestoredSession(_ session: WindowSession) {
-        var openedRecordIndices: [Int] = []
-        for (index, record) in session.tabs.enumerated() {
-            let url = record.bookmark.flatMap(FileBookmark.resolve)
-                ?? URL(fileURLWithPath: record.path)
-            // Enter the scope before the readability check: outside it, a
-            // sandboxed file isn't readable at all. Held for the session.
-            let accessing = url.startAccessingSecurityScopedResource()
-            guard FileManager.default.isReadableFile(atPath: url.path) else {
-                if accessing { url.stopAccessingSecurityScopedResource() }
-                continue
+        var groups: [(urls: [URL], activeIndex: Int?, fraction: Double)] = []
+        for group in session.groups {
+            var urls: [URL] = []
+            var active: Int?
+            for (index, record) in group.tabs.enumerated() {
+                let url = record.bookmark.flatMap(FileBookmark.resolve)
+                    ?? URL(fileURLWithPath: record.path)
+                // Enter the scope before the readability check: outside it, a
+                // sandboxed file isn't readable at all. Held for the session.
+                let accessing = url.startAccessingSecurityScopedResource()
+                guard FileManager.default.isReadableFile(atPath: url.path) else {
+                    if accessing { url.stopAccessingSecurityScopedResource() }
+                    continue
+                }
+                if accessing { externalScopedURLs.append(url) }
+                if index == group.activeIndex { active = urls.count }
+                urls.append(url)
             }
-            if accessing { externalScopedURLs.append(url) }
-            // activating: false: bulk restore must not boot one webview per tab;
-            // only the final activate below boots one.
-            editor.open(url: url, activating: false)
-            openedRecordIndices.append(index)
+            groups.append((urls, active, group.fraction))
         }
-        if let wanted = session.activeIndex,
-           let position = openedRecordIndices.firstIndex(of: wanted) {
-            editor.activateTab(at: position)
-        } else if !openedRecordIndices.isEmpty {
-            editor.activateTab(at: 0)
-        }
-        // Restored tabs are all file tabs, so a position here is a file-tab index.
-        if let wanted = session.splitIndex,
-           let position = openedRecordIndices.firstIndex(of: wanted) {
-            editor.restoreSplit(fileTabAt: position, leading: session.splitIsLeading)
+        // Tabs open dormant: bulk restore must not boot one web view per tab, only one per group.
+        if groups.contains(where: { !$0.urls.isEmpty }) {
+            editor.restoreGroups(groups, activeGroupIndex: session.activeGroupIndex)
         }
         if session.isSidebarVisible {
             setSidebarVisible(true)
@@ -783,6 +865,24 @@ final class RootSplitViewController: NSViewController {
     /// every window (one process-wide preference).
     func setViewModeDefault(_ mode: ViewMode) {
         Preferences.viewMode = mode
+        for root in liveRootsIncludingSelf() { root.applyEditorConfig() }
+    }
+
+    /// ⌘⇧↩. Keeps the AI text in the selection, or all of it with no selection.
+    @objc func cmdAcceptAiMarks(_ sender: Any? = nil) {
+        guard admitShellAction(#selector(cmdAcceptAiMarks(_:))) else { return }
+        editor.activeSurface?.acceptAiMarks()
+    }
+
+    /// ⌘⇧⌫. Drops that text and restores what it deleted.
+    @objc func cmdRejectAiMarks(_ sender: Any? = nil) {
+        guard admitShellAction(#selector(cmdRejectAiMarks(_:))) else { return }
+        editor.activeSurface?.rejectAiMarks()
+    }
+
+    /// One process-wide preference, like the default view mode.
+    @objc func cmdToggleAiMarks(_ sender: Any? = nil) {
+        Preferences.showAiMarks.toggle()
         for root in liveRootsIncludingSelf() { root.applyEditorConfig() }
     }
 
@@ -1271,16 +1371,15 @@ final class RootSplitViewController: NSViewController {
         toggleTrailingPanel(.outline)
     }
 
-    /// ⌥⌘P: the compiled PDF in the outline's slot, toggled like ⌘K.
+    /// ⌥⌘P: the compiled PDF in the trailing slot, toggled like ⌘K.
     @objc func cmdTogglePDFPanel(_ sender: Any? = nil) {
         toggleTrailingPanel(.pdf)
     }
 
-    /// Hides the slot when it shows `content`, else shows `content` there. Zen owns the
-    /// chrome: opening into it is refused, like the Library.
+    /// Takes `content` out of the slot when it shows there, else adds it. Zen owns the chrome:
+    /// opening into it is refused, like the Library.
     private func toggleTrailingPanel(_ content: EditorContainerViewController.TrailingPanelContent) {
-        let hides = editor.isOutlinePanelVisible && editor.trailingPanelContent == content
-        if !hides, isZen { return }
+        if !editor.isShowing(content), isZen { return }
         revealChrome()
         editor.toggleTrailingPanel(content, animated: motionAllowed)
     }
@@ -1395,16 +1494,30 @@ final class RootSplitViewController: NSViewController {
         for root in liveRootsIncludingSelf() { root.applyEditorFontScale() }
     }
 
-    @objc func cmdNextTab(_ sender: Any? = nil) { editor.nextTab() }
-    @objc func cmdPrevTab(_ sender: Any? = nil) { editor.previousTab() }
-
-    /// ⌘\: two documents side by side, or back to one.
-    @objc func cmdToggleSplit(_ sender: Any? = nil) {
-        guard editor.canToggleSplit else { return NSSound.beep() }
-        editor.toggleSplit()
+    @objc func cmdNextTab(_ sender: Any? = nil) {
+        guard admitShellAction(#selector(cmdNextTab(_:))) else { return }
+        editor.nextTab()
+    }
+    @objc func cmdPrevTab(_ sender: Any? = nil) {
+        guard admitShellAction(#selector(cmdPrevTab(_:))) else { return }
+        editor.previousTab()
     }
 
-    @objc func cmdFocusOtherPane(_ sender: Any? = nil) { editor.focusOtherPane() }
+    /// ⌘\: the focused tab moves into a new group on the right.
+    @objc func cmdSplitRight(_ sender: Any? = nil) {
+        if !editor.splitRight() { NSSound.beep() }
+    }
+
+    /// ⌥⌘\: focus the next group, wrapping.
+    @objc func cmdFocusNextGroup(_ sender: Any? = nil) { editor.focusNextGroup() }
+
+    /// ⌘1…⌘9: focus that group; the menu item's tag is the 1-based group number.
+    @objc func cmdFocusGroup(_ sender: Any? = nil) {
+        let number = (sender as? NSMenuItem)?.tag ?? 1
+        if !editor.focusGroup(at: number - 1) { NSSound.beep() }
+    }
+
+    @objc func cmdJoinAllGroups(_ sender: Any? = nil) { editor.joinAllGroups() }
 
     /// ⌘,: the app's one Settings window, owned by the app delegate.
     @objc func cmdSettings(_ sender: Any? = nil) {
@@ -1480,8 +1593,15 @@ final class RootSplitViewController: NSViewController {
     /// an instant write. Both lanes land the same final state (`isHidden`
     /// set, alpha 1).
     private func setBandHidden(_ hidden: Bool, fadeOver duration: TimeInterval?) {
-        guard headerBar.isHidden != hidden else { return }
+        // Before the guard: zen off inside zen-on's fade finds the band not yet hidden, and only
+        // the epoch stops that fade's completion from hiding it outside zen
+        // (docs/issues/2026-10-31-tabs-hide-without-scrolling.md).
         zenBandFadeEpoch += 1
+        guard headerBar.isHidden != hidden else {
+            if !hidden { headerBar.alphaValue = 1 }
+            return
+        }
+        Self.chromeLog.info("band \(hidden ? "hidden" : "shown", privacy: .public) (zen)")
         guard let duration, duration > 0, headerBar.window != nil else {
             headerBar.isHidden = hidden
             headerBar.alphaValue = 1
@@ -1628,18 +1748,19 @@ final class RootSplitViewController: NSViewController {
     }
 
     /// The live editor surface's covered-transition seams: a bitmap of the
-    /// pixels on screen, and the surface's own paint gate. While split, both
-    /// panes: one bitmap of the pane area, released once both have painted, so
-    /// the unfocused pane never shows bare background under the cover.
+    /// pixels on screen, and the surface's own paint gate. With several groups,
+    /// every pane: one bitmap of the pane area, released once all have painted,
+    /// so an unfocused pane never shows bare background under the cover.
     private func liveWebPaintSeams() -> (snapshotter: WebPaintGate.Snapshotter,
                                          paintGate: WebPaintGate.PaintGate,
                                          bitmapSource: NSView)? {
         guard let surface = editor.activeSurface, surface.view.window != nil else { return nil }
-        guard let other = editor.splitSurface, other.view.window != nil else {
+        let others = editor.otherShownSurfaces.filter { $0.view.window != nil }
+        guard !others.isEmpty else {
             return (surface.captureSnapshot, surface.afterNextPaint, surface.view)
         }
         let host = editor.paneHostView
-        let surfaces = [surface, other]
+        let surfaces = [surface] + others
         let snapshotter: WebPaintGate.Snapshotter = { done in
             var images: [NSImage?] = Array(repeating: nil, count: surfaces.count)
             var pending = surfaces.count
@@ -1762,17 +1883,20 @@ extension RootSplitViewController: NSMenuItemValidation {
             item.state = mode == Preferences.viewMode ? .on : .off
         }
         switch item.action {
+        case #selector(cmdToggleAiMarks(_:))?:
+            item.state = Preferences.showAiMarks ? .on : .off
         case #selector(cmdTogglePDFPanel(_:))?:
             item.state = editor.isPDFPanelShowing ? .on : .off
         case #selector(cmdCompile(_:))?:
             return editor.canCompileActive
         case #selector(cmdShowInPDF(_:))?:
             return editor.canSyncActiveToPDF
-        case #selector(cmdToggleSplit(_:))?:
-            item.state = editor.isSplit ? .on : .off
-            return editor.canToggleSplit
-        case #selector(cmdFocusOtherPane(_:))?:
-            return editor.isSplit
+        case #selector(cmdSplitRight(_:))?:
+            return editor.canSplitRight
+        case #selector(cmdFocusNextGroup(_:))?, #selector(cmdJoinAllGroups(_:))?:
+            return editor.groupCount > 1
+        case #selector(cmdFocusGroup(_:))?:
+            return item.tag >= 1 && item.tag <= editor.groupCount
         default:
             break
         }
@@ -1813,26 +1937,43 @@ extension RootSplitViewController {
     func setOutlinePanelForTesting(_ visible: Bool) { editor.setOutlinePanelVisible(visible, animated: false) }
     /// The trailing slot as the matrix names it.
     var trailingPanelStateForTesting: UIState.OutlineState {
-        guard editor.isOutlinePanelVisible else { return .hidden }
-        return editor.trailingPanelContent == .pdf ? .pdf : .shown
-    }
-    func setTrailingPanelForTesting(_ state: UIState.OutlineState) {
-        switch state {
-        case .hidden: editor.setOutlinePanelVisible(false, animated: false)
-        case .shown: editor.showTrailingPanel(.outline, animated: false)
-        case .pdf: editor.showTrailingPanel(.pdf, animated: false)
+        switch (editor.isShowing(.outline), editor.isPDFPanelShowing) {
+        case (false, false): return .hidden
+        case (true, false): return .shown
+        case (false, true): return .pdf
+        case (true, true): return .both
         }
     }
-    /// The split axis, through the menu command's own path. Like ⌘\, it opens no tabs: the
-    /// caller seeds the two a split shows.
-    func setSplitForTesting(_ state: UIState.SplitState) {
-        guard (state == .split) != editor.isSplit else { return }
-        cmdToggleSplit()
+    func setTrailingPanelForTesting(_ state: UIState.OutlineState) {
+        editor.setOutlinePanelVisible(false, animated: false)
+        if state == .shown || state == .both { editor.showTrailingPanel(.outline, animated: false) }
+        if state == .pdf || state == .both { editor.showTrailingPanel(.pdf, animated: false) }
+    }
+    /// The groups axis, through the menu command's own path: `.multiple` is three groups, made
+    /// by ⌘\ twice; `.single` joins them. Like ⌘\, it opens no tabs: the caller seeds three.
+    func setGroupsForTesting(_ state: UIState.GroupsState) {
+        switch state {
+        case .single:
+            cmdJoinAllGroups()
+        case .multiple:
+            // Split the first group until there are three, then focus the last (the tab that was
+            // focused). Made regardless of width: groups made in a wide window stay when the
+            // Library or the slot narrows the column, and that is the geometry under test.
+            while editor.groupCount < UIState.GroupsState.multipleCount {
+                editor.focusGroup(at: 0)
+                guard editor.splitRight(ignoringWidth: true) else { break }
+            }
+            editor.focusGroup(at: editor.groupCount - 1)
+        }
+        view.layoutSubtreeIfNeeded()
     }
     /// Drive the web-forwarded shell command lane (`editor.onShellCommand`).
     func simulateShellCommandForTesting(_ name: String) { editor.onShellCommand?(name) }
-    /// Drives the real `onTabsChanged` sink with a canned strip.
-    func simulateTabsChangedForTesting(_ items: [TabItem]) { handleTabsChanged(items) }
+    /// Drives the real `onTabsChanged` sink with a canned strip (one group).
+    func simulateTabsChangedForTesting(_ items: [TabItem]) {
+        handleTabsChanged([TabGroupItem(id: headerBar.tabStrip.groupID ?? UUID(), tabs: items, isFocused: true)])
+    }
+    var tabStripsForTesting: [HeaderTabStrip] { headerBar.strips }
 
     /// Drives the full-screen chrome switch that nothing else in a test can
     /// reach: the same flag and presentation path the window's notification
@@ -1877,14 +2018,30 @@ extension RootSplitViewController {
                                  y: ChalkMetrics.footerPillMargin)
         let editorContent: CGRect = editor.isViewLoaded
             ? view.convert(editor.contentViewFrameForTesting, from: editor.view) : .zero
+        // The focused group's row: the active label and its accent underline are there.
+        let focusedStrip = headerBar.strips.first { $0.isFocusedGroup } ?? headerBar.tabStrip
         let activeLabel: CGRect? = headerBar.isHidden
             ? nil
-            : headerBar.tabStrip.activeLabelFrameForTesting
-                .map { view.convert($0, from: headerBar.tabStrip) }
+            : focusedStrip.activeLabelFrameForTesting
+                .map { view.convert($0, from: focusedStrip) }
         let activeUnderline: CGRect? = headerBar.isHidden
             ? nil
-            : headerBar.tabStrip.activeUnderlineFrameForTesting
-                .map { view.convert($0, from: headerBar.tabStrip) }
+            : focusedStrip.activeUnderlineFrameForTesting
+                .map { view.convert($0, from: focusedStrip) }
+        let groupStrips: [CGRect] = headerBar.isHidden
+            ? [] : headerBar.strips.map { view.convert($0.frame, from: headerBar) }
+        let lights: CGRect? = {
+            guard let window = view.window,
+                  let close = window.standardWindowButton(.closeButton),
+                  let zoom = window.standardWindowButton(.zoomButton),
+                  !close.isHidden, !zoom.isHidden, let host = zoom.superview else { return nil }
+            return view.convert(host.convert(close.frame.union(zoom.frame), to: nil), from: nil)
+        }()
+        let nameLines: [CGFloat] = headerBar.isHidden ? [] : headerBar.strips.compactMap { strip in
+            strip.nameLineForTesting.map { view.convert(CGPoint(x: 0, y: $0), from: strip).y }
+        }
+        let firstNameMinX: CGFloat? = headerBar.isHidden ? nil
+            : headerBar.tabStrip.firstLabelFrameForTesting.map { view.convert($0, from: headerBar.tabStrip).minX }
         return ChromeLayout(
             state: state,
             root: view.bounds,
@@ -1913,9 +2070,14 @@ extension RootSplitViewController {
             bandPaintTrailingHole: trailingHole,
             editorPanes: editor.isViewLoaded
                 ? editor.paneFramesForTesting.map { view.convert($0, from: editor.view) } : [],
-            splitDivider: editor.isViewLoaded
-                ? editor.splitDividerFrameForTesting.map { view.convert($0, from: editor.view) } : nil,
-            splitMinimumPane: ChalkMetrics.splitMinimumPaneWidth)
+            groupDividers: editor.isViewLoaded
+                ? editor.groupDividerFramesForTesting.map { view.convert($0, from: editor.view) } : [],
+            groupMinimumWidth: ChalkMetrics.groupMinimumWidth,
+            groupStrips: groupStrips,
+            trafficLights: lights,
+            nameLines: nameLines,
+            firstNameMinX: firstNameMinX,
+            trafficLightGap: ChalkMetrics.trafficLightGap + ChalkMetrics.tabLabelPadding)
     }
 
     /// Drive one user-level chrome toggle through the REAL entry points.
@@ -1929,12 +2091,12 @@ extension RootSplitViewController {
             setMacFullscreenForTesting(mode == .fullscreen)
         case .zen(let on):
             setEditingMode(on ? .zen : .normal)
-        case .split(let on):
-            setSplitForTesting(on ? .split : .single)
+        case .groups(let on):
+            setGroupsForTesting(on ? .multiple : .single)
         case .outline(let visible):
             if visible, isZen { return }
             revealChrome()
-            // Through the menu's own paths: showing puts the outline in the slot, hiding closes
+            // Through the menu's own paths: showing adds the outline to the slot, hiding closes
             // the slot whatever it shows.
             if visible {
                 editor.showTrailingPanel(.outline, animated: false)

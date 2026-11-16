@@ -17,7 +17,8 @@ anything UIKit-free lives in ChalkKit, and the shell's spec chrome tokens are
   `open-external`. Entry point `mountEditor` ([mount.ts](packages/editor-core/src/mount.ts)).
   The native transport additionally carries transport-internal messages
   (`resolve-asset` and `render-tikz` request/reply, `scroll` telemetry, `outline` pushes for the
-  persistent panel, `command` save/toggle-outline/toggle-outline-panel) and the
+  persistent panel, `ai-marks` pushes for `ProvenanceStore`, `command`
+  save/toggle-outline/toggle-outline-panel/accept-ai-marks/reject-ai-marks) and the
   `window.__chalkEditor` bridge (clipboard, outline access, and
   `setOutlineSubscription`, which turns the `outline` pushes on and off),
   mirrored in [WebEditorSurface.swift](mac/Chalk/Editor/WebEditorSurface.swift).
@@ -71,8 +72,8 @@ accepted-failure format). jsdom unit tests stay beside their package, in
 [scripts/check.sh](scripts/check.sh) runs the lot. Its `--list` names every
 step: build-web, typecheck, xcodegen, build-mac, invariants-doc,
 engine-tests, chalkkit-tests, caret-fixtures, browser-tests,
-geometric-matrix, snapshots, pref-guard, ui-invariants, mac-tests, bench.
-`--fast` skips the three Xcode test steps and the benchmarks.
+geometric-matrix, snapshots, pref-guard, ui-invariants, tab-row, mac-tests, bench.
+`--fast` skips the four Xcode test steps and the benchmarks.
 Debug builds, and so the ChalkTests host, use the bundle ID
 `com.huleux.chalk.debug`: tests write `UserDefaults.standard`, and must never
 share a domain with the installed Release app (`com.huleux.chalk`). It parses each runner's output with a fixed extractor, so a
@@ -91,8 +92,8 @@ so `swift test` works from the command line without Xcode's test runner
   have hardcoded fallbacks — leave them. Keep its touch handling: VS Code runs
   on touchscreen laptops.
 - **Chrome geometry is asserted, not eyeballed.** `ChromeInvariantMatrixTests`
-  drives a 96-cell state matrix (window mode x sidebar x trailing slot
-  (closed, outline, PDF) x editing mode x split x appearance) and checks named rules over the chrome's real
+  drives a 128-cell state matrix (window mode x sidebar x trailing slot
+  (closed, outline, PDF, both) x editing mode x tab groups (one or three) x appearance) and checks named rules over the chrome's real
   laid-out frames. Before changing the band, the Library panel,
   the tab strip or the editor's resting offset, read
   [docs/ui-correctness.md](docs/ui-correctness.md) — it lists the traps that
@@ -100,6 +101,12 @@ so `swift test` works from the command line without Xcode's test runner
   preferences, counting applicable instead of falsifiable assertions). The rules
   themselves are generated into [docs/ui-invariants.md](docs/ui-invariants.md);
   `scripts/check.sh` fails if that file drifts from the Swift catalogue.
+- **The tab row is asserted on what it draws.** Test windows are the app's own
+  (`EditorWindowController.makeChromeWindow`: tall titlebar, real traffic
+  lights). Before changing a tab-row token in `ChalkMetrics` or
+  `HeaderTabStrip`'s layout, run the `tab-row` step and look at its gallery
+  (`TEST_RUNNER_CHALK_TAB_GALLERY=1`, see `TabRowGeometryTests`); the traps are
+  in docs/ui-correctness.md "Tab row".
 
 ## Comments
 

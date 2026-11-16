@@ -45,9 +45,10 @@ final class MenuRoutingTests: XCTestCase {
         XCTAssertNil(file.items.first { $0.title == "Close" }, "the system Close item would shadow Close Tab on ⌘W")
 
         let view = try submenu(titled: "View", in: main)
-        XCTAssertEqual(itemTitles(view), ["Toggle Sidebar", "Outline", "Outline Panel", "Editing Mode", "View Mode",
+        XCTAssertEqual(itemTitles(view), ["Toggle Sidebar", "Outline", "Outline Panel", "Editing Mode", "View Mode", "Show AI Marks",
                                       "Zoom In", "Zoom Out", "Actual Size", "Next Tab", "Previous Tab",
-                                      "Split Editor", "Focus Other Pane"])
+                                      "Split Editor Right", "Focus Next Group", "Focus First Group",
+                                      "Focus Second Group", "Focus Third Group", "Join All Groups"])
         let modes = try XCTUnwrap(view.items.first { $0.title == "Editing Mode" }?.submenu)
         XCTAssertEqual(itemTitles(modes), ["Normal", "Zen", "Typewriter", "Focus", "Cycle Editing Mode"])
         let viewModes = try XCTUnwrap(view.items.first { $0.title == "View Mode" }?.submenu)
@@ -89,10 +90,18 @@ final class MenuRoutingTests: XCTestCase {
         XCTAssertEqual(try item("Actual Size").keyEquivalent, "0")
         XCTAssertEqual(try item("Next Tab").keyEquivalent, "\t")
         XCTAssertEqual(try item("Next Tab").keyEquivalentModifierMask, [.control])
+        // Shift turns Tab into back-tab (U+0019): a "\t" item never matches Ctrl+Shift+Tab.
+        XCTAssertEqual(try item("Previous Tab").keyEquivalent, "\u{19}")
         XCTAssertEqual(try item("Previous Tab").keyEquivalentModifierMask, [.control, .shift])
-        XCTAssertEqual(try item("Split Editor").keyEquivalent, "\\")
-        XCTAssertEqual(try item("Split Editor").keyEquivalentModifierMask, [.command])
-        XCTAssertEqual(try item("Focus Other Pane").keyEquivalentModifierMask, [.command, .option])
+        XCTAssertEqual(try item("Split Editor Right").keyEquivalent, "\\")
+        XCTAssertEqual(try item("Split Editor Right").keyEquivalentModifierMask, [.command])
+        XCTAssertEqual(try item("Focus Next Group").keyEquivalentModifierMask, [.command, .option])
+        // VS Code's group focus chords; the tag is the group's number.
+        for (number, title) in [(1, "Focus First Group"), (2, "Focus Second Group"), (3, "Focus Third Group")] {
+            XCTAssertEqual(try item(title).keyEquivalent, String(number))
+            XCTAssertEqual(try item(title).keyEquivalentModifierMask, [.command])
+            XCTAssertEqual(try item(title).tag, number)
+        }
         XCTAssertEqual(try item("Settings\u{2026}").keyEquivalent, ",")
         XCTAssertEqual(try item("Compile").keyEquivalent, "r")
         XCTAssertEqual(try item("Compile").keyEquivalentModifierMask, [.command])

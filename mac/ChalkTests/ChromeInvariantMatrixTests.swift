@@ -77,8 +77,9 @@ final class ChromeInvariantMatrixTests: XCTestCase {
         if state.outline == .hidden && layout.outlinePanel != nil {
             faults.append("\(state.id): the outline panel was not requested and is open")
         }
-        if controller.editor.isSplit != (state.split == .split) {
-            faults.append("\(state.id): the split is \(controller.editor.isSplit ? "open" : "closed")")
+        let groups = state.groups == .multiple ? UIState.GroupsState.multipleCount : 1
+        if controller.editor.groupCount != groups {
+            faults.append("\(state.id): \(controller.editor.groupCount) tab groups, expected \(groups)")
         }
         // The band is Chalk's own in every window mode: a full-screen cell
         // with no band is a cell that did not configure.
@@ -98,28 +99,33 @@ final class ChromeInvariantMatrixTests: XCTestCase {
         // against geometry that could have come out differently.
         var coverage: [(id: String, names: [String])] = []
         for state in UIState.matrix {
-            let controller = root(in: state)
-            let layout = controller.chromeLayout(for: state)
-            configFaults += configurationFaults(state, layout, controller)
+            autoreleasepool {
+                let controller = root(in: state)
+                let layout = controller.chromeLayout(for: state)
+                configFaults += configurationFaults(state, layout, controller)
 
-            var asserted: [String] = []
-            for invariant in ChromeInvariant.catalogue
-            where invariant.isEvidence(about: layout) {
-                asserted.append(invariant.name)
-                if !invariant.holds(layout) {
-                    failures.append("""
-                        \(state.id): \(invariant.name)
-                          \(invariant.rationale)
-                          root=\(layout.root) band=\(layout.band) paint=\(layout.bandPaint)
-                          hole=\(String(describing: layout.bandPaintHole)) \
-                        panel=\(String(describing: layout.libraryPanel)) \
-                        chips=\(layout.tabStrip) resting=\(layout.editorRestingTop)
-                          pill=\(layout.footerPill) corner=\(layout.pillCorner) \
-                        content=\(layout.editorContent) reserve=\(layout.reserveTop)
-                        """)
+                var asserted: [String] = []
+                for invariant in ChromeInvariant.catalogue
+                where invariant.isEvidence(about: layout) {
+                    asserted.append(invariant.name)
+                    if !invariant.holds(layout) {
+                        failures.append("""
+                            \(state.id): \(invariant.name)
+                              \(invariant.rationale)
+                              root=\(layout.root) band=\(layout.band) paint=\(layout.bandPaint)
+                              hole=\(String(describing: layout.bandPaintHole)) \
+                            panel=\(String(describing: layout.libraryPanel)) \
+                            chips=\(layout.tabStrip) resting=\(layout.editorRestingTop)
+                              pill=\(layout.footerPill) corner=\(layout.pillCorner) \
+                            content=\(layout.editorContent) reserve=\(layout.reserveTop)
+                              libraryHeader=\(String(describing: layout.libraryFirstHeaderTop)) \
+                            lights=\(String(describing: layout.trafficLights)) nameLines=\(layout.nameLines) \
+                            firstName=\(String(describing: layout.firstNameMinX))
+                            """)
+                    }
                 }
+                coverage.append((state.id, asserted))
             }
-            coverage.append((state.id, asserted))
         }
 
         let counts = coverage.map(\.names.count)

@@ -14,28 +14,35 @@ final class EditorContainerView: ThemedView {
     override func refreshColors() { onAppearanceChange?() }
 }
 
-/// Hosts the open tabs and shows the active tab's editor surface, plus a second tab's beside it
-/// while split. Each tab owns its surface and document controller, so switching tabs preserves
-/// cursor, scroll and undo.
+/// Hosts the open tabs in side-by-side tab groups and shows each group's tab in its pane. Each
+/// tab owns its surface and document controller, so switching tabs preserves cursor, scroll and
+/// undo. See docs/specs/2026-11-11-editor-groups-design.md.
 final class EditorContainerViewController: NSViewController {
-    private var tabs: [Tab] = []
-    /// The FOCUSED pane's tab: every command (save, compile, outline, PDF) acts on it.
-    private var activeTab: Tab?
-    /// The split's other pane (⌘\); nil without a split. Never `activeTab`.
-    private var splitTab: Tab?
-    /// The pane `activeTab` is drawn in. Without a split it is the pane that fills the area.
-    private var focusedSide: EditorPaneHostView.Side = .leading
-    /// What the focused pane showed before `activeTab`: what ⌘\ puts in the new pane.
-    private weak var previousActiveTab: Tab?
+    /// The focused group: every command (save, compile, outline, PDF) acts on its tab.
+    private var activeGroup = EditorGroup()
+    /// Leading to trailing; never empty, and only the last group left can be empty.
+    private lazy var groups: [EditorGroup] = [activeGroup]
+    /// Every tab, leading group first: the window-wide view (dedupe, save-all, recovery).
+    private var tabs: [Tab] { groups.flatMap(\.tabs) }
+    /// The focused group's tab.
+    private var activeTab: Tab? { activeGroup.activeTab }
+    /// The tabs on screen, one per group.
+    private var shownTabs: [Tab] { groups.compactMap(\.activeTab) }
+    private func group(of tab: Tab) -> EditorGroup? { groups.first { $0.contains(tab) } }
+    private func group(id: UUID) -> EditorGroup? { groups.first { $0.id == id } }
+    /// How the column is shared between the groups (the pane host lays it out).
+    private var groupsLayout: EditorGroupsLayout {
+        get { contentView.layoutModel }
+        set { contentView.layoutModel = newValue }
+    }
 
     /// Reads the host window's own editing mode. A closure, not a stored copy: a copy goes stale
     /// when another window changes its mode. The default serves a container with no host (tests).
     var currentEditingMode: () -> EditingMode = { Preferences.editingMode }
 
     private let contentView = EditorPaneHostView()
-    /// Watches clicks so one in the unfocused pane focuses it (`focusPane(under:)`).
+    /// Watches clicks so one in an unfocused group's pane focuses it (`focusPane(under:)`).
     private var paneClickMonitor: Any?
-    private var splitResizeStartWidth: CGFloat = 0
     /// "No document open". Visibility is set explicitly by `refreshEmptyState()`, never by
     /// occlusion: a detached surface must not read as an empty window under a live chip.
     /// See docs/issues/2026-07-24-blank-editor-on-open.md.
@@ -59,56 +66,69 @@ final class EditorContainerViewController: NSViewController {
     private var contentLeading: NSLayoutConstraint?
     private var frozenContentWidth: NSLayoutConstraint?
 
-    // MARK: Outline panel
+    // MARK: Trailing slot
 
-    /// The persistent outline (⌘K) on the column's trailing edge. Push mode pins the content to
-    /// the panel; overlay mode floats it above. See docs/specs/2026-09-04-outline-panel-design.md.
-    let outlinePanel = OutlinePanelViewController()
-    private(set) var isOutlinePanelVisible = false
-    /// Fired after the panel opens, closes, resizes or changes mode, so the host can cut it out
-    /// of the tab band's paint.
-    var onOutlinePanelLayoutChanged: (() -> Void)?
-    /// Straddles the panel's leading edge, in THIS view so it can extend over the editor's side.
-    private let outlineResizeGrip = ColumnResizeGrip()
-    /// Last frame announced through `onOutlinePanelLayoutChanged`, so only a layout pass that
-    /// actually moved the panel re-cuts the band.
-    private var lastAnnouncedOutlinePanelFrame: CGRect?
-    /// The panel's frame in this container's view, nil while hidden.
-    var outlinePanelFrame: CGRect? { isOutlinePanelVisible ? outlinePanel.view.frame : nil }
-    private(set) var outlinePanelIsOverlay = false
-    /// The shown width: `preferredSlotWidth` fitted to the column (`fitSlotWidth`).
-    private var outlinePanelWidth: NSLayoutConstraint?
-    /// The width the slot asks for (a drag, the content's preference), kept while a narrow column
-    /// shows less of it, so a wider window gives it back.
-    private var preferredSlotWidth = Preferences.outlinePanelWidth
-    /// The x, in this view, the slot must not start before: past it the band's chips lose their
-    /// narrowest strip. Set by the host (`setSlotLeadingLimit`).
-    private var slotLeadingLimit: CGFloat = 0
-    /// The panel's trailing pin: 0 when shown, +width when parked off-screen.
-    private var outlinePanelTrailing: NSLayoutConstraint?
-    private var contentTrailingToEdge: NSLayoutConstraint?
-    private var contentTrailingToPanel: NSLayoutConstraint?
-
-    // MARK: PDF panel
-
-    /// What the trailing slot shows. The PDF panel reuses the outline panel's frame, slide,
-    /// grip and band cut-out, so the chrome has one trailing slot whatever fills it;
-    /// `isOutlinePanelVisible` is that slot's visibility.
+    /// The one frame on the column's trailing edge, whatever fills it: push, overlay, slide and
+    /// the band's cut-out all act on it. Inside, the PDF sits left of the outline, so the source
+    /// keeps its output beside it and the window's outline stays put when a tab's PDF comes and
+    /// goes. Clips, so a panel entering or leaving slides in and out of the slot's own edges.
+    /// See docs/specs/2026-09-04-outline-panel-design.md.
+    private let trailingSlot = NSView()
+    /// What the slot holds. Keeps its value while the slot is closed, so a slide-out is drawn.
     enum TrailingPanelContent { case outline, pdf }
-    private(set) var trailingPanelContent: TrailingPanelContent = .outline
-    /// The compiled PDF, pinned over the outline panel's frame while the slot shows it.
+    private(set) var trailingPanelContents: Set<TrailingPanelContent> = [.outline]
+    /// The slot's visibility, whatever it holds.
+    private(set) var isOutlinePanelVisible = false
+    /// The persistent outline (⌘K).
+    let outlinePanel = OutlinePanelViewController()
+    /// The compiled PDF (⌥⌘P).
     let pdfPanel = PDFPanelViewController()
     /// This window's compiles (⌘R, Cmd+S) and SyncTeX.
     let compiler = CompileController()
-    /// The slot shows the outline: only then do surfaces push outline snapshots.
-    private var isOutlineShowing: Bool { isOutlinePanelVisible && trailingPanelContent == .outline }
-    var isPDFPanelShowing: Bool { isOutlinePanelVisible && trailingPanelContent == .pdf }
+    /// Only while the outline shows do surfaces push outline snapshots.
+    private var isOutlineShowing: Bool { isShowing(.outline) }
+    var isPDFPanelShowing: Bool { isShowing(.pdf) }
+    func isShowing(_ content: TrailingPanelContent) -> Bool {
+        isOutlinePanelVisible && trailingPanelContents.contains(content)
+    }
+    /// Fired after the slot opens, closes, resizes or changes mode, so the host can cut it out
+    /// of the tab band's paint.
+    var onOutlinePanelLayoutChanged: (() -> Void)?
+    /// Straddles the slot's leading edge, in THIS view so it can extend over the editor's side.
+    private let outlineResizeGrip = ColumnResizeGrip()
+    /// Straddles the PDF/outline border while the slot holds both.
+    private let innerResizeGrip = ColumnResizeGrip()
+    /// Last frame announced through `onOutlinePanelLayoutChanged`, so only a layout pass that
+    /// actually moved the slot re-cuts the band.
+    private var lastAnnouncedOutlinePanelFrame: CGRect?
+    /// The slot's frame in this container's view, nil while hidden.
+    var outlinePanelFrame: CGRect? { isOutlinePanelVisible ? trailingSlot.frame : nil }
+    private(set) var outlinePanelIsOverlay = false
+    /// The slot's shown width: the panels' preferred widths fitted to the column (`fitSlotWidth`).
+    private var slotWidthPin: NSLayoutConstraint?
+    /// The slot's trailing pin: 0 when shown, +width when parked off-screen.
+    private var slotTrailingPin: NSLayoutConstraint?
+    private var outlineWidthPin: NSLayoutConstraint?
+    /// 0 while the slot holds the outline, +width when it is parked past the slot's edge.
+    private var outlineTrailingPin: NSLayoutConstraint?
+    private var pdfWidthPin: NSLayoutConstraint?
+    /// The widths the panels ask for (a drag, the stored preference), kept while a narrow column
+    /// shows less, so a wider window gives them back.
+    private var preferredOutlineWidth = Preferences.outlinePanelWidth
+    private var preferredPDFWidth = Preferences.pdfPanelWidth
+    /// The x, in this view, the slot must not start before: past it the band's chips lose their
+    /// narrowest readable strip. Set by the host (`setSlotLeadingLimit`).
+    private var slotLeadingLimit: CGFloat = 0
+    private var contentTrailingToEdge: NSLayoutConstraint?
+    private var contentTrailingToPanel: NSLayoutConstraint?
 
-    /// Fired when the open tabs change so the host can redraw the strip.
-    var onTabsChanged: (([TabItem]) -> Void)?
+    /// Fired when the open tabs change so the host can redraw the strips, one per group.
+    var onTabsChanged: (([TabGroupItem]) -> Void)?
+    /// The groups' panes moved: the host realigns each group's strip over its pane.
+    var onGroupFramesChanged: (() -> Void)?
 
     /// The ACTIVE tab's editor scroll offset (auto-hiding chrome).
-    var onActiveEditorScroll: ((Double) -> Void)?
+    var onActiveEditorScroll: ((Double, Bool) -> Void)?
 
     /// Band height sent to every web surface as the text's resting top offset. Kept so
     /// late-created tabs and crash reloads get the current value.
@@ -167,15 +187,59 @@ final class EditorContainerViewController: NSViewController {
     private var activeSavePanel: NSSavePanel?
 
 
-    /// Drag-reorder commit: move tab `id` to strip position `index` (clamped). Only the order
-    /// changes; session restore serializes `tabs` in order, so it persists.
+    /// Drag-reorder commit within a group: move tab `id` to strip position `index` (clamped) of
+    /// its own group. Only the order changes; session restore serializes it.
     func moveTab(id: UUID, to index: Int) {
-        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let target = max(0, min(index, tabs.count - 1))
-        guard from != target else { return }
-        let tab = tabs.remove(at: from)
-        tabs.insert(tab, at: target)
-        refreshTabBar()
+        guard let tab = tab(id: id), let group = group(of: tab) else { return }
+        moveTab(id: id, toGroup: group.id, at: index)
+    }
+
+    /// Move tab `id` to position `index` of group `groupID` (a drop on another group's strip or
+    /// editor). Leaving a group shows its next tab there; a group left empty closes. The moved tab
+    /// is shown and focused in its new group.
+    func moveTab(id: UUID, toGroup groupID: UUID, at index: Int) {
+        guard let tab = tab(id: id), let source = group(of: tab), let target = group(id: groupID),
+              let from = source.index(of: tab) else { return }
+        if source === target {
+            let to = max(0, min(index, source.tabs.count - 1))
+            guard from != to else { return }
+            source.tabs.remove(at: from)
+            source.tabs.insert(tab, at: to)
+            refreshTabBar()
+            return
+        }
+        source.tabs.remove(at: from)
+        target.tabs.insert(tab, at: max(0, min(index, target.tabs.count)))
+        if source.activeTab === tab {
+            if isOutlineShowing { tab.surface.setOutlineSubscription(false) }
+            source.activeTab = nil
+            tab.surface.view.removeFromSuperview()
+            if source.tabs.isEmpty {
+                removeGroup(source, refocusing: false)
+            } else if let next = neighbor(in: source, at: from) {
+                present(next, in: source)
+            }
+        }
+        activate(tab)
+    }
+
+    /// Split: a new group beside group `groupID` (`trailing` puts it after), holding tab `id`.
+    /// False, changing nothing, when no group fits at the minimum width (`ignoringWidth` is the
+    /// matrix's way past that) or when the tab is its own group's only one: a tab is in one group,
+    /// so splitting it off would leave an empty group behind.
+    @discardableResult
+    func splitTab(id: UUID, beside groupID: UUID, trailing: Bool, ignoringWidth: Bool = false) -> Bool {
+        guard let tab = tab(id: id), let source = group(of: tab),
+              let targetIndex = groups.firstIndex(where: { $0.id == groupID }),
+              !(source === groups[targetIndex] && source.tabs.count < 2),
+              ignoringWidth || canAddGroup else { return false }
+        let newGroup = EditorGroup()
+        let at = trailing ? targetIndex + 1 : targetIndex
+        groups.insert(newGroup, at: at)
+        groupsLayout = groupsLayout.inserting(at: at, splitting: targetIndex)
+        applyPaneLayout()
+        moveTab(id: id, toGroup: newGroup.id, at: 0)
+        return true
     }
 
     override func loadView() {
@@ -230,8 +294,8 @@ final class EditorContainerViewController: NSViewController {
             chromeFade.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             fadeHeight,
         ])
-        installOutlinePanel()
-        installSplitControls()
+        installTrailingSlot()
+        installGroupControls()
 
         // Cross-window save sync. One observer per container, not per tab, so tab close needs no
         // teardown; selector-based observers detach on dealloc.
@@ -244,77 +308,72 @@ final class EditorContainerViewController: NSViewController {
         view.chalkSetLayerBackground(.chalkEditorBackground)
     }
 
-    private func installOutlinePanel() {
-        addChild(outlinePanel)
-        let panelView: NSView = outlinePanel.view
-        panelView.translatesAutoresizingMaskIntoConstraints = false
-        // Honour a visibility the host set before the view loaded (session restore calls
-        // `setOutlinePanelVisible` from the host's `init`). Hiding unconditionally left the flag
-        // true over an invisible panel.
-        panelView.isHidden = !isOutlinePanelVisible
+    private func installTrailingSlot() {
+        let slot = trailingSlot
+        slot.translatesAutoresizingMaskIntoConstraints = false
+        slot.wantsLayer = true
+        slot.clipsToBounds = true
         // Above the chrome fade: the fade is for text, and over the panel it hid its top.
-        view.addSubview(panelView)
+        view.addSubview(slot)
 
-        let width = panelView.widthAnchor.constraint(equalToConstant: Preferences.outlinePanelWidth)
-        outlinePanelWidth = width
-        let trailing = panelView.trailingAnchor.constraint(
+        let width = slot.widthAnchor.constraint(equalToConstant: Preferences.outlinePanelWidth)
+        slotWidthPin = width
+        let trailing = slot.trailingAnchor.constraint(
             equalTo: view.trailingAnchor,
             constant: isOutlinePanelVisible ? 0 : Preferences.outlinePanelWidth)
-        outlinePanelTrailing = trailing
-        contentTrailingToPanel = contentView.trailingAnchor.constraint(equalTo: panelView.leadingAnchor)
+        slotTrailingPin = trailing
+        contentTrailingToPanel = contentView.trailingAnchor.constraint(equalTo: slot.leadingAnchor)
         NSLayoutConstraint.activate([
             width, trailing,
-            panelView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            panelView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            slot.topAnchor.constraint(equalTo: contentView.topAnchor),
+            slot.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        // The PDF first: it comes and goes from under the outline.
+        pdfWidthPin = mount(pdfPanel, in: slot, width: preferredPDFWidth)
+        outlineWidthPin = mount(outlinePanel, in: slot, width: preferredOutlineWidth)
+        let outlineTrailing = outlinePanel.view.trailingAnchor.constraint(equalTo: slot.trailingAnchor)
+        outlineTrailingPin = outlineTrailing
+        NSLayoutConstraint.activate([
+            outlineTrailing,
+            // Holds with the PDF out of the slot too: it sits clipped past the leading edge,
+            // ready to be uncovered.
+            pdfPanel.view.trailingAnchor.constraint(equalTo: outlinePanel.view.leadingAnchor),
         ])
         outlinePanel.onJump = { [weak self] line in self?.revealLine(line) }
+        wirePDFPanel()
 
-        // The grip straddles the border so a drag on the visible edge catches it from either
-        // side. It hides with the panel so the parked panel leaves no phantom strip.
-        let grip = outlineResizeGrip
-        grip.showsHoverLine = true
-        grip.translatesAutoresizingMaskIntoConstraints = false
-        grip.isHidden = !isOutlinePanelVisible
-        view.addSubview(grip)
-        NSLayoutConstraint.activate([
-            grip.centerXAnchor.constraint(equalTo: panelView.leadingAnchor),
-            grip.widthAnchor.constraint(equalToConstant: 12),
-            grip.topAnchor.constraint(equalTo: panelView.topAnchor),
-            grip.bottomAnchor.constraint(equalTo: panelView.bottomAnchor),
-        ])
-        grip.onDragBegan = { [weak self] in
-            self?.outlineResizeStartWidth = self?.outlinePanelWidth?.constant ?? 0
+        // The grips straddle their borders so a drag on the visible edge catches it from either
+        // side, and each resizes the panel on its trailing side. They hide with the slot so a
+        // parked slot leaves no phantom strip.
+        install(outlineResizeGrip, on: slot.leadingAnchor) { [weak self] in
+            self?.trailingPanelContents.contains(.pdf) == true ? .pdf : .outline
         }
-        grip.onDragged = { [weak self] dx in
-            guard let self else { return }
-            self.setOutlinePanelWidth(self.outlineResizeStartWidth - dx, persist: false)
-        }
-        grip.onDragEnded = { [weak self] in
-            guard let self else { return }
-            self.setOutlinePanelWidth(self.outlinePanelWidth?.constant ?? 0, persist: true)
-        }
+        install(innerResizeGrip, on: outlinePanel.view.leadingAnchor) { .outline }
 
-        installPDFPanel(over: panelView)
-
+        settleSlotViews()
+        fitSlotWidth()
         // A pre-load `setOutlinePanelVisible` ran this with nil constraints. The column may still
         // be unsized, so `viewDidLayout` re-evaluates it.
         updateOutlinePanelMode()
     }
 
-    /// The PDF panel rides on the outline panel's view: same frame, same slide. Below the grip,
-    /// which must stay on top to catch drags on the slot's edge.
-    private func installPDFPanel(over slot: NSView) {
-        addChild(pdfPanel)
-        let pdfView: NSView = pdfPanel.view
-        pdfView.translatesAutoresizingMaskIntoConstraints = false
-        pdfView.isHidden = !isPDFPanelShowing
-        view.addSubview(pdfView, positioned: .above, relativeTo: slot)
+    /// Add `child` to the slot at full height. Returns its width pin.
+    private func mount(_ child: NSViewController, in slot: NSView, width: CGFloat) -> NSLayoutConstraint {
+        addChild(child)
+        let panel: NSView = child.view
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        slot.addSubview(panel)
+        let pin = panel.widthAnchor.constraint(equalToConstant: width)
         NSLayoutConstraint.activate([
-            pdfView.topAnchor.constraint(equalTo: slot.topAnchor),
-            pdfView.bottomAnchor.constraint(equalTo: slot.bottomAnchor),
-            pdfView.leadingAnchor.constraint(equalTo: slot.leadingAnchor),
-            pdfView.trailingAnchor.constraint(equalTo: slot.trailingAnchor),
+            pin,
+            panel.topAnchor.constraint(equalTo: slot.topAnchor),
+            panel.bottomAnchor.constraint(equalTo: slot.bottomAnchor),
         ])
+        return pin
+    }
+
+    private func wirePDFPanel() {
         pdfPanel.onCompile = { [weak self] in self?.compileActive() }
         pdfPanel.onSyncClick = { [weak self] page, point in self?.reverseSync(page: page, point: point) }
         pdfPanel.onIssue = { [weak self] issue in self?.jump(to: issue) }
@@ -325,13 +384,43 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
-    private var outlineResizeStartWidth: CGFloat = 0
+    /// `panel` is read when a drag begins: what the slot's edge resizes depends on what it holds.
+    private func install(_ grip: ColumnResizeGrip, on edge: NSLayoutXAxisAnchor,
+                         resizing panel: @escaping () -> TrailingPanelContent) {
+        grip.showsHoverLine = true
+        grip.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(grip)
+        NSLayoutConstraint.activate([
+            grip.centerXAnchor.constraint(equalTo: edge),
+            grip.widthAnchor.constraint(equalToConstant: 12),
+            grip.topAnchor.constraint(equalTo: trailingSlot.topAnchor),
+            grip.bottomAnchor.constraint(equalTo: trailingSlot.bottomAnchor),
+        ])
+        var dragged = TrailingPanelContent.outline
+        var startWidth: CGFloat = 0
+        grip.onDragBegan = { [weak self] in
+            guard let self else { return }
+            dragged = panel()
+            startWidth = self.shownWidth(of: dragged)
+        }
+        grip.onDragged = { [weak self] dx in
+            self?.setPanelWidth(dragged, startWidth - dx, persist: false)
+        }
+        grip.onDragEnded = { [weak self] in
+            guard let self else { return }
+            self.setPanelWidth(dragged, self.shownWidth(of: dragged), persist: true)
+        }
+    }
+
+    private func shownWidth(of content: TrailingPanelContent) -> CGFloat {
+        (content == .pdf ? pdfWidthPin : outlineWidthPin)?.constant ?? 0
+    }
 
     /// Open or close the slot: ⌘K's outline, the zen close, session restore. Opening puts the
     /// outline in it; closing also takes the active tab's PDF down.
     func setOutlinePanelVisible(_ visible: Bool, animated: Bool) {
         isOutlineWanted = visible
-        activeTab?.showsPDF = false
+        if !visible { activeTab?.showsPDF = false }
         applySlot(animated: animated)
     }
 
@@ -340,34 +429,31 @@ final class EditorContainerViewController: NSViewController {
     private func setSlotVisible(_ visible: Bool, animated: Bool) {
         guard visible != isOutlinePanelVisible else { return }
         isOutlinePanelVisible = visible
-        let panelView: NSView = outlinePanel.view
         if visible {
-            panelView.isHidden = false
-            outlineResizeGrip.isHidden = false
-            pdfPanel.view.isHidden = trailingPanelContent != .pdf
+            revealSlotViews()
             updateOutlinePanelMode()
             // Place the panel at its off-screen start before the slide: a
             // hidden view keeps a stale frame, and un-hiding it inside the
             // animated pass showed that frame for one frame at the top
             // trailing corner before the slide began.
             view.layoutSubtreeIfNeeded()
-            seedTrailingPanel()
+            seed(trailingPanelContents)
         } else {
-            if trailingPanelContent == .outline { activeTab?.surface.setOutlineSubscription(false) }
+            if trailingPanelContents.contains(.outline) { activeTab?.surface.setOutlineSubscription(false) }
             outlinePanelIsOverlay = false
             contentTrailingToPanel?.isActive = false
             contentTrailingToEdge?.isActive = true
         }
-        outlinePanelTrailing?.constant = visible ? 0 : (outlinePanelWidth?.constant ?? 0)
-        // Read the live flag, not `visible`: with a fast close-then-open, this hide's completion
-        // fires after the reopen.
+        slotTrailingPin?.constant = visible ? 0 : (slotWidthPin?.constant ?? 0)
+        runSlotLayout(animated: animated)
+    }
+
+    /// Run the pending slot constraints on the sidebar's clock. Reads the live flags at the end,
+    /// not the caller's: with a fast close-then-open, a hide's completion fires after the reopen.
+    private func runSlotLayout(animated: Bool) {
         let finish = { [weak self] in
             guard let self else { return }
-            if !self.isOutlinePanelVisible {
-                panelView.isHidden = true
-                self.pdfPanel.view.isHidden = true
-                self.outlineResizeGrip.isHidden = true
-            }
+            self.settleSlotViews()
             self.onOutlinePanelLayoutChanged?()
         }
         if animated, view.window != nil {
@@ -383,6 +469,24 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
+    /// Un-hide what the slot now holds. A panel leaving stays up until `settleSlotViews`.
+    private func revealSlotViews() {
+        trailingSlot.isHidden = false
+        outlineResizeGrip.isHidden = false
+        if trailingPanelContents.contains(.outline) { outlinePanel.view.isHidden = false }
+        if trailingPanelContents.contains(.pdf) { pdfPanel.view.isHidden = false }
+    }
+
+    /// Hide all the resting slot does not show.
+    private func settleSlotViews() {
+        let showing = isOutlinePanelVisible ? trailingPanelContents : []
+        trailingSlot.isHidden = showing.isEmpty
+        outlineResizeGrip.isHidden = showing.isEmpty
+        innerResizeGrip.isHidden = showing.count < 2
+        outlinePanel.view.isHidden = !showing.contains(.outline)
+        pdfPanel.view.isHidden = !showing.contains(.pdf)
+    }
+
     /// Push while the column can spare the width; overlay once the text
     /// would drop below `ChalkMetrics.outlinePanelPushMinimumEditorWidth`.
     /// Re-evaluated on every layout pass so a window resize flips it.
@@ -390,7 +494,7 @@ final class EditorContainerViewController: NSViewController {
         // Mid-slide the content is trailing-anchored at a frozen width: swapping the trailing pin
         // would jump it sideways. `unfreezeContentWidth` re-evaluates after the reflow.
         guard frozenContentWidth == nil else { return }
-        guard isOutlinePanelVisible, let width = outlinePanelWidth?.constant else { return }
+        guard isOutlinePanelVisible, let width = slotWidthPin?.constant else { return }
         let column = view.bounds.width
         let overlay = column - width < ChalkMetrics.outlinePanelPushMinimumEditorWidth
         let pushActive = contentTrailingToPanel?.isActive ?? false
@@ -402,137 +506,159 @@ final class EditorContainerViewController: NSViewController {
         onOutlinePanelLayoutChanged?()
     }
 
-    /// Fill whichever content the slot shows from the active tab.
-    private func seedTrailingPanel() {
-        switch trailingPanelContent {
-        case .outline:
+    /// Fill `contents` from the active tab.
+    private func seed(_ contents: Set<TrailingPanelContent>) {
+        if contents.contains(.outline) {
             seedOutlinePanel()
             activeTab?.surface.setOutlineSubscription(true)
-        case .pdf:
+        }
+        if contents.contains(.pdf) {
             refreshPDFPanel()
         }
     }
 
-    /// The window wants the outline (⌘K); it shows whenever the active tab is not showing its PDF.
+    /// The window wants the outline (⌘K).
     private(set) var isOutlineWanted = false
 
-    /// What the slot should show for the active tab: its PDF when it asked for one, else the
+    /// What the slot should hold for the active tab: its PDF when it asked for one, and the
     /// outline when the window wants it. Zen keeps it closed, even on a tab switch.
-    private var desiredSlot: TrailingPanelContent? {
-        if currentEditingMode() == .zen { return nil }
-        if activeTab?.showsPDF == true { return .pdf }
-        return isOutlineWanted ? .outline : nil
+    private var desiredSlot: Set<TrailingPanelContent> {
+        if currentEditingMode() == .zen { return [] }
+        var contents: Set<TrailingPanelContent> = []
+        if activeTab?.showsPDF == true { contents.insert(.pdf) }
+        if isOutlineWanted { contents.insert(.outline) }
+        return contents
     }
 
-    /// Bring the slot in line with `desiredSlot`.
-    private func applySlot(animated: Bool) {
-        if let content = desiredSlot {
-            presentSlot(content, animated: animated)
-        } else {
+    /// Bring the slot in line with `desiredSlot`. `seeding` is what to refill in an open slot,
+    /// nil for all of it, as a tab switch needs: refilling the PDF reads it from disk.
+    private func applySlot(animated: Bool, seeding: Set<TrailingPanelContent>? = nil) {
+        let contents = desiredSlot
+        if contents.isEmpty {
             setSlotVisible(false, animated: animated)
+        } else {
+            presentSlot(contents, animated: animated, seeding: seeding ?? contents)
         }
     }
 
-    /// Show `content`: ⌥⌘P and Compile mark the active tab as showing its PDF, ⌘K takes the
-    /// tab's PDF down and puts the window's outline up.
+    /// Show `content` beside whatever the slot already holds: ⌥⌘P and Compile mark the active
+    /// tab as showing its PDF, ⌘K puts the window's outline up.
     func showTrailingPanel(_ content: TrailingPanelContent, animated: Bool) {
-        switch content {
-        case .pdf:
-            activeTab?.showsPDF = true
-        case .outline:
-            isOutlineWanted = true
-            activeTab?.showsPDF = false
-        }
-        applySlot(animated: animated)
+        setWanted(content, true, animated: animated)
     }
 
-    /// Slide the slot in with `content`, or swap the content in place when it shows the other
-    /// one.
-    private func presentSlot(_ content: TrailingPanelContent, animated: Bool) {
-        if isOutlinePanelVisible, trailingPanelContent == content {
-            seedTrailingPanel()
+    /// ⌘K / ⌥⌘P: take `content` down when the slot shows it, else show it.
+    func toggleTrailingPanel(_ content: TrailingPanelContent, animated: Bool) {
+        setWanted(content, !isShowing(content), animated: animated)
+    }
+
+    private func setWanted(_ content: TrailingPanelContent, _ wanted: Bool, animated: Bool) {
+        switch content {
+        case .pdf: activeTab?.showsPDF = wanted
+        case .outline: isOutlineWanted = wanted
+        }
+        applySlot(animated: animated, seeding: wanted ? [content] : [])
+    }
+
+    /// Slide the slot in with `contents`, or, when it is open, slide the panels that change in
+    /// or out of its edges.
+    private func presentSlot(_ contents: Set<TrailingPanelContent>, animated: Bool,
+                             seeding: Set<TrailingPanelContent>) {
+        if isOutlinePanelVisible, trailingPanelContents == contents {
+            seed(seeding)
             return
         }
-        if trailingPanelContent != content {
-            if isOutlineShowing { activeTab?.surface.setOutlineSubscription(false) }
-            trailingPanelContent = content
-            setOutlinePanelWidth(Self.preferredWidth(for: content), persist: false)
+        if isOutlineShowing, !contents.contains(.outline) {
+            activeTab?.surface.setOutlineSubscription(false)
         }
-        if isOutlinePanelVisible {
-            pdfPanel.view.isHidden = content != .pdf
-            seedTrailingPanel()
-            onOutlinePanelLayoutChanged?()
-        } else {
+        trailingPanelContents = contents
+        guard isOutlinePanelVisible else {
+            fitSlotWidth()
             setSlotVisible(true, animated: animated)
+            return
         }
-    }
-
-    /// ⌘K / ⌥⌘P: take `content` down when the slot shows it, else show it. Taking a PDF down
-    /// uncovers the outline when the window wants one.
-    func toggleTrailingPanel(_ content: TrailingPanelContent, animated: Bool) {
-        guard isOutlinePanelVisible, trailingPanelContent == content else {
-            return showTrailingPanel(content, animated: animated)
-        }
-        switch content {
-        case .pdf: activeTab?.showsPDF = false
-        case .outline: isOutlineWanted = false
-        }
-        applySlot(animated: animated)
-    }
-
-    private static func preferredWidth(for content: TrailingPanelContent) -> CGFloat {
-        content == .pdf ? Preferences.pdfPanelWidth : Preferences.outlinePanelWidth
+        // At its start before the slide, as in `setSlotVisible`.
+        revealSlotViews()
+        view.layoutSubtreeIfNeeded()
+        seed(seeding)
+        fitSlotWidth()
+        updateOutlinePanelMode()
+        runSlotLayout(animated: animated)
     }
 
     /// Fill the panel from the active tab before the first push lands.
     private func seedOutlinePanel() {
-        outlinePanel.setDocumentName(activeTab?.displayName ?? "")
+        outlinePanel.setDocumentName(activeTab?.displayName ?? "",
+                                     key: activeTab.map { $0.url?.path ?? $0.id.uuidString })
         guard let tab = activeTab else {
             outlinePanel.setSnapshot(.empty)
             return
         }
         tab.surface.fetchOutline { [weak self, weak tab] snapshot in
-            guard let self, let tab, self.activeTab === tab, self.isOutlinePanelVisible else { return }
+            guard let self, let tab, self.activeTab === tab, self.isOutlineShowing else { return }
             self.outlinePanel.setSnapshot(snapshot ?? .empty)
         }
     }
 
-    private var slotWidthRange: ClosedRange<CGFloat> {
-        trailingPanelContent == .pdf ? Preferences.pdfPanelWidthRange : Preferences.sidebarWidthRange
+    private static func widthRange(of content: TrailingPanelContent) -> ClosedRange<CGFloat> {
+        content == .pdf ? Preferences.pdfPanelWidthRange : Preferences.sidebarWidthRange
     }
 
-    func setOutlinePanelWidth(_ proposed: CGFloat, persist: Bool) {
-        let range = slotWidthRange
+    func setPanelWidth(_ content: TrailingPanelContent, _ proposed: CGFloat, persist: Bool) {
+        let range = Self.widthRange(of: content)
         let clamped = min(range.upperBound, max(range.lowerBound, proposed))
-        preferredSlotWidth = clamped
+        switch content {
+        case .outline:
+            preferredOutlineWidth = clamped
+            if persist { Preferences.outlinePanelWidth = clamped }
+        case .pdf:
+            preferredPDFWidth = clamped
+            if persist { Preferences.pdfPanelWidth = clamped }
+        }
         fitSlotWidth()
         updateOutlinePanelMode()
-        if persist {
-            switch trailingPanelContent {
-            case .outline: Preferences.outlinePanelWidth = clamped
-            case .pdf: Preferences.pdfPanelWidth = clamped
-            }
-        }
         if isOutlinePanelVisible {
             view.layoutSubtreeIfNeeded()
             onOutlinePanelLayoutChanged?()
         }
     }
 
-    /// Show `preferredSlotWidth`, or as much of it as the column has past `slotLeadingLimit`.
-    /// Wider, the slot overhangs the Library and leaves the band's chips no room. Never below the
-    /// content's minimum, which an early layout pass's column and a tiny window both undercut: the
-    /// panel's own chrome needs it, and the band survives the overhang (`HeaderBarView.stripTrailing`).
+    /// Show the panels' preferred widths, or as much of them as the column has past
+    /// `slotLeadingLimit`. Wider, the slot overhangs the Library and leaves the band's chips no
+    /// room. Never below the contents' minimum, which an early layout pass's column and a tiny
+    /// window both undercut: the panels' own chrome needs it, and the band survives the overhang
+    /// (`HeaderBarView.stripTrailing`). Two panels also leave the editor its push width while
+    /// they can, or one ⌘K would throw the text under the slot. The PDF gives way first.
     private func fitSlotWidth() {
-        guard let widthPin = outlinePanelWidth else { return }
-        let room = view.bounds.width - slotLeadingLimit
-        let fitted = max(slotWidthRange.lowerBound, min(preferredSlotWidth, room))
-        guard abs(widthPin.constant - fitted) > 0.5 else { return }
-        widthPin.constant = fitted
-        if !isOutlinePanelVisible { outlinePanelTrailing?.constant = fitted }
+        guard let slotPin = slotWidthPin else { return }
+        let hasOutline = trailingPanelContents.contains(.outline)
+        let hasPDF = trailingPanelContents.contains(.pdf)
+        let column = view.bounds.width
+        var room = column - slotLeadingLimit
+        if hasOutline, hasPDF { room = min(room, column - ChalkMetrics.outlinePanelPushMinimumEditorWidth) }
+        let outlineMinimum = hasOutline ? Self.widthRange(of: .outline).lowerBound : 0
+        let pdfMinimum = hasPDF ? Self.widthRange(of: .pdf).lowerBound : 0
+        let wanted = (hasOutline ? preferredOutlineWidth : 0) + (hasPDF ? preferredPDFWidth : 0)
+        let fitted = max(outlineMinimum + pdfMinimum, min(wanted, room))
+
+        // A panel out of the slot keeps its preferred width for its slide.
+        let outline = hasOutline ? min(preferredOutlineWidth, fitted - pdfMinimum) : preferredOutlineWidth
+        let pdf = hasPDF ? fitted - (hasOutline ? outline : 0) : preferredPDFWidth
+
+        Self.set(outlineWidthPin, to: outline)
+        Self.set(pdfWidthPin, to: pdf)
+        Self.set(outlineTrailingPin, to: hasOutline ? 0 : outline)
+        Self.set(slotPin, to: fitted)
+        if !isOutlinePanelVisible { Self.set(slotTrailingPin, to: fitted) }
     }
 
-    /// The host's limit for the slot's leading edge, in this view (`HeaderBarView.stripMinimumExtent`).
+    /// Layout re-fits on every pass, so a write that changes nothing must not dirty it again.
+    private static func set(_ pin: NSLayoutConstraint?, to constant: CGFloat) {
+        guard let pin, abs(pin.constant - constant) > 0.5 else { return }
+        pin.constant = constant
+    }
+
+    /// The host's limit for the slot's leading edge, in this view (`HeaderBarView.stripReadableExtent`).
     func setSlotLeadingLimit(_ x: CGFloat) {
         guard abs(x - slotLeadingLimit) > 0.5 else { return }
         slotLeadingLimit = x
@@ -631,7 +757,7 @@ final class EditorContainerViewController: NSViewController {
     override func viewDidLayout() {
         super.viewDidLayout()
         #if DEBUG
-        let line = "layout content=\(contentView.frame) active=\(activeTab?.surface.view.frame ?? .zero) panelHidden=\(outlinePanel.isViewLoaded ? outlinePanel.view.isHidden : true) panel=\(outlinePanel.isViewLoaded ? outlinePanel.view.frame : .zero) frozen=\(frozenContentWidth != nil)"
+        let line = "layout content=\(contentView.frame) active=\(activeTab?.surface.view.frame ?? .zero) panelHidden=\(trailingSlot.isHidden) panel=\(trailingSlot.frame) frozen=\(frozenContentWidth != nil)"
         if line != lastTracedLayout { lastTracedLayout = line; DebugTrace.log(line) }
         #endif
         syncActiveSurfaceAppearance()
@@ -670,7 +796,7 @@ final class EditorContainerViewController: NSViewController {
     func pushAppearance(dark: Bool, theme: ChalkTheme) {
         pushedDark = dark
         pushedTheme = theme
-        for tab in [activeTab, splitTab].compactMap({ $0 }) {
+        for tab in shownTabs {
             pushAppearance(to: tab.surface, dark: dark, theme: theme)
         }
     }
@@ -730,7 +856,7 @@ final class EditorContainerViewController: NSViewController {
     }
 
     /// Shared new-tab setup: wire the controller and seed the surface with current settings.
-    private func adopt(_ tab: Tab) {
+    private func adopt(_ tab: Tab, into group: EditorGroup? = nil) {
         tab.controller.delegate = self
         tab.controller.libraryRootsProvider = { [weak self] in self?.libraryRootsProvider() ?? [] }
         // The surface exhausted its boot recovery: tell the user rather than show a blank tab.
@@ -745,15 +871,15 @@ final class EditorContainerViewController: NSViewController {
         surface.setMeasure(Preferences.editorMeasure)
         surface.setLineHeight(Preferences.editorLineHeight)
         surface.setTextAlign(Preferences.textAlignment)
-        surface.onScroll = { [weak self, weak tab] y in
+        surface.onScroll = { [weak self, weak tab] y, wheel in
             guard let self, let tab, self.activeTab === tab else { return }
-            self.onActiveEditorScroll?(y)
+            self.onActiveEditorScroll?(y, wheel)
         }
         surface.onOutline = { [weak self, weak tab] snapshot in
             guard let self, let tab, self.activeTab === tab, self.isOutlineShowing else { return }
             self.outlinePanel.setSnapshot(snapshot)
         }
-        tabs.append(tab)
+        (group ?? activeGroup).tabs.append(tab)
     }
 
     /// The webview never became ready, even after a reload. Buffer and file are untouched.
@@ -884,25 +1010,55 @@ final class EditorContainerViewController: NSViewController {
 
     // MARK: - Window restoration
 
-    /// File-backed tab URLs in strip order and the active tab's index. Drafts are skipped, so the
-    /// index counts the returned URLs, not `tabs`.
-    func sessionSnapshot() -> (urls: [URL], activeIndex: Int?, splitIndex: Int?, splitIsLeading: Bool) {
-        let fileTabs = tabs.filter { $0.url != nil }
-        let urls = fileTabs.compactMap(\.url)
-        let activeIndex = fileTabs.firstIndex { $0 === activeTab }
-        let splitIndex = fileTabs.firstIndex { $0 === splitTab }
-        return (urls, activeIndex, splitIndex, splitIndex != nil && focusedSide == .trailing)
+    /// The groups as journal records, file-backed tabs only, bookmarks included (drafts die with
+    /// the window, so an active draft's index is nil and a drafts-only group is dropped by
+    /// `WindowSession`), and the focused group's index into them.
+    func sessionGroups() -> (groups: [WindowSession.GroupRecord], activeGroupIndex: Int?) {
+        let fractions = groupsLayout.fitted(toCount: groups.count).fractions
+        let records = groups.enumerated().map { i, group in
+            let fileTabs = group.tabs.filter { $0.url != nil }
+            return WindowSession.GroupRecord(
+                tabs: fileTabs.compactMap { $0.sessionRecord() },
+                activeIndex: fileTabs.firstIndex { $0 === group.activeTab },
+                fraction: Double(fractions[i]))
+        }
+        return (records, groups.firstIndex { $0 === activeGroup })
     }
 
-    /// The file-backed tabs as journal records, bookmarks included (drafts die with the window).
-    func sessionTabRecords() -> [WindowSession.TabRecord] {
-        tabs.compactMap { $0.sessionRecord() }
-    }
-
-    /// Activate by strip position (restoration; ignores out-of-range).
-    func activateTab(at index: Int) {
-        guard tabs.indices.contains(index) else { return }
-        activate(tabs[index])
+    /// Session restore: rebuild the groups. Each entry is one group's files in strip order (the
+    /// ones that are still readable), the one it showed, and its width share. Tabs are opened
+    /// dormant; only each group's shown tab boots a web view.
+    func restoreGroups(_ records: [(urls: [URL], activeIndex: Int?, fraction: Double)], activeGroupIndex: Int?) {
+        loadViewIfNeeded()
+        var built: [(group: EditorGroup, active: Int?, fraction: CGFloat)] = []
+        var focused: EditorGroup?
+        for (i, record) in records.enumerated() {
+            // The first group fills the group already there (it may hold a launch tab).
+            let group = built.isEmpty ? activeGroup : EditorGroup()
+            if group !== activeGroup { groups.append(group) }
+            for url in record.urls where tab(showing: url) == nil {
+                let tab = Tab(url: url)
+                adopt(tab, into: group)
+                tab.controller.open(url: url)
+            }
+            built.append((group, record.activeIndex, CGFloat(record.fraction)))
+            if i == activeGroupIndex { focused = group }
+        }
+        // A group whose files are all gone is not restored.
+        built.removeAll { entry in
+            guard entry.group.tabs.isEmpty, groups.count > 1 else { return false }
+            groups.removeAll { $0 === entry.group }
+            return true
+        }
+        groupsLayout = EditorGroupsLayout(fractions: built.map(\.fraction)).fitted(toCount: groups.count)
+        applyPaneLayout()
+        for entry in built {
+            let index = entry.active.flatMap { entry.group.tabs.indices.contains($0) ? $0 : nil } ?? 0
+            guard entry.group.tabs.indices.contains(index) else { continue }
+            present(entry.group.tabs[index], in: entry.group)
+        }
+        activeGroup = focused.flatMap { f in groups.first { $0 === f } } ?? groups[0]
+        if let tab = activeTab { activate(tab) } else { refreshTabBar() }
     }
 
     // MARK: - Crash recovery
@@ -1032,8 +1188,10 @@ final class EditorContainerViewController: NSViewController {
     }
 
     #if DEBUG
-    /// The strip snapshot the next refreshTabBar() would publish (unit tests).
-    var tabItemsForTesting: [TabItem] { makeTabItems() }
+    /// Every tab's strip snapshot, leading group first, as the next refreshTabBar() would publish
+    /// them (unit tests). `isActive` is per group: each group's shown tab.
+    var tabItemsForTesting: [TabItem] { makeTabItems().flatMap(\.tabs) }
+    var groupItemsForTesting: [TabGroupItem] { makeTabItems() }
 
     /// Every URL whose open failure reached the user, so a test can wait for the failure itself.
     private(set) var openFailuresForTesting: [URL] = []
@@ -1047,43 +1205,62 @@ final class EditorContainerViewController: NSViewController {
     }
 
     var contentViewFrameForTesting: CGRect { contentView.frame }
-    /// The panes on screen, leading first, in this view's coordinates: the focused pane alone
-    /// without a split.
+    /// Each group's pane, leading first, in this view's coordinates.
     var paneFramesForTesting: [CGRect] {
-        let panes = isSplit ? [contentView.leadingPane, contentView.trailingPane]
-            : [contentView.pane(focusedSide)]
-        return panes.map { view.convert($0.frame, from: contentView) }
+        contentView.panes.map { view.convert($0.frame, from: contentView) }
     }
-    var splitDividerFrameForTesting: CGRect? {
-        isSplit ? view.convert(contentView.divider.frame, from: contentView) : nil
+    /// The seam grips between neighbouring groups, leading first, in this view's coordinates.
+    var groupDividerFramesForTesting: [CGRect] {
+        contentView.grips.map { view.convert($0.frame, from: contentView) }
     }
+    /// The focused tab's position in the window-wide (leading group first) order.
     var activeTabIndexForTesting: Int? { tabs.firstIndex { $0 === activeTab } }
-    var splitTabIndexForTesting: Int? { tabs.firstIndex { $0 === splitTab } }
-    /// "leading" or "trailing": the pane the tab's surface is installed in; nil when detached.
-    func paneSideForTesting(tabAt index: Int) -> String? {
-        guard tabs.indices.contains(index) else { return nil }
-        let superview = tabs[index].surface.view.superview
-        if superview === contentView.leadingPane { return "leading" }
-        if superview === contentView.trailingPane { return "trailing" }
-        return nil
+    var focusedGroupIndexForTesting: Int? { groups.firstIndex { $0 === activeGroup } }
+    /// Activate by window-wide position (leading group first); ignores out-of-range.
+    func activateTabForTesting(at index: Int) {
+        guard tabs.indices.contains(index) else { return }
+        activate(tabs[index])
+    }
+    /// Each group's shown tab as a window-wide index.
+    var groupActiveTabIndicesForTesting: [Int?] {
+        let all = tabs
+        return groups.map { group in group.activeTab.flatMap { tab in all.firstIndex { $0 === tab } } }
+    }
+    /// The group whose pane hosts the tab's surface; nil when detached.
+    func paneGroupIndexForTesting(tabAt index: Int) -> Int? {
+        let all = tabs
+        guard all.indices.contains(index) else { return nil }
+        let superview = all[index].surface.view.superview
+        return groups.firstIndex { $0.pane === superview }
     }
     /// The click path's focus change, without synthesizing an event.
-    func focusPaneForTesting(tabAt index: Int) {
-        guard tabs.indices.contains(index), tabs[index] === splitTab else { return }
-        swapFocus(focusingEditor: false)
+    func focusPaneForTesting(group index: Int) {
+        guard groups.indices.contains(index), let tab = groups[index].activeTab else { return }
+        activate(tab, focusingEditor: false)
     }
-    func dragSplitDividerForTesting(by dx: CGFloat) {
-        contentView.divider.onDragBegan?()
-        contentView.divider.onDragged?(dx)
-        contentView.divider.onDragEnded?()
+    func dragGroupDividerForTesting(seam: Int = 0, by dx: CGFloat) {
+        guard contentView.grips.indices.contains(seam) else { return }
+        let grip = contentView.grips[seam]
+        grip.onDragBegan?()
+        grip.onDragged?(dx)
+        grip.onDragEnded?()
         contentView.layoutSubtreeIfNeeded()
     }
+    var groupFractionsForTesting: [CGFloat] { groupsLayout.fractions }
+    /// The drop indicator's rect in the pane host, nil while hidden.
+    var dropIndicatorForTesting: CGRect? { contentView.dropOverlay.shownRect }
 
-    var outlinePanelWidthForTesting: CGFloat { outlinePanelWidth?.constant ?? 0 }
+    var outlinePanelWidthForTesting: CGFloat { slotWidthPin?.constant ?? 0 }
+    /// One panel's frame in this container's view, for the slot's inner layout.
+    func panelFrameForTesting(_ content: TrailingPanelContent) -> CGRect {
+        let panel: NSView = content == .pdf ? pdfPanel.view : outlinePanel.view
+        return view.convert(panel.frame, from: trailingSlot)
+    }
+    var isInnerResizeGripHiddenForTesting: Bool { innerResizeGrip.isHidden }
     var outlineResizeGripFrameForTesting: CGRect { outlineResizeGrip.frame }
     var outlineResizeGripIsHiddenForTesting: Bool { outlineResizeGrip.isHidden }
     var isOutlinePanelAboveChromeFadeForTesting: Bool {
-        guard let panel = view.subviews.firstIndex(of: outlinePanel.view),
+        guard let panel = view.subviews.firstIndex(of: trailingSlot),
               let fade = view.subviews.firstIndex(of: chromeFade) else { return false }
         return panel > fade
     }
@@ -1169,46 +1346,65 @@ final class EditorContainerViewController: NSViewController {
         return tabs.first { $0.fileIdentity == identity }
     }
 
-    private func activate(_ tab: Tab) {
-        if tab === splitTab {
-            swapFocus()
-            return
+    /// Show `tab` in its group and focus that group. A tab already shown in another group only
+    /// moves focus: both surfaces stay where they are, with no install and no cross-fade.
+    private func activate(_ tab: Tab, focusingEditor: Bool = true) {
+        guard let group = group(of: tab) else { return }
+        let outgoingFocus = activeTab
+        if group !== activeGroup {
+            if isOutlineShowing { outgoingFocus?.surface.setOutlineSubscription(false) }
+            activeGroup = group
         }
-        if activeTab !== tab {
-            let outgoingSurface = activeTab?.surface
-            if isOutlineShowing { activeTab?.surface.setOutlineSubscription(false) }
-            previousActiveTab = activeTab
-            activeTab = tab
-            // Dress the incoming surface (appearance, chrome-top) BEFORE install, so it never
-            // flashes a stale theme or band height (docs/motion.md "Tab switch").
-            pushedDark = view.effectiveAppearance.isChalkDark
-            pushedTheme = ChalkAppearance.theme
-            pushAppearance(to: tab.surface, dark: pushedDark == true, theme: ChalkAppearance.theme)
-            #if DEBUG
-            activateEventTrailForTesting.append("appearance")
-            #endif
-            if let inset = chromeTopInset {
-                tab.surface.setChromeTopInset(inset)
-                #if DEBUG
-                activateEventTrailForTesting.append("chrome-top")
-                #endif
-            }
-            ensureInstalled(tab)
-            #if DEBUG
-            activateEventTrailForTesting.append("install")
-            #endif
+        if group.activeTab !== tab {
+            let outgoingSurface = group.activeTab?.surface
+            if isOutlineShowing { group.activeTab?.surface.setOutlineSubscription(false) }
+            group.activeTab = tab
+            dressAndInstall(tab)
             // Each tab keeps its own PDF; the outline follows the window.
             applySlot(animated: false)
             if let outgoingSurface, outgoingSurface.view !== tab.surface.view {
                 crossFade(from: outgoingSurface, to: tab.surface)
             }
         } else {
-            // Re-activating the active tab still installs, so a detached surface is repaired.
+            // Re-activating a shown tab still installs, so a detached surface is repaired.
             ensureInstalled(tab)
+            // The outline and the PDF follow focus.
+            if outgoingFocus !== tab { applySlot(animated: false) }
         }
         refreshEmptyState()
         refreshTabBar()
-        focusEditorNextTurn(tab)
+        if focusingEditor { focusEditorNextTurn(tab) }
+    }
+
+    /// Show `tab` in `group` without moving focus: a group that lost its shown tab to a close or
+    /// a move, or a restored group. Dressed before install, like an activated one.
+    private func present(_ tab: Tab, in group: EditorGroup) {
+        guard group.contains(tab), group.activeTab !== tab else { return }
+        group.activeTab?.surface.view.removeFromSuperview()
+        group.activeTab = tab
+        dressAndInstall(tab)
+        refreshTabBar()
+    }
+
+    /// Dress a surface about to be shown (appearance, chrome-top) BEFORE install, so it never
+    /// flashes a stale theme or band height (docs/motion.md "Tab switch").
+    private func dressAndInstall(_ tab: Tab) {
+        pushedDark = view.effectiveAppearance.isChalkDark
+        pushedTheme = ChalkAppearance.theme
+        pushAppearance(to: tab.surface, dark: pushedDark == true, theme: ChalkAppearance.theme)
+        #if DEBUG
+        activateEventTrailForTesting.append("appearance")
+        #endif
+        if let inset = chromeTopInset {
+            tab.surface.setChromeTopInset(inset)
+            #if DEBUG
+            activateEventTrailForTesting.append("chrome-top")
+            #endif
+        }
+        ensureInstalled(tab)
+        #if DEBUG
+        activateEventTrailForTesting.append("install")
+        #endif
     }
 
     /// Every activation focuses the editor, a turn later so the triggering control (tab chip,
@@ -1230,7 +1426,7 @@ final class EditorContainerViewController: NSViewController {
         let outgoing = outgoingSurface.view
         let incoming = incomingSurface.view
         incoming.alphaValue = 1
-        // Both live in the focused pane; the fade never touches the split's other pane.
+        // Both live in the focused group's pane; the fade never touches another group's.
         guard incoming.chalkMotionAllowed, !motionIsInstant,
               let pane = incoming.superview, outgoing.superview === pane else {
             DebugTrace.log("tab cross-fade: instant swap")
@@ -1242,7 +1438,7 @@ final class EditorContainerViewController: NSViewController {
         let swap: (NSImage?) -> Void = { [weak self] image in
             guard !swapped, let self else { return }
             swapped = true
-            // A rapid switch can show `outgoing` again (active, or in the split's other pane)
+            // A rapid switch can show `outgoing` again (active, or in another group's pane)
             // before its bitmap lands: never remove it then, and never paint a stale bitmap over it.
             guard !self.isShown(outgoing) else { return }
             guard let image else {
@@ -1285,20 +1481,13 @@ final class EditorContainerViewController: NSViewController {
         #endif
     }
 
-    /// The single surface-install site: the active tab into the focused pane, the split tab into
-    /// the other. A surface in the wrong pane moves. Removal drops the edge constraints, so each
-    /// install activates a fresh set.
+    /// The single surface-install site: each group's shown tab into that group's pane. A surface
+    /// in the wrong pane moves. Removal drops the edge constraints, so each install activates a
+    /// fresh set.
     private func ensureInstalled(_ tab: Tab) {
-        let side: EditorPaneHostView.Side
-        if tab === activeTab {
-            side = focusedSide
-        } else if tab === splitTab {
-            side = focusedSide.other
-        } else {
-            return
-        }
+        guard let group = group(of: tab), group.activeTab === tab else { return }
         tab.surface.bootIfNeeded() // dormant until first shown (fd bound)
-        let pane = contentView.pane(side)
+        let pane = group.pane
         let editorView = tab.surface.view
         guard editorView.superview !== pane else { return }
         editorView.removeFromSuperview()
@@ -1312,15 +1501,17 @@ final class EditorContainerViewController: NSViewController {
         ])
     }
 
-    private func isShown(_ tab: Tab) -> Bool { tab === activeTab || tab === splitTab }
+    private func isShown(_ tab: Tab) -> Bool { groups.contains { $0.activeTab === tab } }
 
     private func isShown(_ surfaceView: NSView) -> Bool {
-        surfaceView === activeTab?.surface.view || surfaceView === splitTab?.surface.view
+        groups.contains { $0.activeTab?.surface.view === surfaceView }
     }
+
+    private func tab(id: UUID) -> Tab? { tabs.first { $0.id == id } }
 
     /// Tab strip callbacks.
     func activate(id: UUID) {
-        if let tab = tabs.first(where: { $0.id == id }) { activate(tab) }
+        if let tab = tab(id: id) { activate(tab) }
     }
 
     private func close(_ tab: Tab) {
@@ -1341,37 +1532,20 @@ final class EditorContainerViewController: NSViewController {
         if !tab.controller.hasUnappliedRecovery {
             clearSnapshotQueued(id: tab.id.uuidString)
         }
-        let wasActive = activeTab === tab
-        let wasSplit = splitTab === tab
-        let index = tabs.firstIndex { $0 === tab }
         tab.surface.view.removeFromSuperview()
         tab.surface.teardown()
         tab.controller.close()
-        if let index { tabs.remove(at: index) }
+        guard let group = group(of: tab), let index = group.index(of: tab) else { return }
+        let wasShown = group.activeTab === tab
+        group.tabs.remove(at: index)
+        if wasShown { group.activeTab = nil }
 
-        if wasSplit {
-            // The other pane takes the next tab the focused pane is not showing, or closes.
-            splitTab = nil
-            if let next = neighbor(at: index ?? 0, excluding: activeTab) {
-                show(next, inSplitAt: focusedSide.other)
-            } else {
-                applyPaneLayout()
-                refreshTabBar()
-            }
-        } else if wasActive {
-            activeTab = nil
-            if let next = neighbor(at: index ?? 0, excluding: splitTab) {
-                activate(next)
-            } else if let other = splitTab {
-                // The split's other tab is all that is left: it becomes the only pane, in place.
-                splitTab = nil
-                activeTab = other
-                focusedSide = focusedSide.other
-                applyPaneLayout()
-                applySlot(animated: false)
-                refreshEmptyState()
-                refreshTabBar()
-                focusEditorNextTurn(other)
+        // VS Code's closeEmptyGroups: a group's last tab takes the group with it.
+        if group.tabs.isEmpty && groups.count > 1 {
+            removeGroup(group, refocusing: true)
+        } else if wasShown {
+            if let next = neighbor(in: group, at: index) {
+                if group === activeGroup { activate(next) } else { present(next, in: group) }
             } else {
                 applySlot(animated: false)
                 refreshEmptyState()
@@ -1382,15 +1556,35 @@ final class EditorContainerViewController: NSViewController {
         }
     }
 
-    /// The tab nearest strip position `index` (the closed tab's), skipping `excluded`.
-    private func neighbor(at index: Int, excluding excluded: Tab?) -> Tab? {
-        let pool = tabs.enumerated().filter { $0.element !== excluded }
-        return (pool.first { $0.offset >= index } ?? pool.last)?.element
+    /// The tab of `group` nearest strip position `index` (a closed or moved tab's).
+    private func neighbor(in group: EditorGroup, at index: Int) -> Tab? {
+        guard !group.tabs.isEmpty else { return nil }
+        return group.tabs[min(index, group.tabs.count - 1)]
     }
 
-    /// The split's other tab is skipped: ⌃Tab changes what the focused pane shows, not focus.
+    /// Close `group` (empty, or emptied by a join) and give its width to its leading neighbour.
+    /// `refocusing` moves focus to the neighbour when the closed group had it; a caller that is
+    /// about to focus something itself passes false.
+    private func removeGroup(_ group: EditorGroup, refocusing: Bool) {
+        guard groups.count > 1, let index = groups.firstIndex(where: { $0 === group }) else { return }
+        groups.remove(at: index)
+        groupsLayout = groupsLayout.removing(at: index)
+        group.activeTab?.surface.view.removeFromSuperview()
+        applyPaneLayout()
+        if group === activeGroup {
+            activeGroup = groups[max(0, index - 1)]
+            if refocusing {
+                applySlot(animated: false)
+                refreshEmptyState()
+                if let tab = activeTab { focusEditorNextTurn(tab) }
+            }
+        }
+        refreshTabBar()
+    }
+
+    /// ⌃Tab cycles the focused group's tabs (VS Code's next editor in group).
     private func cycle(_ delta: Int) {
-        let ring = tabs.filter { $0 !== splitTab }
+        let ring = activeGroup.tabs
         guard let active = activeTab, ring.count > 1,
               let i = ring.firstIndex(where: { $0 === active }) else { return }
         activate(ring[(i + delta + ring.count) % ring.count])
@@ -1432,18 +1626,25 @@ final class EditorContainerViewController: NSViewController {
     /// The active file, for the Library's open-document mark. Nil for a draft.
     var activeDocumentURL: URL? { activeTab?.url }
 
-    private func makeTabItems() -> [TabItem] {
-        // The "folder/" prefix shows only where another open tab has the same filename.
-        let needsPrefix = TabStripPolicy.needsFolderPrefix(names: tabs.map(\.displayName))
-        return tabs.enumerated().map { index, tab in
-            TabItem(id: tab.id, name: tab.displayName, isDirty: tab.isDirty,
-                    isActive: tab === activeTab,
-                    isShownInSplit: tab === splitTab,
-                    // Preview: a file-backed tab not yet committed (what a sidebar click reuses).
-                    isPreview: tab.url != nil && !tab.isCommitted,
-                    folder: needsPrefix[index]
-                        ? tab.url.flatMap(TabStripPolicy.folderPrefix(for:))
-                        : nil)
+    private func makeTabItems() -> [TabGroupItem] {
+        // The "folder/" prefix shows only where another open tab, in any group, has the same
+        // filename.
+        let all = tabs
+        let needsPrefix = TabStripPolicy.needsFolderPrefix(names: all.map(\.displayName))
+        var flat = 0
+        return groups.map { group in
+            let items = group.tabs.map { tab -> TabItem in
+                defer { flat += 1 }
+                return TabItem(id: tab.id, name: tab.displayName, isDirty: tab.isDirty,
+                               isActive: tab === group.activeTab,
+                               // Preview: a file-backed tab not yet committed (what a sidebar
+                               // click reuses).
+                               isPreview: tab.url != nil && !tab.isCommitted,
+                               folder: needsPrefix[flat]
+                                   ? tab.url.flatMap(TabStripPolicy.folderPrefix(for:))
+                                   : nil)
+            }
+            return TabGroupItem(id: group.id, tabs: items, isFocused: group === activeGroup)
         }
     }
 
@@ -1471,134 +1672,151 @@ final class EditorContainerViewController: NSViewController {
     }
 }
 
-// MARK: - Split
+// MARK: - Tab groups
 
 extension EditorContainerViewController {
-    var isSplit: Bool { splitTab != nil }
-    /// A split shows two different tabs, so it needs a second one to show.
-    var canToggleSplit: Bool { isSplit || tabs.count > 1 }
-    /// The split's other surface, for the covers a transition installs over the panes.
-    var splitSurface: EditorSurface? { splitTab?.surface }
-    /// Both panes, for a cover's bitmap of what is on screen.
+    var groupCount: Int { groups.count }
+    /// The surfaces on screen besides the focused one, for the covers a transition installs over
+    /// the panes.
+    var otherShownSurfaces: [EditorSurface] {
+        groups.filter { $0 !== activeGroup }.compactMap { $0.activeTab?.surface }
+    }
+    /// Every pane, for a cover's bitmap of what is on screen.
     var paneHostView: NSView { contentView }
-
-    /// ⌘\: open the split with the tab the focused pane showed before (else a strip neighbour)
-    /// beside it, or close it, keeping the focused pane's tab. Focus stays where it is.
-    func toggleSplit() {
-        if isSplit {
-            closeSplit()
-            return
-        }
-        guard let active = activeTab else { return }
-        let candidate = previousActiveTab.flatMap { tab in tabs.contains { $0 === tab } ? tab : nil }
-            ?? neighbor(at: (tabs.firstIndex { $0 === active } ?? 0) + 1, excluding: active)
-        guard let other = candidate, other !== active else { return }
-        show(other, inSplitAt: .trailing)
-        focusEditorNextTurn(active)
+    /// Each group's id and pane frame in `view`'s coordinates, leading first, for the strips the
+    /// host aligns over them.
+    var groupFrames: [(id: UUID, frame: CGRect)] {
+        groups.map { ($0.id, view.convert($0.pane.frame, from: contentView)) }
+    }
+    /// Whether one more group fits beside these at the minimum width.
+    var canAddGroup: Bool {
+        groupsLayout.canInsert(columnWidth: contentView.bounds.width, minimum: ChalkMetrics.groupMinimumWidth)
     }
 
-    /// The tab chip's "Open in Split": show tab `id` in the other pane and focus it.
-    func openInSplit(id: UUID) {
-        guard let tab = tabs.first(where: { $0.id == id }), tab !== activeTab else { return }
-        if tab !== splitTab { show(tab, inSplitAt: isSplit ? focusedSide.other : .trailing) }
-        swapFocus()
+    /// ⌘\ (Split Editor Right): the focused tab moves into a new group to the right of its own,
+    /// under `splitTab`'s rules.
+    var canSplitRight: Bool { activeTab != nil && activeGroup.tabs.count > 1 && canAddGroup }
+
+    @discardableResult
+    func splitRight(ignoringWidth: Bool = false) -> Bool {
+        guard let tab = activeTab else { return false }
+        return splitTab(id: tab.id, beside: activeGroup.id, trailing: true, ignoringWidth: ignoringWidth)
     }
 
-    func focusOtherPane() { swapFocus() }
-
-    /// Put `tab` in the pane on `side` as the split's other tab; the active surface moves to the
-    /// opposite pane if it is not already there. The new surface is dressed before install, like
-    /// an activated one, so it never shows a stale theme or band height.
-    private func show(_ tab: Tab, inSplitAt side: EditorPaneHostView.Side) {
-        guard tab !== activeTab else { return }
-        if let current = splitTab, current !== tab { current.surface.view.removeFromSuperview() }
-        splitTab = tab
-        focusedSide = side.other
-        if let dark = pushedDark, let theme = pushedTheme {
-            pushAppearance(to: tab.surface, dark: dark, theme: theme)
+    /// ⌥-click and the tab menu's "Move to Right Group": into the group to the right of the tab's
+    /// own, made when there is none (VS Code's open to the side).
+    func moveToNeighborGroup(id: UUID, trailing: Bool) {
+        guard let tab = tab(id: id), let source = group(of: tab),
+              let index = groups.firstIndex(where: { $0 === source }) else { return }
+        let neighbor = index + (trailing ? 1 : -1)
+        if groups.indices.contains(neighbor) {
+            moveTab(id: id, toGroup: groups[neighbor].id, at: groups[neighbor].tabs.count)
         } else {
-            pushAppearance(to: tab.surface, dark: view.effectiveAppearance.isChalkDark,
-                           theme: ChalkAppearance.theme)
+            splitTab(id: id, beside: source.id, trailing: trailing)
         }
-        if let inset = chromeTopInset { tab.surface.setChromeTopInset(inset) }
-        if let active = activeTab { ensureInstalled(active) }
-        ensureInstalled(tab)
+    }
+
+    /// ⌘1…⌘9: focus group `index` (0-based); false when there is no such group.
+    @discardableResult
+    func focusGroup(at index: Int) -> Bool {
+        guard groups.indices.contains(index), let tab = groups[index].activeTab else { return false }
+        activate(tab)
+        return true
+    }
+
+    /// ⌥⌘\: focus the next group, wrapping.
+    func focusNextGroup() {
+        guard groups.count > 1, let index = groups.firstIndex(where: { $0 === activeGroup }) else { return }
+        focusGroup(at: (index + 1) % groups.count)
+    }
+
+    /// Focus group `id` (its row's "+").
+    func focusGroup(id: UUID) {
+        if let tab = group(id: id)?.activeTab { activate(tab) }
+    }
+
+    /// Join All Groups: every tab into the focused group, in strip order, leading group first.
+    func joinAllGroups() {
+        guard groups.count > 1 else { return }
+        let all = tabs
+        for group in groups where group !== activeGroup {
+            group.activeTab?.surface.view.removeFromSuperview()
+            group.activeTab = nil
+        }
+        activeGroup.tabs = all
+        groups = [activeGroup]
+        groupsLayout = .single
         applyPaneLayout()
         refreshTabBar()
+        if let tab = activeTab { focusEditorNextTurn(tab) }
     }
 
-    /// Drop the unfocused pane. The focused surface stays in its pane, which now fills the area,
-    /// so nothing reloads or repaints.
-    private func closeSplit() {
-        guard let other = splitTab else { return }
-        splitTab = nil
-        other.surface.view.removeFromSuperview()
-        applyPaneLayout()
-        refreshTabBar()
-        if let active = activeTab { focusEditorNextTurn(active) }
+    /// Close Group: close every tab of group `id` (each unsaved one asks first). The shown tab
+    /// goes last, so no closing tab is shown (and its web view booted) on the way out.
+    func closeGroup(id: UUID) {
+        guard let group = group(id: id) else { return }
+        for tab in group.tabs where tab !== group.activeTab { close(tab) }
+        if let shown = group.activeTab { close(shown) }
     }
 
-    /// The other pane takes focus: its tab becomes the active one. Both surfaces stay where they
-    /// are, so there is no install and no cross-fade.
-    private func swapFocus(focusingEditor: Bool = true) {
-        guard let incoming = splitTab, let outgoing = activeTab else { return }
-        if isOutlineShowing { outgoing.surface.setOutlineSubscription(false) }
-        splitTab = outgoing
-        activeTab = incoming
-        focusedSide = focusedSide.other
-        // The outline and the PDF follow focus.
-        applySlot(animated: false)
-        refreshEmptyState()
-        refreshTabBar()
-        if focusingEditor { focusEditorNextTurn(incoming) }
-    }
-
-    /// The pane host follows the model: two panes while `splitTab` is set, else the focused one.
+    /// The pane host follows the model: one pane per group.
     private func applyPaneLayout() {
-        contentView.isSplit = splitTab != nil
-        contentView.soloSide = focusedSide
+        contentView.setPanes(groups.map(\.pane))
         contentView.layoutSubtreeIfNeeded()
     }
 
-    private func installSplitControls() {
-        contentView.fraction = Preferences.splitFraction
-        let grip = contentView.divider
-        grip.onDragBegan = { [weak self] in
-            self?.splitResizeStartWidth = self?.contentView.leadingWidth ?? 0
-        }
-        grip.onDragged = { [weak self] dx in
-            guard let self, self.contentView.bounds.width > 0 else { return }
-            self.contentView.fraction = (self.splitResizeStartWidth + dx) / self.contentView.bounds.width
-        }
-        grip.onDragEnded = { [weak self] in
-            guard let self else { return }
-            Preferences.splitFraction = self.contentView.fraction
-        }
+    private func installGroupControls() {
+        contentView.onPaneFramesChanged = { [weak self] in self?.onGroupFramesChanged?() }
+        applyPaneLayout()
         paneClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             self?.focusPane(under: event)
             return event
         }
     }
 
-    /// A click in the unfocused pane focuses it. Observed, never consumed: the click still lands
-    /// in the page and places the caret, so the editor is not refocused on top of it.
+    /// A click in an unfocused group's pane focuses that group. Observed, never consumed: the
+    /// click still lands in the page and places the caret, so the editor is not refocused on
+    /// top of it.
     private func focusPane(under event: NSEvent) {
-        guard splitTab != nil, let window = view.window, event.window === window,
+        guard groups.count > 1, let window = view.window, event.window === window,
               let root = window.contentView, let frame = root.superview else { return }
-        // A hit test, not a frame check: the tab band, the outline overlay and the divider sit
+        // A hit test, not a frame check: the tab band, the outline overlay and the dividers sit
         // over the panes and own their clicks.
-        let other = contentView.pane(focusedSide.other)
         guard let hit = root.hitTest(frame.convert(event.locationInWindow, from: nil)),
-              hit.isDescendant(of: other) else { return }
-        swapFocus(focusingEditor: false)
+              let group = groups.first(where: { $0 !== activeGroup && hit.isDescendant(of: $0.pane) }),
+              let tab = group.activeTab else { return }
+        activate(tab, focusingEditor: false)
     }
 
-    /// Session restore: show the file tab at `index` (strip order, drafts excluded) in the split,
-    /// on the leading side when focus was on the trailing pane.
-    func restoreSplit(fileTabAt index: Int, leading: Bool) {
-        let fileTabs = tabs.filter { $0.url != nil }
-        guard fileTabs.indices.contains(index), fileTabs[index] !== activeTab else { return }
-        show(fileTabs[index], inSplitAt: leading ? .leading : .trailing)
+    // MARK: Tab drag over the editor
+
+    /// The drop zone under `windowPoint` for tab `id` dragged over the panes, with the indicator
+    /// rect in the pane host; nil where a drop does nothing.
+    func dropTarget(forTab id: UUID, atWindowPoint windowPoint: NSPoint)
+        -> (group: UUID, zone: TabDropPolicy.Zone, rect: CGRect)? {
+        guard let tab = tab(id: id), let source = group(of: tab) else { return nil }
+        let point = contentView.convert(windowPoint, from: nil)
+        guard let target = groups.first(where: { $0.pane.frame.contains(point) }) else { return nil }
+        let frame = target.pane.frame
+        guard let zone = TabDropPolicy.zone(at: target.pane.convert(windowPoint, from: nil), in: frame.size, isSourceGroup: target === source,
+                                            sourceTabCount: source.tabs.count,
+                                            canSplit: canAddGroup) else { return nil }
+        return (target.id, zone, TabDropPolicy.overlayRect(for: zone, in: frame))
+    }
+
+    /// Show the drop indicator over `rect` (pane host coordinates), or hide it.
+    func showDropIndicator(_ rect: CGRect?) {
+        contentView.dropOverlay.show(rect)
+    }
+
+    /// Commit a drop onto the editor (`dropTarget`'s answer).
+    func dropTab(id: UUID, onGroup groupID: UUID, zone: TabDropPolicy.Zone) {
+        switch zone {
+        case .center:
+            moveTab(id: id, toGroup: groupID, at: group(id: groupID)?.tabs.count ?? 0)
+        case .leading, .trailing:
+            splitTab(id: id, beside: groupID, trailing: zone == .trailing)
+        }
     }
 }
 

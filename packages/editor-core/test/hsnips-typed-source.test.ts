@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EditorView } from '@codemirror/view';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { EditorState, EditorSelection } from '@codemirror/state';
 import { parseHSnips } from '../src/editor/hsnips-parser';
 import { hsnipsExtension, hsnipsKeymap, setSnippets, _testing } from '../src/editor/hsnips-plugin';
@@ -72,6 +72,8 @@ describe('math triggers', () => {
     [';th', '\\theta'],
     [';ta', '\\tau'],
     [';b', '\\beta'],
+    [';e', '\\varepsilon'],
+    ['x;;2', 'x^{2}'],
     ['sin', '\\sin'],
     ['sinh', '\\sinh'],
     ['arcsin', '\\arcsin'],
@@ -199,6 +201,47 @@ it('Tab out of a snippet ends it, so later typing is not a highlighted field', (
   for (const ch of ' then') typeOne(view, ch);
   expect(view.state.doc.toString()).toBe('$x$ then');
   expect(view.dom.querySelector('.cm-hsnips-placeholder')).toBeNull();
+  view.destroy();
+});
+
+describe('Tab inside a display-math snippet closes inner scopes first', () => {
+  const tab = (view: EditorView) =>
+    runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9 }), 'editor');
+  const caret = (view: EditorView) => {
+    const doc = view.state.doc.toString();
+    const head = view.state.selection.main.head;
+    return doc.slice(0, head) + '|' + doc.slice(head);
+  };
+
+  it.each([
+    ['md', mdView, '$$\n[x_{t+1}]\n$$'],
+    ['tex', texView, '\\[\n[x_{t+1}]\n\\]'],
+  ] as const)('%s: } then ] then out of the block', (_lang, mk, block) => {
+    const view = mk('', { cursor: 0 });
+    view.dispatch({ effects: setSnippets.of(snippets) });
+    for (const ch of 'dm[]') typeOne(view, ch);
+    view.dispatch({ selection: EditorSelection.cursor(view.state.selection.main.head - 1) });
+    for (const ch of 'x__t+1') typeOne(view, ch);
+    const after = (marker: string) => block.replace(marker, `${marker}|`);
+    tab(view);
+    expect(caret(view)).toBe(after('}'));
+    tab(view);
+    expect(caret(view)).toBe(after('}]'));
+    tab(view);
+    expect(caret(view)).toBe(`${block}|`);
+    view.destroy();
+  });
+});
+
+it.each([
+  ['md', mdView],
+  ['tex', texView],
+] as const)('%s: a Tab-only trigger typed into `dm` expands on Tab', (_lang, mk) => {
+  const view = mk('', { cursor: 0 });
+  view.dispatch({ effects: setSnippets.of(snippets) });
+  for (const ch of 'dmpmat') typeOne(view, ch);
+  runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9 }), 'editor');
+  expect(view.state.doc.toString()).toContain('\\begin{pmatrix}');
   view.destroy();
 });
 

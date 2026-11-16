@@ -101,6 +101,9 @@ extension NSColor {
     /// The active name's short underline: the single accent, nothing else in the chrome is
     /// saturated (Y-1).
     static let chalkTabUnderline = chalkAccent
+    /// A tab group without focus keeps its shown tab's underline, unsaturated, so only the
+    /// focused group carries the accent.
+    static let chalkTabUnderlineUnfocused = themed(\.tabLabelInactive)
     /// Mono labels: filename run.
     static let chalkTabLabelActive = themed(\.tabLabelActive)
     static let chalkTabLabelInactive = themed(\.tabLabelInactive)

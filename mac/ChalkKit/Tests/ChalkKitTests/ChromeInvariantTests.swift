@@ -28,29 +28,39 @@ final class ChromeInvariantTests: XCTestCase {
             content = fullWidthContent
         }
         var panes = [content]
-        var divider: CGRect?
+        var dividers: [CGRect] = []
+        let strip = CGRect(x: 350, y: 20, width: 400, height: 40)
+        var strips = [strip]
         if split {
-            let (leading, trailing) = content.divided(atDistance: (content.width / 2).rounded(.down),
-                                                      from: .minXEdge)
-            panes = [leading, trailing]
-            divider = CGRect(x: leading.maxX - 6, y: content.minY, width: 12, height: content.height)
+            // Three groups, as the matrix draws `.multiple`.
+            let third = (content.width / 3).rounded(.down)
+            panes = (0..<3).map { i in
+                CGRect(x: content.minX + CGFloat(i) * third, y: content.minY,
+                       width: i == 2 ? content.width - 2 * third : third, height: content.height)
+            }
+            dividers = panes.dropLast().map { CGRect(x: $0.maxX - 6, y: content.minY, width: 12, height: content.height) }
+            strips = panes.enumerated().map { i, pane in
+                let minX = i == 0 ? strip.minX : pane.minX + 14
+                return CGRect(x: minX, y: strip.minY, width: pane.maxX - 14 - minX, height: strip.height)
+            }
         }
         return ChromeLayout(
             state: UIState(window: .fullscreen,
                            sidebar: sidebar ? .shown : .hidden,
-                           mode: .normal, split: split ? .split : .single, appearance: .dark),
+                           mode: .normal, groups: split ? .multiple : .single, appearance: .dark),
             root: root, band: band, bandPaint: band,
             bandPaintHole: panel.map { CGRect(x: 0, y: 0, width: $0.maxX, height: band.height) },
             libraryPanel: panel,
-            tabStrip: CGRect(x: 350, y: 20, width: 400, height: 40),
+            tabStrip: strips[0],
             editorRestingTop: 87, restingPad: 27,
             libraryRowHeight: 34, underlineGap: 7,
             footerPill: CGRect(x: 18, y: 748, width: 200, height: 40),
             pillCorner: CGPoint(x: 18, y: 12),
             editorContent: content,
             reserveTop: band.maxY,
-            // The first area header sits just below the chrome floor.
-            libraryFirstHeaderTop: sidebar ? band.maxY + 4 : nil,
+            // Full screen: no traffic lights, so the first area header rises
+            // into the band to the panel's top padding.
+            libraryFirstHeaderTop: sidebar ? root.minY + 24 : nil,
             activeTabLabel: label,
             activeTabUnderline: CGRect(x: label.minX, y: label.maxY + 5,
                                        width: label.width, height: 2),
@@ -59,8 +69,26 @@ final class ChromeInvariantTests: XCTestCase {
             outlinePanelPushMinimum: outline ? (overlay ? 500 : 200) : 0,
             bandPaintTrailingHole: outlinePanel.map { CGRect(x: $0.minX, y: 0, width: 1000 - $0.minX, height: band.height) },
             editorPanes: panes,
-            splitDivider: divider,
-            splitMinimumPane: 200)
+            groupDividers: dividers,
+            groupMinimumWidth: 200,
+            groupStrips: strips,
+            // Every row's names on one line, the band's centre.
+            nameLines: strips.map { _ in band.midY })
+    }
+
+    /// `healthy` windowed, with the lights on the names' line and the first name one gap past
+    /// them. One group has no Library, so the row starts at the lights; three keep the Library,
+    /// whose geometry `healthy` builds them around.
+    private func windowedWithLights(split: Bool = false) -> ChromeLayout {
+        var layout = healthy(sidebar: split, split: split)
+        layout.state = UIState(window: .windowed, sidebar: split ? .shown : .hidden, mode: .normal,
+                               groups: split ? .multiple : .single, appearance: .dark)
+        layout.reserveTop = layout.band.maxY
+        layout.libraryFirstHeaderTop = split ? layout.band.maxY + 4 : nil
+        layout.trafficLights = CGRect(x: 19, y: layout.band.midY - 7, width: 60, height: 14)
+        layout.trafficLightGap = 24
+        layout.firstNameMinX = 19 + 60 + 24
+        return layout
     }
 
     /// The windowed sibling: the band is the AppKit strip's business, so
@@ -101,7 +129,8 @@ final class ChromeInvariantTests: XCTestCase {
 
     func testHealthyLayoutSatisfiesEveryInvariant() {
         for layout in [healthy(sidebar: true), healthy(sidebar: false),
-                       macHealthy(sidebar: true), macHealthy(sidebar: false)] {
+                       macHealthy(sidebar: true), macHealthy(sidebar: false),
+                       windowedWithLights(), windowedWithLights(split: true)] {
             for invariant in ChromeInvariant.catalogue where invariant.appliesTo(layout) {
                 XCTAssertTrue(invariant.holds(layout),
                               "\(invariant.name) failed on a healthy layout")
@@ -184,6 +213,50 @@ final class ChromeInvariantTests: XCTestCase {
         XCTAssertFalse(rule("libraryListStartsAtTheChromeFloor").holds(layout))
     }
 
+    /// Full screen has no traffic lights: a list still parked below the band
+    /// leaves their empty strip over the Library.
+    func testLibraryFloorRuleFailsWhenFullScreenKeepsTheLightsStrip() {
+        var layout = healthy()
+        XCTAssertTrue(rule("libraryListStartsAtTheChromeFloor").holds(layout))
+        layout.libraryFirstHeaderTop = layout.band.maxY + 4
+        XCTAssertFalse(rule("libraryListStartsAtTheChromeFloor").holds(layout))
+    }
+
+    /// The names off the lights' line: the short titlebar after a full-screen exit put the
+    /// lights 7pt above them (docs/issues/2026-11-16-tab-row-regressions.md).
+    func testNamesOffTheLightsLineFail() {
+        var layout = windowedWithLights()
+        XCTAssertTrue(rule("namesShareTheLightsLine").isEvidence(about: layout))
+        XCTAssertTrue(check("namesShareTheLightsLine", layout))
+        layout.trafficLights?.origin.y -= 7
+        XCTAssertFalse(check("namesShareTheLightsLine", layout))
+    }
+
+    /// Full screen hides the lights: the rule says nothing there.
+    func testTheLightsRulesDoNotApplyInFullScreen() {
+        var layout = windowedWithLights()
+        layout.state = UIState(window: .fullscreen, sidebar: .hidden, mode: .normal, appearance: .dark)
+        XCTAssertFalse(rule("namesShareTheLightsLine").appliesTo(layout))
+        XCTAssertFalse(rule("firstNameClearsTheLights").appliesTo(layout))
+    }
+
+    func testAFirstNameThatCrowdsOrLeavesTheLightsFails() {
+        var layout = windowedWithLights()
+        XCTAssertTrue(check("firstNameClearsTheLights", layout))
+        layout.firstNameMinX! -= 8
+        XCTAssertFalse(check("firstNameClearsTheLights", layout))
+        layout.firstNameMinX! += 16
+        XCTAssertFalse(check("firstNameClearsTheLights", layout))
+    }
+
+    func testAGroupRowOffTheLineFails() {
+        var layout = windowedWithLights(split: true)
+        XCTAssertTrue(rule("groupRowsShareOneLine").isEvidence(about: layout))
+        XCTAssertTrue(check("groupRowsShareOneLine", layout))
+        layout.nameLines[1] += 2
+        XCTAssertFalse(check("groupRowsShareOneLine", layout))
+    }
+
     /// Invariants that only make sense with a Library must not run without one.
     func testLibraryInvariantsDoNotApplyWhenTheSidebarIsHidden() {
         let hidden = healthy(sidebar: false)
@@ -219,7 +292,8 @@ final class ChromeInvariantTests: XCTestCase {
     /// The other direction: a real layout must not be quietly discounted.
     /// Falsifiability that is too strict would hide coverage the suite has.
     func testAHealthyLayoutIsEvidenceForEveryRuleThatApplies() {
-        for layout in [healthy(sidebar: true), healthy(sidebar: false), healthy(split: true)] {
+        for layout in [healthy(sidebar: true), healthy(sidebar: false), healthy(split: true),
+                       windowedWithLights(), windowedWithLights(split: true)] {
             for invariant in ChromeInvariant.catalogue where invariant.appliesTo(layout) {
                 XCTAssertTrue(invariant.isFalsifiable(layout),
                               "\(invariant.name) applies to a fully populated layout "
@@ -302,9 +376,9 @@ final class ChromeInvariantTests: XCTestCase {
         XCTAssertFalse(rule("outlinePanelIsNeverPaintedOver").isEvidence(about: healthy(outline: false)))
     }
 
-    // MARK: Split
+    // MARK: Groups
 
-    func testHealthySplitSatisfiesEveryInvariant() {
+    func testHealthyGroupsSatisfyEveryInvariant() {
         for layout in [healthy(split: true), healthy(outline: true, split: true),
                        healthy(outline: true, overlay: true, split: true)] {
             for invariant in ChromeInvariant.catalogue where invariant.isEvidence(about: layout) {
@@ -313,7 +387,7 @@ final class ChromeInvariantTests: XCTestCase {
         }
     }
 
-    func testPanesRuleFailsWhenTheSplitStateShowsOnePane() {
+    func testPanesRuleFailsWhenTheGroupsStateShowsOnePane() {
         var layout = healthy(split: true)
         layout.editorPanes = [layout.editorContent]
         XCTAssertFalse(check("editorPanesTileTheContent", layout))
@@ -321,7 +395,7 @@ final class ChromeInvariantTests: XCTestCase {
 
     func testPanesRuleFailsWhenTheTrailingPaneStopsShort() {
         var layout = healthy(split: true)
-        layout.editorPanes[1].size.width -= 20
+        layout.editorPanes[2].size.width -= 20
         XCTAssertFalse(check("editorPanesTileTheContent", layout))
     }
 
@@ -339,28 +413,53 @@ final class ChromeInvariantTests: XCTestCase {
 
     func testFloorRuleFailsOnASliver() {
         var layout = healthy(split: true)
-        let content = layout.editorContent
-        layout.editorPanes = [CGRect(x: content.minX, y: content.minY, width: 80, height: content.height),
-                              CGRect(x: content.minX + 80, y: content.minY,
-                                     width: content.width - 80, height: content.height)]
-        XCTAssertFalse(check("splitPanesKeepTheirFloor", layout))
+        let panes = layout.editorPanes
+        layout.editorPanes[0].size.width = 80
+        layout.editorPanes[1] = CGRect(x: panes[0].minX + 80, y: panes[1].minY,
+                                       width: panes[1].maxX - panes[0].minX - 80, height: panes[1].height)
+        XCTAssertFalse(check("editorGroupsKeepTheirFloor", layout))
     }
 
-    func testFloorRuleAcceptsHalvesInANarrowColumn() {
+    func testFloorRuleAcceptsEvenSharesInANarrowColumn() {
         var layout = healthy(split: true)
-        layout.splitMinimumPane = layout.editorContent.width
-        XCTAssertTrue(check("splitPanesKeepTheirFloor", layout))
+        layout.groupMinimumWidth = layout.editorContent.width
+        XCTAssertTrue(check("editorGroupsKeepTheirFloor", layout))
     }
 
     func testDividerRuleFailsAtAStaleX() {
         var layout = healthy(split: true)
-        layout.splitDivider?.origin.x += 40
-        XCTAssertFalse(check("splitDividerSitsOnTheSeam", layout))
+        layout.groupDividers[1].origin.x += 40
+        XCTAssertFalse(check("groupDividersSitOnTheSeams", layout))
     }
 
-    func testSplitRulesDoNotApplyToOnePane() {
+    func testDividerRuleFailsWhenASeamHasNoHandle() {
+        var layout = healthy(split: true)
+        layout.groupDividers.removeLast()
+        XCTAssertFalse(check("groupDividersSitOnTheSeams", layout))
+    }
+
+    func testStripRuleFailsWhenARowCrossesIntoTheNextColumn() {
+        var layout = healthy(split: true)
+        layout.groupStrips[0].size.width += 100
+        XCTAssertFalse(check("groupStripsLieOverTheirColumns", layout))
+    }
+
+    func testStripRuleFailsWhenARowStartsBeforeItsColumn() {
+        var layout = healthy(split: true)
+        layout.groupStrips[2].origin.x = layout.editorPanes[2].minX - 30
+        XCTAssertFalse(check("groupStripsLieOverTheirColumns", layout))
+    }
+
+    func testStripRuleFailsWhenAGroupHasNoRow() {
+        var layout = healthy(split: true)
+        layout.groupStrips.removeLast()
+        XCTAssertFalse(check("groupStripsLieOverTheirColumns", layout))
+    }
+
+    func testGroupRulesDoNotApplyToOneGroup() {
         let layout = healthy()
-        XCTAssertFalse(rule("splitPanesKeepTheirFloor").appliesTo(layout))
-        XCTAssertFalse(rule("splitDividerSitsOnTheSeam").appliesTo(layout))
+        XCTAssertFalse(rule("editorGroupsKeepTheirFloor").appliesTo(layout))
+        XCTAssertFalse(rule("groupDividersSitOnTheSeams").appliesTo(layout))
+        XCTAssertFalse(rule("groupStripsLieOverTheirColumns").appliesTo(layout))
     }
 }

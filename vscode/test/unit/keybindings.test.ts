@@ -57,6 +57,17 @@ const OWNED_CHORDS: ReadonlyArray<{ chord: string; owner: string }> = [
   { chord: 'z', owner: 'Mod-z — undo (historyKeymap, setup.ts)' },
   { chord: 'shift+z', owner: 'Mod-Shift-z / Ctrl-Shift-z — redo, macOS / Linux (historyKeymap)' },
   { chord: 'y', owner: 'Mod-y — redo, Windows / Linux (historyKeymap)' },
+  { chord: 'alt+[', owner: 'Mod-Alt-[ — fold (md-fold.ts)' },
+  { chord: 'alt+]', owner: 'Mod-Alt-] — unfold (md-fold.ts)' },
+  ...['0', '1', '2', '3', '4', '5', '6'].map((n) => ({
+    chord: `alt+${n}`,
+    owner: `Mod-Alt-${n} — fold to level (md-fold.ts)`,
+  })),
+  { chord: 'enter', owner: 'Mod-Enter — step a task checkbox (md-outliner-keys.ts)' },
+  { chord: 'shift+7', owner: 'Mod-Shift-7 — numbered list (md-outliner-keys.ts)' },
+  { chord: 'shift+8', owner: 'Mod-Shift-8 — bullet list (md-outliner-keys.ts)' },
+  { chord: 'shift+9', owner: 'Mod-Shift-9 — task list (md-outliner-keys.ts)' },
+  { chord: '.', owner: 'Mod-. — zoom into a subtree (md-zoom.ts)' },
 ];
 
 /** The no-op command that claims a chord back from the workbench. */

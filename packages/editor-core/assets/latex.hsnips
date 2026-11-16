@@ -143,6 +143,40 @@ snippet `([a-zA-Z])_(\d\d)` "sub two numbers" Ai
 ``rv = m[1]``_{``rv = m[2]``}
 endsnippet
 
+# Time subscripts: `ct` → c_t, then `1` → c_{t+1} or `m` → c_{t-1}. Not `d`,
+# so `dt` stays a differential, and not after `;` or `:`, so `;vt` stays ϑ. `xtilde` and `xtrans` pass through `x_t` on the
+# way, hence the two `_t…` rescues below.
+context math(context)
+snippet `(?<![\w;:\\])([a-ce-zA-Z])t` "time subscript" A
+``rv = m[1]``_t
+endsnippet
+
+context math(context)
+snippet `_t(\d)` "time subscript t+n" A
+_{t+``rv = m[1]``}
+endsnippet
+
+context math(context)
+snippet _tm "time subscript t-1" Ai
+_{t-1}
+endsnippet
+
+context math(context)
+snippet `\\mathbb\{E\}t` "expectation at t" A
+\mathbb{E}_t
+endsnippet
+
+context math(context)
+snippet `([a-zA-Z])_tilde` "add tilde (after a time subscript)" Ai
+\tilde{``rv = m[1]``}
+endsnippet
+
+context math(context)
+priority 1
+snippet _trans "transpose (after a time subscript)" Ai
+^\top
+endsnippet
+
 context math(context)
 snippet `\\hat{([a-zA-Z])}(\d)` "hat with sub number" Ai
 \hat{``rv = m[1]``}_{``rv = m[2]``}
@@ -327,7 +361,7 @@ endsnippet
 
 context math(context)
 snippet ;e "ε" Ai
-\epsilon
+\varepsilon
 endsnippet
 
 context math(context)
@@ -488,6 +522,11 @@ endsnippet
 context math(context)
 snippet ;O "Ω" Ai
 \Omega
+endsnippet
+
+context math(context)
+snippet ;; "superscript (braces)" Ai
+^{$1}$0
 endsnippet
 
 

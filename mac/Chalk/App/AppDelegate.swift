@@ -197,6 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Anything that leaves the marker armed past this was a death nobody handled.
     func applicationWillTerminate(_ notification: Notification) {
         AlphaSession.shared.markClean()
+        ProvenanceStore.shared.flush()
     }
 
     /// The app outlives its last window, like every Mac document app.

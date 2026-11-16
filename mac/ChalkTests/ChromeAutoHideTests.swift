@@ -51,7 +51,7 @@ final class ChromeAutoHideTests: XCTestCase {
             let root = loadedRoot()
             XCTAssertFalse(root.isChromeAutoHiddenForTesting)
             for offset in stride(from: 100.0, through: 140.0, by: 10.0) {
-                root.editorDidScroll(offset: offset)
+                root.editorDidScroll(offset: offset, canHide: true)
             }
             XCTAssertTrue(root.isChromeAutoHiddenForTesting,
                           "40pt of downward travel crosses the hide threshold")
@@ -61,13 +61,16 @@ final class ChromeAutoHideTests: XCTestCase {
     func testScrollingBackUpRevealsChrome() {
         withPreference(true) {
             let root = loadedRoot()
-            for offset in stride(from: 100.0, through: 140.0, by: 10.0) {
-                root.editorDidScroll(offset: offset)
+            for offset in stride(from: 300.0, through: 340.0, by: 10.0) {
+                root.editorDidScroll(offset: offset, canHide: true)
             }
             XCTAssertTrue(root.isChromeAutoHiddenForTesting)
-            root.editorDidScroll(offset: 125)
+            root.editorDidScroll(offset: 300, canHide: true)
+            XCTAssertTrue(root.isChromeAutoHiddenForTesting,
+                          "40pt back up is a reading drift, not a reach for the tabs")
+            root.editorDidScroll(offset: 190, canHide: true)
             XCTAssertFalse(root.isChromeAutoHiddenForTesting,
-                           "15pt back up clears the eager show threshold")
+                           "a quick 150pt back up is a reach for the tabs")
         }
     }
 
@@ -75,7 +78,7 @@ final class ChromeAutoHideTests: XCTestCase {
         withPreference(false) {
             let root = loadedRoot()
             for offset in stride(from: 100.0, through: 300.0, by: 10.0) {
-                root.editorDidScroll(offset: offset)
+                root.editorDidScroll(offset: offset, canHide: true)
             }
             XCTAssertFalse(root.isChromeAutoHiddenForTesting,
                            "with the switch off no amount of scrolling hides the tabs")
@@ -93,13 +96,13 @@ final class ChromeAutoHideTests: XCTestCase {
         withPreference(true) {
             let root = loadedRoot()
             let first = UUID()
-            root.handleTabsChanged([item(first, name: "a.md")])
+            root.simulateTabsChangedForTesting([item(first, name: "a.md")])
             for offset in stride(from: 100.0, through: 140.0, by: 10.0) {
-                root.editorDidScroll(offset: offset)
+                root.editorDidScroll(offset: offset, canHide: true)
             }
             XCTAssertTrue(root.isChromeAutoHiddenForTesting)
 
-            root.handleTabsChanged([
+            root.simulateTabsChangedForTesting([
                 item(first, name: "a.md", active: false),
                 item(UUID(), name: "b.md"),
             ])
@@ -114,13 +117,13 @@ final class ChromeAutoHideTests: XCTestCase {
         withPreference(true) {
             let root = loadedRoot()
             let id = UUID()
-            root.handleTabsChanged([item(id, name: "a.md")])
+            root.simulateTabsChangedForTesting([item(id, name: "a.md")])
             for offset in stride(from: 100.0, through: 140.0, by: 10.0) {
-                root.editorDidScroll(offset: offset)
+                root.editorDidScroll(offset: offset, canHide: true)
             }
             XCTAssertTrue(root.isChromeAutoHiddenForTesting)
 
-            root.handleTabsChanged([item(id, name: "a.md", dirty: true)])
+            root.simulateTabsChangedForTesting([item(id, name: "a.md", dirty: true)])
             XCTAssertTrue(root.isChromeAutoHiddenForTesting,
                           "a dirty-marker update is not a tab the reader opened")
         }
@@ -133,7 +136,7 @@ final class ChromeAutoHideTests: XCTestCase {
         withPreference(true) {
             let root = loadedRoot()
             for offset in stride(from: 100.0, through: 140.0, by: 10.0) {
-                root.editorDidScroll(offset: offset)
+                root.editorDidScroll(offset: offset, canHide: true)
             }
             XCTAssertTrue(root.isChromeAutoHiddenForTesting)
 

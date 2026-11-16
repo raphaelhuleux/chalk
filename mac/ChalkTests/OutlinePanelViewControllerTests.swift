@@ -149,4 +149,73 @@ final class OutlinePanelViewControllerTests: XCTestCase {
         vc.setSnapshot(OutlineSnapshot(items: three, cursorLine: 1))
         XCTAssertEqual(vc.tableViewForTesting.rowHeight, 32, accuracy: 0.5)
     }
+
+    // MARK: - Folding
+
+    /// tree = Outline demo / Setup / Requirements / Method: the title and
+    /// Setup have nested items, so only they carry a chevron.
+    func testOnlyRowsWithNestedItemsFold() {
+        let (_, vc) = hosted()
+        vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 1))
+        vc.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual((0..<4).map { vc.isFoldableForTesting(row: $0) }, [true, true, false, false])
+    }
+
+    func testFoldingHidesTheSubtreeAndUnfoldingBringsItBack() {
+        let (_, vc) = hosted()
+        vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 1))
+        vc.toggleFoldForTesting(row: 1)
+        XCTAssertEqual(vc.rowCountForTesting, 3, "Requirements folds into Setup")
+        var jumped: [Int] = []
+        vc.onJump = { jumped.append($0) }
+        vc.jumpToRowForTesting(2)
+        XCTAssertEqual(jumped, [13], "row 2 is now Method")
+        vc.toggleFoldForTesting(row: 1)
+        XCTAssertEqual(vc.rowCountForTesting, 4)
+    }
+
+    /// The caret inside a folded section selects the folded heading.
+    func testACaretInAFoldedSectionSelectsTheFold() {
+        let (_, vc) = hosted()
+        vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 1))
+        vc.toggleFoldForTesting(row: 1)
+        vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 10))
+        XCTAssertEqual(vc.selectedRowForTesting, 1)
+    }
+
+    /// Folds survive an edit that moves every line, and belong to their
+    /// document: another tab starts unfolded, and coming back restores them.
+    func testFoldsSurviveEditsAndFollowTheDocument() {
+        let (_, vc) = hosted()
+        vc.setDocumentName("a.md", key: "/a.md")
+        vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 1))
+        vc.toggleFoldForTesting(row: 0)
+        XCTAssertEqual(vc.rowCountForTesting, 1)
+
+        let shifted = tree.map {
+            OutlineItem(kind: $0.kind, level: $0.level, title: $0.title, line: $0.line + 3,
+                        calloutType: nil, number: nil)
+        }
+        vc.setSnapshot(OutlineSnapshot(items: shifted, cursorLine: 1))
+        XCTAssertEqual(vc.rowCountForTesting, 1, "typing above the fold keeps it")
+
+        vc.setDocumentName("b.md", key: "/b.md")
+        vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 1))
+        XCTAssertEqual(vc.rowCountForTesting, 4)
+
+        vc.setDocumentName("a.md", key: "/a.md")
+        vc.setSnapshot(OutlineSnapshot(items: shifted, cursorLine: 1))
+        XCTAssertEqual(vc.rowCountForTesting, 1)
+    }
+
+    /// ⌥-click folds the whole branch, so unfolding the top later shows
+    /// Setup still folded.
+    func testOptionClickFoldsTheBranch() {
+        let (_, vc) = hosted()
+        vc.setSnapshot(OutlineSnapshot(items: tree, cursorLine: 1))
+        vc.toggleFoldForTesting(row: 0, recursive: true)
+        XCTAssertEqual(vc.rowCountForTesting, 1)
+        vc.toggleFoldForTesting(row: 0)
+        XCTAssertEqual(vc.rowCountForTesting, 3, "Setup stays folded over Requirements")
+    }
 }

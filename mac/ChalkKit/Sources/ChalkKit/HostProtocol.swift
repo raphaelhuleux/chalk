@@ -81,36 +81,62 @@ public struct HeadingColors: Codable, Sendable, Equatable {
 
 // MARK: - Messages
 
+/// Mirrors `AiMark` in editor-core's provenance.ts. `[from, to)` is AI text, in UTF-16 offsets into
+/// the editor's LF-normalized document; `deleted` is the human text it replaced.
+public struct AiMark: Codable, Sendable, Equatable {
+    public let from: Int
+    public let to: Int
+    public let deleted: String
+
+    public init(from: Int, to: Int, deleted: String) {
+        self.from = from
+        self.to = to
+        self.deleted = deleted
+    }
+}
+
+/// Where an `update`'s text came from. Absent means the app's own push.
+public enum TextOrigin: String, Codable, Sendable, Equatable {
+    case external
+}
+
 /// Host → editor (the 6 inbound message types).
 public enum HostToEditorMessage: Codable, Sendable, Equatable {
     /// `init`. `editorConfig` is passed through opaque. `epoch` is the host's
     /// text-push generation, echoed on every `edit` so the host can drop edits
     /// that predate a buffer swap (else a keystroke racing a reload lands the
     /// old text in the new file). Optional: the VS Code host doesn't send it.
-    case initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?, epoch: Int?)
-    case update(text: String, epoch: Int?)
+    ///
+    /// `aiMarks` on `init` and `update` installs marks from `ProvenanceStore` once the text is in.
+    /// `update`'s `origin` says the text came from outside, so the editor marks what it changed.
+    case initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?, epoch: Int?,
+                    aiMarks: [AiMark]? = nil)
+    case update(text: String, epoch: Int?, origin: TextOrigin? = nil, aiMarks: [AiMark]? = nil)
     case themeColors(ThemeColors)
     case headingColors(HeadingColors)
     case editorConfig(JSONValue)
     case hsnips(content: String)
 
     private enum CodingKeys: String, CodingKey {
-        case type, text, language, editorConfig, colors, config, content, epoch
+        case type, text, language, editorConfig, colors, config, content, epoch, origin, aiMarks
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case let .initialize(text, language, editorConfig, epoch):
+        case let .initialize(text, language, editorConfig, epoch, aiMarks):
             try c.encode("init", forKey: .type)
             try c.encode(text, forKey: .text)
             try c.encode(language, forKey: .language)
             try c.encodeIfPresent(editorConfig, forKey: .editorConfig)
             try c.encodeIfPresent(epoch, forKey: .epoch)
-        case let .update(text, epoch):
+            try c.encodeIfPresent(aiMarks, forKey: .aiMarks)
+        case let .update(text, epoch, origin, aiMarks):
             try c.encode("update", forKey: .type)
             try c.encode(text, forKey: .text)
             try c.encodeIfPresent(epoch, forKey: .epoch)
+            try c.encodeIfPresent(origin, forKey: .origin)
+            try c.encodeIfPresent(aiMarks, forKey: .aiMarks)
         case let .themeColors(colors):
             try c.encode("theme-colors", forKey: .type)
             try c.encode(colors, forKey: .colors)
@@ -135,12 +161,15 @@ public enum HostToEditorMessage: Codable, Sendable, Equatable {
                 text: try c.decode(String.self, forKey: .text),
                 language: try c.decode(EditorLanguage.self, forKey: .language),
                 editorConfig: try c.decodeIfPresent(JSONValue.self, forKey: .editorConfig),
-                epoch: try c.decodeIfPresent(Int.self, forKey: .epoch)
+                epoch: try c.decodeIfPresent(Int.self, forKey: .epoch),
+                aiMarks: try c.decodeIfPresent([AiMark].self, forKey: .aiMarks)
             )
         case "update":
             self = .update(
                 text: try c.decode(String.self, forKey: .text),
-                epoch: try c.decodeIfPresent(Int.self, forKey: .epoch))
+                epoch: try c.decodeIfPresent(Int.self, forKey: .epoch),
+                origin: try c.decodeIfPresent(TextOrigin.self, forKey: .origin),
+                aiMarks: try c.decodeIfPresent([AiMark].self, forKey: .aiMarks))
         case "theme-colors":
             self = .themeColors(try c.decode(ThemeColors.self, forKey: .colors))
         case "heading-colors":

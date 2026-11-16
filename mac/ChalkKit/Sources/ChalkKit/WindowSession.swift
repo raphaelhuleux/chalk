@@ -16,51 +16,116 @@ public struct WindowSession: Codable, Equatable {
         }
     }
 
-    public var tabs: [TabRecord]
-    public var activeIndex: Int?
+    /// One side-by-side tab group: its tabs in strip order, the one it shows, its width share
+    /// (stored as written; `EditorGroupsLayout` cleans and normalises shares on restore).
+    public struct GroupRecord: Codable, Equatable {
+        public var tabs: [TabRecord]
+        public var activeIndex: Int?
+        public var fraction: Double
+
+        public init(tabs: [TabRecord], activeIndex: Int?, fraction: Double = 1) {
+            self.tabs = tabs
+            // Clamp: a stale index would crash the restore path.
+            if let index = activeIndex, tabs.indices.contains(index) {
+                self.activeIndex = index
+            } else {
+                self.activeIndex = tabs.isEmpty ? nil : 0
+            }
+            self.fraction = fraction
+        }
+
+        private enum CodingKeys: String, CodingKey { case tabs, activeIndex, fraction }
+
+        /// Routes through the clamping init.
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(tabs: try container.decode([TabRecord].self, forKey: .tabs),
+                      activeIndex: try container.decodeIfPresent(Int.self, forKey: .activeIndex),
+                      fraction: try container.decodeIfPresent(Double.self, forKey: .fraction) ?? 1)
+        }
+    }
+
+    /// Leading to trailing; never holds an empty group (a window with no file tabs has none).
+    public var groups: [GroupRecord]
+    /// The focused group; nil only without groups.
+    public var activeGroupIndex: Int?
     public var isSidebarVisible: Bool
     /// The persistent outline panel (⌘K). Optional on decode, default closed.
     public var isOutlineVisible: Bool
-    /// The tab in the split's unfocused pane; nil without a split. Optional on decode.
-    public var splitIndex: Int?
-    /// The unfocused pane is the leading one (focus was on the trailing pane).
-    public var splitIsLeading: Bool
 
-    public init(tabs: [TabRecord], activeIndex: Int?, isSidebarVisible: Bool,
-                isOutlineVisible: Bool = false, splitIndex: Int? = nil, splitIsLeading: Bool = false) {
-        self.tabs = tabs
-        // Clamp: a stale index would crash the restore path.
-        if let index = activeIndex, tabs.indices.contains(index) {
-            self.activeIndex = index
+    public init(groups: [GroupRecord], activeGroupIndex: Int?, isSidebarVisible: Bool,
+                isOutlineVisible: Bool = false) {
+        let kept = groups.filter { !$0.tabs.isEmpty }
+        self.groups = kept
+        // An index into the input; empty groups dropped before it shift it.
+        if let index = activeGroupIndex, groups.indices.contains(index), !groups[index].tabs.isEmpty {
+            self.activeGroupIndex = groups[..<index].filter { !$0.tabs.isEmpty }.count
         } else {
-            self.activeIndex = tabs.isEmpty ? nil : 0
+            self.activeGroupIndex = kept.isEmpty ? nil : 0
         }
         self.isSidebarVisible = isSidebarVisible
         self.isOutlineVisible = isOutlineVisible
-        // A split shows two different tabs: one that would repeat the active tab is no split.
-        if let index = splitIndex, tabs.indices.contains(index), index != self.activeIndex {
-            self.splitIndex = index
-            self.splitIsLeading = splitIsLeading
-        } else {
-            self.splitIndex = nil
-            self.splitIsLeading = false
-        }
+    }
+
+    /// One group holding every tab.
+    public init(tabs: [TabRecord], activeIndex: Int?, isSidebarVisible: Bool,
+                isOutlineVisible: Bool = false) {
+        self.init(groups: [GroupRecord(tabs: tabs, activeIndex: activeIndex)], activeGroupIndex: 0,
+                  isSidebarVisible: isSidebarVisible, isOutlineVisible: isOutlineVisible)
+    }
+
+    /// Every tab, leading group first.
+    public var tabs: [TabRecord] { groups.flatMap(\.tabs) }
+
+    /// The focused group's shown tab, as an index into `tabs`.
+    public var activeIndex: Int? {
+        guard let g = activeGroupIndex, let local = groups[g].activeIndex else { return nil }
+        return groups[..<g].reduce(0) { $0 + $1.tabs.count } + local
     }
 
     private enum CodingKeys: String, CodingKey {
-        case tabs, activeIndex, isSidebarVisible, isOutlineVisible, splitIndex, splitIsLeading
+        case groups, activeGroupIndex, isSidebarVisible, isOutlineVisible
+        // Records written before tab groups: one strip, at most one tab in a second pane.
+        case tabs, activeIndex, splitIndex, splitIsLeading
     }
 
-    /// Routes through the clamping init.
+    /// Routes through the clamping inits. A record without `groups` predates tab groups: its
+    /// split tab (if any) becomes a group of its own beside the rest.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(
-            tabs: try container.decode([TabRecord].self, forKey: .tabs),
-            activeIndex: try container.decodeIfPresent(Int.self, forKey: .activeIndex),
-            isSidebarVisible: try container.decode(Bool.self, forKey: .isSidebarVisible),
-            isOutlineVisible: try container.decodeIfPresent(Bool.self, forKey: .isOutlineVisible) ?? false,
-            splitIndex: try container.decodeIfPresent(Int.self, forKey: .splitIndex),
-            splitIsLeading: try container.decodeIfPresent(Bool.self, forKey: .splitIsLeading) ?? false)
+        let isSidebarVisible = try container.decode(Bool.self, forKey: .isSidebarVisible)
+        let isOutlineVisible = try container.decodeIfPresent(Bool.self, forKey: .isOutlineVisible) ?? false
+        if let groups = try container.decodeIfPresent([GroupRecord].self, forKey: .groups) {
+            self.init(groups: groups,
+                      activeGroupIndex: try container.decodeIfPresent(Int.self, forKey: .activeGroupIndex),
+                      isSidebarVisible: isSidebarVisible, isOutlineVisible: isOutlineVisible)
+            return
+        }
+        let tabs = try container.decode([TabRecord].self, forKey: .tabs)
+        let activeIndex = try container.decodeIfPresent(Int.self, forKey: .activeIndex)
+        let splitIndex = try container.decodeIfPresent(Int.self, forKey: .splitIndex)
+        let splitIsLeading = try container.decodeIfPresent(Bool.self, forKey: .splitIsLeading) ?? false
+        let active = activeIndex.flatMap { tabs.indices.contains($0) ? $0 : nil } ?? (tabs.isEmpty ? nil : 0)
+        guard let split = splitIndex, tabs.indices.contains(split), split != active, tabs.count > 1 else {
+            self.init(tabs: tabs, activeIndex: active,
+                      isSidebarVisible: isSidebarVisible, isOutlineVisible: isOutlineVisible)
+            return
+        }
+        var rest = tabs
+        rest.remove(at: split)
+        let main = GroupRecord(tabs: rest, activeIndex: active.map { $0 > split ? $0 - 1 : $0 }, fraction: 0.5)
+        let side = GroupRecord(tabs: [tabs[split]], activeIndex: 0, fraction: 0.5)
+        self.init(groups: splitIsLeading ? [side, main] : [main, side],
+                  activeGroupIndex: splitIsLeading ? 1 : 0,
+                  isSidebarVisible: isSidebarVisible, isOutlineVisible: isOutlineVisible)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(groups, forKey: .groups)
+        try container.encodeIfPresent(activeGroupIndex, forKey: .activeGroupIndex)
+        try container.encode(isSidebarVisible, forKey: .isSidebarVisible)
+        try container.encode(isOutlineVisible, forKey: .isOutlineVisible)
     }
 
     public func encoded() -> Data? {

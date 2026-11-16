@@ -171,6 +171,228 @@ const setCursor = (page, pos) =>
 const { browser, contextOptions, tag } = await launchBrowser();
 
 // ---------------------------------------------------------------------------
+// AI marks paint through a layer because decorations can't reach block widgets
+// and need exact precedence on inline ones: pin that the wash really covers
+// each, since jsdom has no geometry to see it.
+const AI_RECTS = () =>
+  [...document.querySelectorAll('.cm-aiMark')].map((e) => {
+    const r = e.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+  });
+const covers = (rects, box) =>
+  rects.some(
+    (r) => r.top <= box.top + 2 && r.bottom >= box.bottom - 2 && r.left <= box.left + 2 && r.right >= box.right - 2,
+  );
+// KaTeX's inline box is taller than its line, and the band is one line high.
+const crosses = (rects, box) =>
+  rects.some(
+    (r) => r.left <= box.left + 2 && r.right >= box.right - 2 && r.top < box.bottom && r.bottom > box.top,
+  );
+const boxOf = (page, selector) =>
+  page.evaluate((s) => {
+    const r = document.querySelector(s)?.getBoundingClientRect();
+    return r ? { top: r.top, bottom: r.bottom, left: r.left, right: r.right } : null;
+  }, selector);
+const AI_DOC = 'First line.\n\nSecond line.\n\nThird line.\n';
+const AI_WRITTEN =
+  'First line.\n\nThe value is $x^2 + y^2$ here.\n\n$$\n\\sum_{i=1}^{n} x_i\n$$\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nThird line.\n\nMore.\n';
+
+await scenario(
+  browser,
+  'AI marks: the wash covers text, math and tables',
+  AI_DOC,
+  async (page, ok) => {
+    await setCursor(page, 0);
+    await page.evaluate(
+      (text) => window.__chalkHost.receive({ type: 'update', text, origin: 'external' }),
+      AI_WRITTEN,
+    );
+    await page.waitForTimeout(300);
+    const rects = await page.evaluate(AI_RECTS);
+    ok('painted', rects.length > 0);
+    const inline = await boxOf(page, '.cm-math-rendered');
+    ok('inline math is rendered', inline !== null);
+    ok('wash runs behind inline math', inline && crosses(rects, inline), JSON.stringify(inline));
+    const display = await boxOf(page, '.cm-math-display');
+    ok('display math is rendered', display !== null);
+    ok('wash covers display math', display && covers(rects, display), JSON.stringify(display));
+    const table = await boxOf(page, '.cm-live-table-wrap');
+    ok('table is rendered', table !== null);
+    ok('wash covers the table', table && covers(rects, table), JSON.stringify(table));
+    const first = await page.evaluate(FIND_TEXT, 'First line');
+    ok(
+      'unchanged text stays bare',
+      !rects.some((r) => r.top < first.y + first.h / 2 && r.bottom > first.y + first.h / 2),
+    );
+    const more = await page.evaluate(FIND_TEXT, 'More');
+    ok(
+      'the wash hugs a short line',
+      rects.some((r) => r.top <= more.y && r.bottom >= more.y + more.h && r.right < 200),
+      JSON.stringify(rects),
+    );
+    const washed = await page.evaluate(
+      () => getComputedStyle(document.querySelector('.cm-aiMark')).backgroundColor,
+    );
+    ok('the rectangles have a colour', washed !== 'rgba(0, 0, 0, 0)', washed);
+  },
+  { width: 760, height: 900 },
+  'md',
+);
+
+const AI_LONG = 'A sentence long enough to wrap across several rows of the column. '.repeat(4);
+const AI_COLUMN_DOC = `# One\n\n${AI_LONG}\n\n- item ${AI_LONG}\n\n> quote ${AI_LONG}\n\n\`\`\`python\ncode = 1\n\`\`\`\n\n> [!note]\n> callout ${AI_LONG}\n\n$$\nx^2\n$$\n\n## Two\n\n${AI_LONG}\n`;
+// A blank line beside display math once measured the widget's box and painted a
+// strip as wide as the widget into the right margin.
+await scenario(
+  browser,
+  'AI marks: the wash stays inside the text column',
+  'x\n',
+  async (page, ok) => {
+    await page.evaluate(
+      (text) => window.__chalkHost.receive({ type: 'update', text, origin: 'external' }),
+      AI_COLUMN_DOC,
+    );
+    await page.waitForTimeout(300);
+    const rects = await page.evaluate(AI_RECTS);
+    ok('painted', rects.length > 0);
+    const column = await boxOf(page, '.cm-content');
+    const stray = rects.filter((r) => r.left < column.left - 1 || r.right > column.right + 1);
+    ok('no rectangle leaves the column', stray.length === 0, JSON.stringify(stray));
+  },
+  { width: 760, height: 900 },
+  'md',
+);
+
+await scenario(
+  browser,
+  'AI marks: hover shows the old text, Reject restores it',
+  'alpha fixed omega\n',
+  async (page, ok) => {
+    await setCursor(page, 0);
+    await page.evaluate(() =>
+      window.__chalkHost.receive({
+        type: 'update',
+        text: 'alpha heterogeneous omega\n',
+        origin: 'external',
+      }),
+    );
+    await page.waitForTimeout(250);
+    ok('a deletion tick shows', (await page.locator('.cm-aiDeletion').count()) === 1);
+    const word = await page.evaluate(FIND_TEXT, 'heterogeneous');
+    await page.mouse.move(word.x + word.w / 2, word.y + word.h / 2);
+    await page.waitForSelector('.cm-aiReview', { timeout: 2000 });
+    ok('hover shows the removed text', (await page.innerText('.cm-aiReview-text')) === 'fixed');
+    await page.getByRole('button', { name: 'Reject' }).dispatchEvent('mousedown');
+    await page.waitForTimeout(150);
+    ok('reject restores it', (await content(page)).includes('alpha fixed omega'));
+    ok('no wash is left', (await page.locator('.cm-aiMark').count()) === 0);
+    ok('no tick is left', (await page.locator('.cm-aiDeletion').count()) === 0);
+  },
+  { width: 760, height: 900 },
+  'md',
+);
+
+await scenario(
+  browser,
+  'AI marks: every mark offers Accept and Reject, and a press closes the popup',
+  'alpha omega\n\nThe household values log utility and a factor.\n',
+  async (page, ok) => {
+    await setCursor(page, 0);
+    await page.evaluate(() =>
+      window.__chalkHost.receive({
+        type: 'update',
+        text: 'alpha inserted omega\n\nUtility is logarithmic, so the household maximises log consumption instead.\n\nFirst question?\n\nSecond question?\n',
+        origin: 'external',
+      }),
+    );
+    await page.waitForTimeout(250);
+    const inserted = await page.evaluate(FIND_TEXT, 'inserted');
+    await page.mouse.move(inserted.x + inserted.w / 2, inserted.y + inserted.h / 2);
+    await page.waitForSelector('.cm-aiReview', { timeout: 2000 });
+    ok('an insertion has no old text', (await page.locator('.cm-aiReview-text').count()) === 0);
+    await page.getByRole('button', { name: 'Accept' }).dispatchEvent('mousedown');
+    await page.waitForTimeout(150);
+    ok('Accept closes the popup', (await page.locator('.cm-aiReview').count()) === 0);
+    ok('Accept keeps the text', (await content(page)).includes('alpha inserted omega'));
+
+    const second = await page.evaluate(FIND_TEXT, 'Second question');
+    await page.mouse.move(0, 0);
+    await page.mouse.move(second.x + second.w / 2, second.y + second.h / 2);
+    await page.waitForSelector('.cm-aiReview', { timeout: 2000 });
+    const popup = await boxOf(page, '.cm-aiReview');
+    ok('the popup sits by the hovered line', popup && Math.abs(popup.bottom - second.y) < 40, JSON.stringify({ popup, second }));
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(200);
+
+    const rewrite = await page.evaluate(FIND_TEXT, 'maximises');
+    await page.mouse.move(rewrite.x + rewrite.w / 2, rewrite.y + rewrite.h / 2);
+    await page.waitForSelector('.cm-aiReview-text', { timeout: 2000 });
+    ok(
+      'a rewrite shows the whole old sentence',
+      (await page.innerText('.cm-aiReview-text')).includes('values log utility'),
+      await page.innerText('.cm-aiReview-text'),
+    );
+    await page.getByRole('button', { name: 'Reject' }).dispatchEvent('mousedown');
+    await page.waitForTimeout(150);
+    ok('Reject closes the popup', (await page.locator('.cm-aiReview').count()) === 0);
+    ok(
+      'one Reject restores the whole sentence',
+      (await content(page)).includes('The household values log utility and a factor.'),
+      await content(page),
+    );
+  },
+  { width: 760, height: 900 },
+  'md',
+);
+
+await scenario(
+  browser,
+  'AI marks: a mark leaves caret motion alone',
+  'one two three four five six seven\n',
+  async (page, ok) => {
+    const stops = async () => {
+      await setCursor(page, 0);
+      const seen = [];
+      for (let i = 0; i < 12; i++) {
+        await page.keyboard.press('ArrowRight');
+        seen.push(await page.evaluate(() => window.__chalkDebugView.state.selection.main.head));
+      }
+      return seen.join();
+    };
+    const bare = await stops();
+    await page.evaluate(() =>
+      window.__chalkHost.receive({
+        type: 'update',
+        text: 'one two AI three four five six seven\n',
+        origin: 'external',
+      }),
+    );
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      const v = window.__chalkDebugView;
+      v.dispatch({ changes: { from: 8, to: 11 } });
+    });
+    await page.waitForTimeout(100);
+    ok('same stops with the text back', (await stops()) === bare);
+    await page.evaluate(() =>
+      window.__chalkHost.receive({
+        type: 'update',
+        text: 'one two four five six seven\n',
+        origin: 'external',
+      }),
+    );
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.__chalkDebugView.focus());
+    await setCursor(page, 7);
+    await page.keyboard.press('ArrowRight');
+    const after = await page.evaluate(() => window.__chalkDebugView.state.selection.main.head);
+    ok('a deletion tick is no caret stop', after === 8, String(after));
+  },
+  { width: 760, height: 900 },
+  'md',
+);
+
+// ---------------------------------------------------------------------------
 await scenario(
   browser,
   'click precision + reveal on release',
@@ -2555,6 +2777,191 @@ for (const [lang, doc] of Object.entries(DEAD_KEY_DOCS)) {
 }
 
 // ---------------------------------------------------------------------------
+//  `^` `^` on ABC-AZERTY, replayed from a Safari trace on the owner's Mac:
+//
+//    2nd ^ : deleteCompositionText, insertFromComposition "^", compositionend
+//            compositionstart, insertCompositionText "^"     (a NEW pending ^)
+//    t     : deleteCompositionText, insertFromComposition "^", compositionend
+//            insertText "t"
+//
+//  The `^^` snippet fired on the pending second `^`. WebKit then committed it
+//  at the caret, inside the braces, and `^^t` became `^{^t}`
+//  (docs/issues/2026-11-06-azerty-dead-key-doubles-superscript.md).
+// ---------------------------------------------------------------------------
+
+/** Open a composition writing `ch` at the caret, and remember where it is. */
+const MARK = (ch) => {
+  const target = document.querySelector('.cm-content');
+  target.focus();
+  target.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+  const sel = window.getSelection();
+  let node = sel.getRangeAt(0).startContainer;
+  let offset = sel.getRangeAt(0).startOffset;
+  if (node.nodeType !== Node.TEXT_NODE) {
+    // An element caret sits between children: write at the end of the one
+    // before it, or the start of the one after (CM6 parks it at offset 0 of
+    // the closing `$`'s span, which is before the `$`).
+    const before = node.childNodes[offset - 1];
+    const after = node.childNodes[offset];
+    if (before?.nodeType === Node.TEXT_NODE) {
+      node = before;
+      offset = before.length;
+    } else if (after?.nodeType === Node.TEXT_NODE) {
+      node = after;
+      offset = 0;
+    } else {
+      return 'no text node at the caret';
+    }
+  }
+  node.insertData(offset, ch);
+  window.__marked = { node, offset, ch };
+  const after = document.createRange();
+  after.setStart(node, offset + ch.length);
+  after.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(after);
+  target.dispatchEvent(new CompositionEvent('compositionupdate', { data: ch, bubbles: true }));
+  return 'ok';
+};
+
+/** End the composition the way WebKit commits a dead key: the marked text is
+ *  deleted and the committed text inserted at the caret, which is where the
+ *  marked text was unless the page moved it. */
+const COMMIT = () => {
+  const target = document.querySelector('.cm-content');
+  const { node, offset, ch } = window.__marked;
+  if (node.isConnected && node.data.slice(offset, offset + ch.length) === ch) {
+    node.deleteData(offset, ch.length);
+    const at = document.createRange();
+    at.setStart(node, offset);
+    at.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(at);
+  }
+  const sel = window.getSelection();
+  let caret = sel.getRangeAt(0).startContainer;
+  let pos = sel.getRangeAt(0).startOffset;
+  if (caret.nodeType !== Node.TEXT_NODE) {
+    const text = document.createTextNode('');
+    caret.insertBefore(text, caret.childNodes[pos] ?? null);
+    caret = text;
+    pos = 0;
+  }
+  caret.insertData(pos, ch);
+  const after = document.createRange();
+  after.setStart(caret, pos + ch.length);
+  after.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(after);
+  target.dispatchEvent(new CompositionEvent('compositionend', { data: ch, bubbles: true }));
+  return 'ok';
+};
+
+for (const [lang, doc] of Object.entries(DEAD_KEY_DOCS)) {
+  await scenario(
+    browser,
+    `${lang}: azerty dead ^ ^ expands ^^ once`,
+    doc,
+    async (page, ok) => {
+      for (const [where, letter] of DEAD_KEY_CELLS.slice(1)) {
+        for (const [ending, next] of [['then t', 't'], ['then space', null]]) {
+          await page.evaluate((m) => window.__chalkHost.receive(m), { type: 'init', text: doc, language: lang });
+          await page.evaluate((s) => window.__chalkHost.receive({ type: 'hsnips', content: s }), HSNIPS);
+          await page.waitForTimeout(300);
+          const placed = await page.evaluate(CARET_AFTER, letter);
+          await page.waitForTimeout(250);
+          const steps = [await page.evaluate(MARK, '^')];
+          await page.waitForTimeout(120);
+          steps.push(await page.evaluate(COMMIT), await page.evaluate(MARK, '^'));
+          await page.waitForTimeout(250);
+          // Space after a dead key commits the accent and types nothing.
+          steps.push(await page.evaluate(COMMIT));
+          if (next) await page.keyboard.insertText(next);
+          await page.waitForTimeout(250);
+          const { line, head, text } = await page.evaluate(() => {
+            const v = window.__chalkDebugView;
+            const h = v.state.selection.main.head;
+            const l = v.state.doc.lineAt(h);
+            return { line: l.text, head: h - l.from, text: v.state.doc.toString() };
+          });
+          const want = `${letter}^{${next ?? ''}}`;
+          ok(`${where} (${ending}): the replay reached the editor`,
+             placed >= 0 && steps.every((s) => s === 'ok'), `${placed} ${steps}`);
+          ok(`${where} (${ending}): ^^ became ${want}`,
+             text.includes(want) && !text.includes('{^'), JSON.stringify(line));
+          ok(`${where} (${ending}): the caret is inside the braces`,
+             line.indexOf(want) + want.length - 1 === head, `${head} in ${JSON.stringify(line)}`);
+        }
+      }
+    },
+    { width: 760, height: 900 },
+    lang,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shortcut hints (snippet-hints.ts) take Up/Down only while two or more rows
+// show, and sit under the caret. Both are real-key, real-layout facts that
+// jsdom can't see. Spec: docs/specs/2026-11-13-snippet-hints.md.
+const HINT_STATE = () => {
+  const v = window.__chalkDebugView;
+  const head = v.state.selection.main.head;
+  const caret = v.coordsAtPos(head);
+  const list = document.querySelector('.cm-snippet-hints');
+  const rows = list ? [...list.querySelectorAll('li')] : [];
+  const box = list?.getBoundingClientRect();
+  return {
+    head,
+    doc: v.state.doc.toString(),
+    rows: rows.length,
+    selected: rows.findIndex((r) => r.hasAttribute('aria-selected')),
+    caretBottom: caret?.bottom ?? null,
+    caretLeft: caret?.left ?? null,
+    listTop: box?.top ?? null,
+    listLeft: box?.left ?? null,
+  };
+};
+
+await scenario(
+  browser,
+  'md: shortcut hints under the caret in display math, arrows only with a list',
+  'Text.\n\n$$\n\n$$\n',
+  async (page, ok) => {
+    await page.evaluate((s) => window.__chalkHost.receive({ type: 'hsnips', content: s }), HSNIPS);
+    await setCursor(page, 10);
+    await page.keyboard.type(';');
+    await page.waitForTimeout(150);
+    const open = await page.evaluate(HINT_STATE);
+    ok('`;` opens the list with several rows', open.rows >= 2, JSON.stringify(open));
+    ok('the list sits under the caret',
+       open.listTop !== null && open.listTop >= open.caretBottom - 1 &&
+       Math.abs(open.listLeft - open.caretLeft) < 80, JSON.stringify(open));
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(80);
+    const down = await page.evaluate(HINT_STATE);
+    ok('ArrowDown moves the highlight, not the caret',
+       down.selected === 1 && down.head === open.head, JSON.stringify(down));
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(150);
+    const done = await page.evaluate(HINT_STATE);
+    ok('Tab inserts the highlighted hint', done.doc.includes('$$\n\\beta\n$$') && done.rows === 0,
+       JSON.stringify(done.doc));
+    await page.keyboard.type(' x');
+    await page.waitForTimeout(150);
+    const before = await page.evaluate(HINT_STATE);
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(80);
+    const up = await page.evaluate(HINT_STATE);
+    ok('with no list, ArrowUp moves the caret', before.rows === 0 && up.head < before.head,
+       `${before.head} -> ${up.head}`);
+  },
+  { width: 760, height: 900 },
+  'md',
+  null,
+  { snippetHints: 'on' },
+);
+
+// ---------------------------------------------------------------------------
 // LaTeX lists are laid out from structure in Preview (tex-list-plugin.ts):
 // an item's text, its wrapped rows and its continuation lines share one left
 // edge, whatever the source indentation, in a proportional font too (the old
@@ -2750,6 +3157,181 @@ await scenario(
   { width: 760, height: 900 },
   'md',
 );
+
+// ---------------------------------------------------------------------------
+// Chrome auto-hide hides the tab band on `scroll` posts marked `wheel`. Wheeling
+// UP from the middle of a display-math document, CM6 replaces estimated line
+// heights with measured ones and pushes scrollTop DOWN by hundreds of pixels in
+// one frame; marked `wheel`, that frame hid the band while the reader scrolled
+// toward it (docs/issues/2026-10-31-tabs-hide-without-scrolling.md).
+{
+  const para = 'The household chooses consumption and savings subject to a borrowing constraint and an idiosyncratic income process. ';
+  let doc = '\\section{Model}\n\n';
+  for (let i = 0; i < 60; i++) {
+    doc += para.repeat(3) + '\n\n';
+    doc += `\\begin{equation}\n  V(a, z) = \\max_{c, a'} \\left\\{ \\frac{c^{1-\\sigma}}{1-\\sigma} + \\beta \\sum_{z'} \\Pi(z, z') V(a', z') \\right\\}\n\\end{equation}\n\n`;
+    if (i % 3 === 0) doc += `\\begin{align}\n  c + a' &= (1+r) a + w z \\\\\n  a' &\\geq \\underline{a}\n\\end{align}\n\n`;
+  }
+  await scenario(
+    browser,
+    'scroll telemetry: a height correction against the wheel is not the reader',
+    doc,
+    async (page, ok) => {
+      await page.evaluate(() => {
+        const d = window.__chalkDebugView.scrollDOM;
+        d.scrollTop = d.scrollHeight / 2;
+      });
+      await page.waitForTimeout(500);
+      await page.evaluate(() => (window.__stubSent = []));
+      const box = await page.locator('.cm-scroller').boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      for (let i = 0; i < 120; i++) {
+        await page.mouse.wheel(0, -20);
+        await page.waitForTimeout(16);
+      }
+      await page.waitForTimeout(300);
+      const posts = await page.evaluate(() => window.__stubSent.filter((m) => m.type === 'scroll'));
+      const steps = posts.slice(1).map((p, i) => ({ dy: p.y - posts[i].y, wheel: p.wheel }));
+      // Without a correction in the run, the next check passes for nothing.
+      const against = steps.filter((s) => s.dy > 0);
+      ok('wheeling up met at least one height correction', against.length > 0,
+         `${posts.length} posts`);
+      ok('no frame that moved against the wheel is marked wheel',
+         against.every((s) => !s.wheel), JSON.stringify(against));
+      ok('frames that moved with the wheel stay marked wheel',
+         steps.filter((s) => s.dy < 0).every((s) => s.wheel));
+    },
+    { width: 900, height: 800 },
+    'tex',
+    () => {
+      window.__stubSent = [];
+      window.__chalkWantsScrollTelemetry = true;
+      window.webkit = { messageHandlers: { chalkHost: { postMessage: (m) => window.__stubSent.push(m) } } };
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Markdown outliner (docs/specs/2026-11-07-markdown-outliner.md): folds over
+// rendered blocks, Up/Down across folds, the chevron, guides and zoom.
+{
+  const OUTLINE_DOC = [
+    '# Math', 'intro', '$$', 'x^2 + y^2', '$$', '',
+    '# Table', '| a | b |', '|---|---|', '| 1 | 2 |', '',
+    '# Callout', '::: {#thm-x}', 'Body $x$', ':::', '',
+    '# List', '- a', '    - a1', '    - a2', '- b', '',
+    '# End', 'last',
+  ].join('\n');
+  const lineOf = (page) =>
+    page.evaluate(() => {
+      const v = window.__chalkDebugView;
+      return v.state.doc.lineAt(v.state.selection.main.head).number;
+    });
+  const toLine = (page, n) =>
+    page.evaluate((n) => {
+      const v = window.__chalkDebugView;
+      v.dispatch({ selection: { anchor: v.state.doc.line(n).to } });
+      v.focus();
+    }, n);
+  const height = (page) => page.evaluate(() => window.__chalkDebugView.contentHeight);
+
+  await scenario(
+    browser,
+    'md outliner: fold to level hides math, table and callout sections and Up/Down cross them',
+    OUTLINE_DOC,
+    async (page, ok) => {
+      const before = await height(page);
+      await toLine(page, 24);
+      await page.keyboard.press('Meta+Alt+Digit1');
+      await page.waitForTimeout(250);
+      ok('every section folds', (await page.locator('.cm-md-fold-placeholder').count()) === 5);
+      ok('no rendered block survives inside a fold',
+        (await page.locator('.cm-math-display, .cm-callout, table').count()) === 0);
+      await toLine(page, 1);
+      const downs = [];
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowDown');
+        await page.waitForTimeout(60);
+        downs.push(await lineOf(page));
+      }
+      ok('Down steps over each fold to the next visible row', downs.join() === '6,7,11,12', downs.join());
+      ok('crossing kept every fold', (await page.locator('.cm-md-fold-placeholder').count()) === 5);
+      const ups = [];
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowUp');
+        await page.waitForTimeout(60);
+        ups.push(await lineOf(page));
+      }
+      ok('Up steps back the same way', ups.join() === '11,7,6,1', ups.join());
+      await page.keyboard.press('Meta+Alt+Digit0');
+      await page.waitForTimeout(250);
+      ok('unfold all restores the height', Math.abs((await height(page)) - before) < 2);
+    },
+    { width: 760, height: 900 },
+    'md',
+  );
+
+  await scenario(
+    browser,
+    'md outliner: the hover chevron folds a list subtree and guides follow',
+    OUTLINE_DOC,
+    async (page, ok) => {
+      ok('a nested list draws a guide', (await page.locator('.cm-md-guide').count()) === 1);
+      const at = await page.evaluate(() => {
+        const v = window.__chalkDebugView;
+        const c = v.coordsAtPos(v.state.doc.line(18).from);
+        return { x: c.left + 4, y: (c.top + c.bottom) / 2 };
+      });
+      await page.mouse.move(at.x, at.y);
+      await page.waitForTimeout(150);
+      const handle = page.locator('.cm-md-fold-handle');
+      ok('hovering a foldable row shows one chevron', (await handle.count()) === 1);
+      const box = await handle.boundingBox();
+      ok('the chevron sits left of the marker', box && box.x + box.width <= at.x);
+      await handle.click();
+      await page.waitForTimeout(150);
+      ok('clicking it folds the item', (await page.locator('.cm-md-fold-placeholder').count()) === 1);
+      ok('a folded item draws no guide', (await page.locator('.cm-md-guide').count()) === 0);
+      ok('the click left the document alone',
+        (await page.evaluate(() => window.__chalkDebugView.state.doc.toString())) === OUTLINE_DOC);
+    },
+    { width: 760, height: 900 },
+    'md',
+  );
+
+  await scenario(
+    browser,
+    'md outliner: zoom shows one section over a display-math block and Escape restores',
+    OUTLINE_DOC,
+    async (page, ok) => {
+      await toLine(page, 24);
+      await page.waitForTimeout(100);
+      const before = await height(page);
+      await toLine(page, 2);
+      await page.keyboard.press('Meta+Period');
+      await page.waitForTimeout(250);
+      ok('the breadcrumb names the section',
+        (await page.locator('.cm-md-zoom-bar').textContent()) === 'Document›Math');
+      ok('the zoomed math still renders', (await page.locator('.cm-math-display').count()) === 1);
+      ok('nothing outside the section renders',
+        (await page.locator('.cm-callout, table').count()) === 0);
+      await page.keyboard.press('Meta+ArrowDown');
+      await page.waitForTimeout(100);
+      ok('Mod-Down stays inside the zoom', (await lineOf(page)) <= 5);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      ok('Escape zooms out', (await page.locator('.cm-md-zoom-bar').count()) === 0);
+      // The caret sits on the `$$` fence, which reveals the math: park it
+      // where it started before comparing.
+      await toLine(page, 24);
+      await page.waitForTimeout(200);
+      const after = await height(page);
+      ok('zooming out restores the height', Math.abs(after - before) < 2, `${before} → ${after}`);
+    },
+    { width: 760, height: 900 },
+    'md',
+  );
+}
 
 await browser.close();
 

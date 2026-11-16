@@ -37,24 +37,29 @@ final class ViewModeTests: XCTestCase {
         let previousMode = Preferences.editingMode
         let previousView = Preferences.viewMode
         let previousTheme = Preferences.colorTheme
+        let previousHints = Preferences.showSnippetHints
         defer {
             Preferences.editingMode = previousMode
             Preferences.viewMode = previousView
             Preferences.colorTheme = previousTheme
+            Preferences.showSnippetHints = previousHints
         }
         Preferences.editingMode = .typewriter
         Preferences.viewMode = .mixed
         Preferences.colorTheme = .latex
+        Preferences.showSnippetHints = true
         XCTAssertEqual(
             Preferences.editorConfigPayload(),
             .object(["editingMode": .string("typewriter"), "viewMode": .string("mixed"),
-                     "markdownStyle": .string("typeset")])
+                     "markdownStyle": .string("typeset"), "aiMarks": .string("show"),
+                     "snippetHints": .string("on")])
         )
         Preferences.colorTheme = .ink
         XCTAssertEqual(
             Preferences.editorConfigPayload(),
             .object(["editingMode": .string("typewriter"), "viewMode": .string("mixed"),
-                     "markdownStyle": .string("source")])
+                     "markdownStyle": .string("source"), "aiMarks": .string("show"),
+                     "snippetHints": .string("on")])
         )
     }
 
@@ -70,7 +75,9 @@ final class ViewModeTests: XCTestCase {
         XCTAssertEqual(
             Preferences.editorConfigPayload(editingMode: .zen),
             .object(["editingMode": .string("zen"), "viewMode": .string(Preferences.viewMode.rawValue),
-                     "markdownStyle": .string(Preferences.colorTheme.markdownStyle)])
+                     "markdownStyle": .string(Preferences.colorTheme.markdownStyle),
+                     "aiMarks": .string("show"),
+                     "snippetHints": .string(Preferences.showSnippetHints ? "on" : "off")])
         )
     }
 
@@ -103,7 +110,9 @@ final class ViewModeTests: XCTestCase {
             XCTAssertEqual(
                 config,
                 .object(["editingMode": .string("zen"), "viewMode": .string(Preferences.viewMode.rawValue),
-                         "markdownStyle": .string(Preferences.colorTheme.markdownStyle)]),
+                         "markdownStyle": .string(Preferences.colorTheme.markdownStyle),
+                     "aiMarks": .string("show"),
+                     "snippetHints": .string(Preferences.showSnippetHints ? "on" : "off")]),
                 "tab \(index) did not get this window's own editing mode"
             )
         }

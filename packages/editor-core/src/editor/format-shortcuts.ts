@@ -56,10 +56,14 @@ function wrapCommand(
         };
       }
 
-      const insert = before + selected + after;
+      // Two insertions, not a replace of the selection: a replace would read
+      // as new text and clear the AI marks on it (provenance.ts).
       const anchor = range.from + before.length;
       return {
-        changes: { from: range.from, to: range.to, insert },
+        changes: [
+          { from: range.from, insert: before },
+          { from: range.to, insert: after },
+        ],
         range: range.empty
           ? EditorSelection.cursor(anchor)
           : EditorSelection.range(anchor, anchor + selected.length),

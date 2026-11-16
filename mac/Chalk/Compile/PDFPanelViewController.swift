@@ -38,8 +38,8 @@ final class SyncPDFView: PDFView {
     }
 }
 
-/// The compiled PDF in the editor column's trailing slot, sharing the outline
-/// panel's frame (`EditorContainerViewController.trailingPanelContent`). A
+/// The compiled PDF in the editor column's trailing slot, beside the outline
+/// when that shows (`EditorContainerViewController.trailingPanelContents`). A
 /// header in the band like the outline's, the PDF, and a list of the last
 /// compile's issues; the log replaces the PDF on demand.
 final class PDFPanelViewController: NSViewController {

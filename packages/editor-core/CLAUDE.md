@@ -142,6 +142,33 @@ vertical-motion code; the jsdom twin for the logic level is
   callout types, so they take their title in a BRACE argument — the widened
   regex is scoped to those three names, or `\begin{minipage}{0.45\textwidth}`
   becomes a callout.
+- **AI marks** ([src/editor/provenance.ts](src/editor/provenance.ts)): text an
+  `update` with `origin: 'external'` wrote, tinted until accepted or edited.
+  Only that message adds marks; every other doc change is unmarked text, so
+  typing inside a mark splits it. It takes a word-level multi-hunk diff
+  ([src/utils/word-diff.ts](src/utils/word-diff.ts)) instead of `diffReplace`,
+  which would repaint everything between two edits; other `update`s keep
+  `diffReplace`. Paint is `layer()`s, never decorations: a mark can't reach a
+  block widget and needs exact precedence over an inline one. Don't use one
+  `RectangleMarker.forRange` across a mark: it skips a block widget at either
+  end of the range. Marks survive an `init` only through the host's store.
+- **Markdown outliner** (folds, subtree keys, guides, zoom;
+  [docs/specs/2026-11-07-markdown-outliner.md](../../docs/specs/2026-11-07-markdown-outliner.md)
+  is the key policy table, change it first): what an item or section covers is
+  defined once, in [md-outline-tree.ts](src/editor/md-outline-tree.ts); every
+  command asks it (cached per doc and tree; use `ancestorsAt`, never a walk over
+  every line). Folds are CM6's `foldState`, atomic, outside the preview
+  compartment; chevrons are an overlay in `.cm-scroller` and guides a `layer()`,
+  so neither adds a caret stop or hides source and the reveal matrix never sees
+  them. foldState drops every fold a `delete` event touches, so a command that
+  edits folded text adds `keepFolds(state, changes)` to its effects.
+- **Shortcut hints** ([snippet-hints.ts](src/editor/snippet-hints.ts),
+  [docs/specs/2026-11-13-snippet-hints.md](../../docs/specs/2026-11-13-snippet-hints.md)):
+  the list recomputes only on typing and clears on anything else, so Tab
+  after a caret move stays tabout's. Its keymap is `Prec.highest` (above a
+  live `dm` session's Tab) and falls through whenever no list is shown. Keep
+  the prefix noise guard (one char only for `;/:`) and never bind Enter;
+  Up/Down are taken only with two or more rows. Regex snippets are excluded.
 - **Don't re-enable native `::selection`** — CM6's layered selection (themed
   with `Prec.highest` in [src/editor/theme.ts](src/editor/theme.ts)) is the
   only intended paint; native `::selection` draws opaque over math widgets.

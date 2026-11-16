@@ -93,35 +93,77 @@ final class WindowSessionTests: XCTestCase {
         XCTAssertTrue(decoded.isSidebarVisible)
     }
 
-    func testSplitRoundTrip() throws {
+    func testGroupsRoundTrip() throws {
         let session = WindowSession(
-            tabs: [record("/a.md"), record("/b.md"), record("/c.md")],
-            activeIndex: 0, isSidebarVisible: false, splitIndex: 2, splitIsLeading: true)
+            groups: [.init(tabs: [record("/a.md"), record("/b.md")], activeIndex: 1, fraction: 0.6),
+                     .init(tabs: [record("/c.md")], activeIndex: 0, fraction: 0.4)],
+            activeGroupIndex: 1, isSidebarVisible: false)
         let decoded = try XCTUnwrap(WindowSession(data: XCTUnwrap(session.encoded())))
-        XCTAssertEqual(decoded.splitIndex, 2)
-        XCTAssertTrue(decoded.splitIsLeading)
+        XCTAssertEqual(decoded, session)
+        XCTAssertEqual(decoded.groups.map(\.fraction), [0.6, 0.4])
+        XCTAssertEqual(decoded.activeIndex, 2, "the focused group's tab, flattened")
     }
 
-    func testJournalWithoutSplitDecodesAsNoSplit() throws {
+    func testEmptyGroupsAreDropped() {
+        let session = WindowSession(
+            groups: [.init(tabs: [], activeIndex: nil, fraction: 0.5),
+                     .init(tabs: [record("/a.md")], activeIndex: 0, fraction: 0.25),
+                     .init(tabs: [record("/b.md")], activeIndex: 0, fraction: 0.25)],
+            activeGroupIndex: 2, isSidebarVisible: false)
+        XCTAssertEqual(session.groups.count, 2)
+        XCTAssertEqual(session.groups.map(\.fraction), [0.25, 0.25], "the layout renormalises on restore")
+        XCTAssertEqual(session.activeGroupIndex, 1, "the index follows its group past the dropped one")
+    }
+
+    func testTamperedGroupIndicesAreClamped() throws {
+        let json = """
+        {"groups":[{"tabs":[{"path":"/a.md"}],"activeIndex":9,"fraction":-1}],
+         "activeGroupIndex":5,"isSidebarVisible":false}
+        """
+        let decoded = try XCTUnwrap(WindowSession(data: Data(json.utf8)))
+        XCTAssertEqual(decoded.activeGroupIndex, 0)
+        XCTAssertEqual(decoded.groups[0].activeIndex, 0)
+        XCTAssertEqual(decoded.groups[0].fraction, -1, "the layout cleans a bad share on restore")
+    }
+
+    func testRecordWithoutSplitDecodesAsOneGroup() throws {
         let json = """
         {"tabs":[{"path":"/a.md"},{"path":"/b.md"}],"activeIndex":1,"isSidebarVisible":false}
         """
         let decoded = try XCTUnwrap(WindowSession(data: Data(json.utf8)))
-        XCTAssertNil(decoded.splitIndex)
-        XCTAssertFalse(decoded.splitIsLeading)
+        XCTAssertEqual(decoded.groups.count, 1)
+        XCTAssertEqual(decoded.activeIndex, 1)
     }
 
-    func testSplitRepeatingTheActiveTabIsDropped() {
-        let session = WindowSession(
-            tabs: [record("/a.md"), record("/b.md")],
-            activeIndex: 1, isSidebarVisible: false, splitIndex: 1, splitIsLeading: true)
-        XCTAssertNil(session.splitIndex)
-        XCTAssertFalse(session.splitIsLeading)
+    /// A pre-groups split: the tab in the other pane becomes a group of its own, on its side.
+    func testRecordWithTrailingSplitDecodesAsTwoGroups() throws {
+        let json = """
+        {"tabs":[{"path":"/a.md"},{"path":"/b.md"},{"path":"/c.md"}],"activeIndex":2,
+         "isSidebarVisible":false,"splitIndex":0,"splitIsLeading":false}
+        """
+        let decoded = try XCTUnwrap(WindowSession(data: Data(json.utf8)))
+        XCTAssertEqual(decoded.groups.map { $0.tabs.map(\.path) }, [["/b.md", "/c.md"], ["/a.md"]])
+        XCTAssertEqual(decoded.groups[0].activeIndex, 1)
+        XCTAssertEqual(decoded.activeGroupIndex, 0)
+        XCTAssertEqual(decoded.groups.map(\.fraction), [0.5, 0.5])
     }
 
-    func testOutOfRangeSplitIsDropped() {
-        let session = WindowSession(
-            tabs: [record("/a.md")], activeIndex: 0, isSidebarVisible: false, splitIndex: 4)
-        XCTAssertNil(session.splitIndex)
+    func testRecordWithLeadingSplitPutsTheSplitTabFirst() throws {
+        let json = """
+        {"tabs":[{"path":"/a.md"},{"path":"/b.md"}],"activeIndex":0,
+         "isSidebarVisible":false,"splitIndex":1,"splitIsLeading":true}
+        """
+        let decoded = try XCTUnwrap(WindowSession(data: Data(json.utf8)))
+        XCTAssertEqual(decoded.groups.map { $0.tabs.map(\.path) }, [["/b.md"], ["/a.md"]])
+        XCTAssertEqual(decoded.activeGroupIndex, 1)
+    }
+
+    func testOldSplitRepeatingTheActiveTabIsOneGroup() throws {
+        let json = """
+        {"tabs":[{"path":"/a.md"},{"path":"/b.md"}],"activeIndex":1,
+         "isSidebarVisible":false,"splitIndex":1,"splitIsLeading":true}
+        """
+        let decoded = try XCTUnwrap(WindowSession(data: Data(json.utf8)))
+        XCTAssertEqual(decoded.groups.count, 1)
     }
 }

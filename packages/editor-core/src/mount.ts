@@ -26,6 +26,18 @@ import {
 import { setSnippets } from './editor/hsnips-plugin';
 import { editingModeCompartment, editingModeExtension } from './editor/typewriter-mode';
 import { markdownTypesetCompartment, markdownTypesetExtension } from './editor/md-typeset';
+import { snippetHintsCompartment, snippetHintsSetting } from './editor/snippet-hints';
+import {
+  type AiMark,
+  acceptAiMarks,
+  aiMarksPaint,
+  aiMarksPaintCompartment,
+  aiWriteEffect,
+  getAiMarks,
+  rejectAiMarks,
+  restoreAiMarks,
+} from './editor/provenance';
+import { wordHunks } from './utils/word-diff';
 import { diffReplace } from './utils/text-diff';
 import { docText } from './utils/doc-text';
 import {
@@ -62,6 +74,9 @@ export interface MountOptions {
   /** Outline, cursor line and prose counts, debounced 120ms after each doc or
    *  selection change, only while `setOutlineSubscription(true)` is in force. */
   onOutline?: (snapshot: OutlineSnapshot) => void;
+  /** Debounced whenever the AI marks change, for the host's store. `text` is
+   *  the document they index into. Omitted: no listener is installed. */
+  onAiMarks?: (marks: readonly AiMark[], text: string) => void;
   /** Drop the duplicated prefix Mac Catalyst WebKit inserts on a dead-key
    *  commit (editor/dead-key-commit.ts). Default false: no other host needs it. */
   deadKeyCommitDedupe?: boolean;
@@ -95,6 +110,11 @@ export interface MountedEditor {
   /** Replace the selection with `insert` as one undoable transaction (the
    *  native host's cut, bypassing WebKit's clipboard). */
   replaceSelection(insert: string): void;
+  /** Clear the AI marks in the selection, or all of them with no selection. */
+  acceptAiMarks(): void;
+  /** Drop the AI text in the selection (or all of it) and restore what it
+   *  deleted. */
+  rejectAiMarks(): void;
 }
 
 /**
@@ -109,6 +129,7 @@ export function mountEditor({
   loadMermaid,
   renderTikz,
   onOutline,
+  onAiMarks,
   deadKeyCommitDedupe = false,
 }: MountOptions): MountedEditor {
   setPort(port);
@@ -162,6 +183,33 @@ export function mountEditor({
     });
   }
 
+  // Store push. A window switch flushes at once: the host saves on resign
+  // key, and its record should hold the text it just wrote.
+  let aiMarksTimer: ReturnType<typeof setTimeout> | null = null;
+  const AI_MARKS_DEBOUNCE_MS = 150;
+
+  function cancelAiMarksPush(): void {
+    if (aiMarksTimer !== null) {
+      clearTimeout(aiMarksTimer);
+      aiMarksTimer = null;
+    }
+  }
+
+  function pushAiMarks(): void {
+    cancelAiMarksPush();
+    if (view) onAiMarks?.(getAiMarks(view.state), docText(view.state.doc));
+  }
+
+  const aiMarksListener = onAiMarks
+    ? EditorView.updateListener.of((update) => {
+        if (getAiMarks(update.startState) !== getAiMarks(update.state)) {
+          cancelAiMarksPush();
+          aiMarksTimer = setTimeout(pushAiMarks, AI_MARKS_DEBOUNCE_MS);
+        }
+        if (update.focusChanged && !update.view.hasFocus && aiMarksTimer !== null) pushAiMarks();
+      })
+    : [];
+
   const actions: EditorActions = {
     onContentChange: (content: string) => {
       if (content === lastKnownText) return;
@@ -196,6 +244,7 @@ export function mountEditor({
         const text = normalizeNewlines(msg.text);
         lastKnownText = text;
         currentLanguage = msg.language;
+        cancelAiMarksPush();
         if (view) {
           view.destroy();
           view = null;
@@ -210,8 +259,9 @@ export function mountEditor({
           loadMermaid,
           renderTikz,
           deadKeyDedupe: deadKeyCommitDedupe,
-          extraExtensions: outlineCompartment.of(outlineExtension()),
+          extraExtensions: [outlineCompartment.of(outlineExtension()), aiMarksListener],
         });
+        if (msg.aiMarks) restoreAiMarks(view, msg.aiMarks);
         if (outlineSubscribed) scheduleOutlinePush();
         // The browser harnesses (Tests/) read `window.__chalkDebugView`,
         // gated on `?debug` or `__chalkDebug = true` set before init (jsdom
@@ -257,6 +307,12 @@ export function mountEditor({
             editingModeCompartment.reconfigure(editingModeExtension(editorConfig.editingMode)),
           );
         }
+        if (editorConfig.aiMarks !== previous.aiMarks) {
+          effects.push(aiMarksPaintCompartment.reconfigure(aiMarksPaint(editorConfig.aiMarks)));
+        }
+        if (editorConfig.snippetHints !== previous.snippetHints) {
+          effects.push(snippetHintsCompartment.reconfigure(snippetHintsSetting(editorConfig.snippetHints)));
+        }
         if (editorConfig.markdownStyle !== previous.markdownStyle) {
           effects.push(
             markdownTypesetCompartment.reconfigure(markdownTypesetExtension(editorConfig.markdownStyle)),
@@ -280,16 +336,30 @@ export function mountEditor({
         const newText = normalizeNewlines(msg.text);
         // Memoized: the `edit` for this doc already flattened it.
         const oldText = docText(view.state.doc);
-        if (newText === oldText) return;
+        if (newText === oldText) {
+          if (msg.aiMarks) restoreAiMarks(view, msg.aiMarks);
+          return;
+        }
         lastKnownText = newText;
         // Don't replace this with a full-text replace: it collapses the cursor
         // to 0 and loses the viewport (utils/text-diff.ts).
-        const { from, to, insert } = diffReplace(oldText, newText);
+        // An outside write diffs by hunk, so it can mark what it wrote without
+        // repainting the unchanged text between its edits. Every other update
+        // stays on the single-replace path.
+        const hunks = msg.origin === 'external' ? wordHunks(oldText, newText) : null;
         // Pin the viewport: a big rewrite resets measured heights to estimates
         // that undershoot math, and the shrunk scrollHeight leaves a blank
         // pane. A dispatch's effects aren't mapped through its own changes, so
         // map the snapshot explicitly (else RangeError on a shrinking update).
-        const changes = view.state.changes({ from, to, insert });
+        const changes = view.state.changes(
+          hunks
+            ? hunks.map((h) => ({
+                from: h.fromA,
+                to: h.toA,
+                insert: newText.slice(h.fromB, h.toB),
+              }))
+            : diffReplace(oldText, newText),
+        );
         // If the rewrite deletes the viewport's anchor, the mapped snapshot is
         // a stale offset (same blank pane): put the mapped anchor at the top.
         const topBlock = view.lineBlockAtHeight(view.scrollDOM.scrollTop);
@@ -303,7 +373,10 @@ export function mountEditor({
           : view.scrollSnapshot().map(changes);
         view.dispatch({
           changes,
-          effects: scrollEffect ? [scrollEffect] : [],
+          effects: [
+            ...(scrollEffect ? [scrollEffect] : []),
+            ...(hunks ? [aiWriteEffect.of(hunks)] : []),
+          ],
           // Host sync: not undoable, and remote so hsnips expansion and
           // mirroring skip it.
           annotations: [
@@ -311,6 +384,7 @@ export function mountEditor({
             Transaction.remote.of(true),
           ],
         });
+        if (msg.aiMarks) restoreAiMarks(view, msg.aiMarks);
         return;
       }
       case 'theme-colors': {
@@ -396,6 +470,12 @@ export function mountEditor({
     replaceSelection(insert: string): void {
       if (!view) return;
       view.dispatch(view.state.replaceSelection(insert));
+    },
+    acceptAiMarks(): void {
+      if (view) acceptAiMarks(view);
+    },
+    rejectAiMarks(): void {
+      if (view) rejectAiMarks(view);
     },
   };
 }

@@ -148,7 +148,17 @@ final class WebEditorSurface: NSObject, EditorSurface {
     private static let fontSizeVariable = "--vscode-editor-font-size"
     private static func fontSize(scale: Double) -> String { "\(baseFontSize * scale)px" }
 
+    #if DEBUG
+    /// Surfaces not yet deallocated. Each holds a WebContent process, which `teardown` alone does
+    /// not end, so a harness that builds roots in a loop checks this (`ChromeMatrixHost`).
+    private(set) static var liveCountForTesting = 0
+    deinit { Self.liveCountForTesting -= 1 }
+    #endif
+
     override init() {
+        #if DEBUG
+        Self.liveCountForTesting += 1
+        #endif
         let config = WKWebViewConfiguration()
         config.userContentController = WKUserContentController()
         webView = EditorWebView(frame: .zero, configuration: config)
@@ -273,14 +283,14 @@ final class WebEditorSurface: NSObject, EditorSurface {
     /// a stale echo was produced against a replaced buffer and is dropped (see `deliverEdit`).
     private(set) var textPushEpoch = 0
 
-    func initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?) {
+    func initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?, aiMarks: [AiMark]?) {
         textPushEpoch += 1
         send(.initialize(text: text, language: language, editorConfig: editorConfig,
-                         epoch: textPushEpoch))
+                         epoch: textPushEpoch, aiMarks: aiMarks))
     }
-    func update(text: String) {
+    func update(text: String, origin: TextOrigin?, aiMarks: [AiMark]?) {
         textPushEpoch += 1
-        send(.update(text: text, epoch: textPushEpoch))
+        send(.update(text: text, epoch: textPushEpoch, origin: origin, aiMarks: aiMarks))
     }
     // The setters skip an unchanged value: Settings pushes every setting to every tab on each
     // slider tick. `ready` re-sends through send/apply, not the setters, so a reload gets all.
@@ -367,7 +377,7 @@ final class WebEditorSurface: NSObject, EditorSurface {
     }
 
     /// Editor scroll offsets (transport-internal `scroll` messages); drive the chrome auto-hide.
-    var onScroll: ((Double) -> Void)?
+    var onScroll: ((Double, Bool) -> Void)?
 
     /// The persistent outline panel's feed (see `setOutlineSubscription`).
     var onOutline: ((OutlineSnapshot) -> Void)?
@@ -384,6 +394,16 @@ final class WebEditorSurface: NSObject, EditorSurface {
         webView.evaluateJavaScript(
             "window.__chalkEditor?.setOutlineSubscription(\(desiredOutlineSubscription))",
             completionHandler: nil)
+    }
+
+    func acceptAiMarks() {
+        guard isReady else { return }
+        webView.evaluateJavaScript("window.__chalkEditor?.acceptAiMarks()", completionHandler: nil)
+    }
+
+    func rejectAiMarks() {
+        guard isReady else { return }
+        webView.evaluateJavaScript("window.__chalkEditor?.rejectAiMarks()", completionHandler: nil)
     }
 
     #if DEBUG
@@ -669,7 +689,7 @@ extension WebEditorSurface: WKScriptMessageHandler {
         // The page never scrolls natively (CM6 scrolls .cm-scroller), so this is the shell's only
         // view of editor scrolling.
         if type == "scroll" {
-            if let y = body["y"] as? Double { onScroll?(y) }
+            if let y = body["y"] as? Double { onScroll?(y, body["wheel"] as? Bool ?? false) }
             return
         }
 
@@ -684,6 +704,20 @@ extension WebEditorSurface: WKScriptMessageHandler {
                 return
             }
             onOutline?(snapshot)
+            return
+        }
+
+        if type == "ai-marks" {
+            guard let text = body["text"] as? String,
+                  let marks = body["marks"],
+                  JSONSerialization.isValidJSONObject(marks),
+                  let data = try? JSONSerialization.data(withJSONObject: marks),
+                  let decoded = try? decoder.decode([AiMark].self, from: data)
+            else {
+                Self.log.error("dropped a malformed ai-marks push")
+                return
+            }
+            delegate?.editor(self, didChangeAiMarks: decoded, text: text)
             return
         }
 

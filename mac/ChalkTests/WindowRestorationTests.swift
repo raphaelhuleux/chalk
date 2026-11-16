@@ -56,25 +56,45 @@ final class WindowRestorationTests: XCTestCase {
         controllers.append(controller)
         let root = controller.root
         XCTAssertEqual(root.openTabCount, 2, "the file that is gone drops silently")
-        XCTAssertEqual(root.editor.sessionSnapshot().activeIndex, 1,
+        XCTAssertEqual(root.captureSession().activeIndex, 1,
                        "the active tab follows the record that survived, not its old index")
         XCTAssertTrue(root.isSidebarVisible)
         XCTAssertTrue(root.editor.isOutlinePanelVisible)
     }
 
-    func testASplitRoundTripsThroughTheRecord() throws {
+    func testGroupsRoundTripThroughTheRecord() throws {
         let a = try writeFile("a.md")
         let b = try writeFile("b.md")
+        let c = try writeFile("c.md")
+        let record = { (url: URL) in WindowSession.TabRecord(path: url.path, bookmark: nil) }
         let restored = WindowSession(
-            tabs: [a, b].map { WindowSession.TabRecord(path: $0.path, bookmark: nil) },
-            activeIndex: 1, isSidebarVisible: false, splitIndex: 0, splitIsLeading: true)
+            groups: [.init(tabs: [record(a), record(b)], activeIndex: 1, fraction: 0.6),
+                     .init(tabs: [record(c)], activeIndex: 0, fraction: 0.4)],
+            activeGroupIndex: 0, isSidebarVisible: false)
         let controller = EditorWindowController(initialContent: .restoreSession(restored))
         controllers.append(controller)
-        XCTAssertTrue(controller.root.editor.isSplit)
+        XCTAssertEqual(controller.root.editor.groupCount, 2)
         let captured = controller.root.captureSession()
-        XCTAssertEqual(captured.activeIndex, 1)
-        XCTAssertEqual(captured.splitIndex, 0)
-        XCTAssertTrue(captured.splitIsLeading)
+        XCTAssertEqual(captured.groups.map { $0.tabs.map(\.path) }, [[a.path, b.path], [c.path]])
+        XCTAssertEqual(captured.groups.map(\.activeIndex), [1, 0])
+        XCTAssertEqual(captured.activeGroupIndex, 0)
+        XCTAssertEqual(captured.groups[0].fraction, 0.6, accuracy: 0.001)
+    }
+
+    /// A record from before tab groups: its split tab comes back as a group of its own.
+    func testAnOldSplitRecordRestoresAsTwoGroups() throws {
+        let a = try writeFile("a.md")
+        let b = try writeFile("b.md")
+        let json = """
+        {"tabs":[{"path":"\(a.path)"},{"path":"\(b.path)"}],"activeIndex":1,
+         "isSidebarVisible":false,"splitIndex":0,"splitIsLeading":true}
+        """
+        let restored = try XCTUnwrap(WindowSession(data: Data(json.utf8)))
+        let controller = EditorWindowController(initialContent: .restoreSession(restored))
+        controllers.append(controller)
+        let captured = controller.root.captureSession()
+        XCTAssertEqual(captured.groups.map { $0.tabs.map(\.path) }, [[a.path], [b.path]])
+        XCTAssertEqual(captured.activeGroupIndex, 1)
     }
 
     func testTheWindowRecordCarriesIdTabsAndFrame() throws {

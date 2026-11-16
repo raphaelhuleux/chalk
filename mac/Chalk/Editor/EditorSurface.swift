@@ -11,8 +11,10 @@ protocol EditorSurface: AnyObject {
     // Host to editor. `theme-colors` is absent: the native shell themes through `data-theme` and
     // `data-palette`.
     // It stays in `HostProtocol` because VS Code sends it.
-    func initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?)
-    func update(text: String)
+    /// `aiMarks` installs marks from `ProvenanceStore` once `text` is in; nil leaves them alone.
+    func initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?, aiMarks: [AiMark]?)
+    /// `origin: .external` makes the editor mark what this text changed.
+    func update(text: String, origin: TextOrigin?, aiMarks: [AiMark]?)
     func setHeadingColors(_ colors: HeadingColors)
     func setEditorConfig(_ config: JSONValue)
     func setHsnips(content: String)
@@ -48,6 +50,11 @@ protocol EditorSurface: AnyObject {
     func setOutlineSubscription(_ on: Bool)
     var onOutline: ((OutlineSnapshot) -> Void)? { get set }
 
+    /// Keep the AI text in the selection, or all of it with no selection. Not a HostPort message.
+    func acceptAiMarks()
+    /// Drop that text and restore what it deleted. Not a HostPort message.
+    func rejectAiMarks()
+
     // MARK: Shell-owned presentation
     //
     // Not HostPort messages: the native shell decides these for whatever surface a tab holds.
@@ -67,8 +74,8 @@ protocol EditorSurface: AnyObject {
     /// Wrapped-prose alignment.
     func setTextAlign(_ alignment: EditorTextAlignment)
 
-    /// Scroll-offset reports; drive the chrome auto-hide.
-    var onScroll: ((Double) -> Void)? { get set }
+    /// Scroll-offset reports, and whether the reader's wheel drove them; drive the chrome auto-hide.
+    var onScroll: ((Double, Bool) -> Void)? { get set }
 
     /// Boot recovery is exhausted. A closure, since the delegate is `DocumentController` and this
     /// is a shell concern.
@@ -84,6 +91,8 @@ protocol EditorSurfaceDelegate: AnyObject {
     /// The surface lost its editor and is reloading; seed again on the next `editorDidBecomeReady`.
     func editorDidResetConnection(_ surface: EditorSurface)
     func editor(_ surface: EditorSurface, didEdit text: String)
+    /// The AI marks changed (debounced); `text` is the document they index.
+    func editor(_ surface: EditorSurface, didChangeAiMarks marks: [AiMark], text: String)
     func editor(_ surface: EditorSurface, requestsOpenExternal url: URL)
     /// Resolve an image `src` to a loadable URL (typically `data:`), or nil.
     func editor(_ surface: EditorSurface, resolveAsset src: String) async -> String?
@@ -101,7 +110,18 @@ protocol EditorSurfaceDelegate: AnyObject {
     func editor(_ surface: EditorSurface, requestsCommand name: String)
 }
 
+extension EditorSurface {
+    func initialize(text: String, language: EditorLanguage, editorConfig: JSONValue?) {
+        initialize(text: text, language: language, editorConfig: editorConfig, aiMarks: nil)
+    }
+
+    func update(text: String) {
+        update(text: text, origin: nil, aiMarks: nil)
+    }
+}
+
 extension EditorSurfaceDelegate {
+    func editor(_ surface: EditorSurface, didChangeAiMarks marks: [AiMark], text: String) {}
     func editor(_ surface: EditorSurface, requestsCommand name: String) {}
     func editor(_ surface: EditorSurface, renderTikz document: String) async -> TikzRenderResult? { nil }
     func editorDidResetConnection(_ surface: EditorSurface) {}

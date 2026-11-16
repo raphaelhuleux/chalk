@@ -160,6 +160,16 @@ function calloutItems(regions: ReturnType<typeof scanCallouts>): OutlineItem[] {
     }));
 }
 
+/** An ATX heading line's display text: no `#`s (leading or closing) and no
+ *  trailing Quarto attributes `{#sec-x}`. */
+export function mdHeadingTitle(lineText: string): string {
+  return lineText
+    .replace(/^\s*#{1,6}\s*/, '') // leading "### " (1-3 space indent is valid)
+    .replace(/\s+#+\s*$/, '') // optional closing "###"
+    .replace(/\s*\{[^}]*\}\s*$/, '') // trailing Quarto attrs "{#sec-x}"
+    .trim();
+}
+
 // Keyed on doc, language and (markdown) syntax tree: with the outline panel
 // open every caret move asks again.
 const outlineCache = new WeakMap<
@@ -194,11 +204,7 @@ function computeOutline(state: EditorState, language: Language): OutlineItem[] {
         const atx = /^ATXHeading(\d)$/.exec(node.name);
         if (atx) {
           const lineObj = state.doc.lineAt(node.from);
-          const title = lineObj.text
-            .replace(/^\s*#{1,6}\s*/, '') // leading "### " (1-3 space indent is valid)
-            .replace(/\s+#+\s*$/, '') // optional closing "###"
-            .replace(/\s*\{[^}]*\}\s*$/, '') // trailing Quarto attrs "{#sec-x}"
-            .trim();
+          const title = mdHeadingTitle(lineObj.text);
           items.push({ kind: 'heading', level: Number(atx[1]), title, line: lineObj.number });
           return;
         }

@@ -124,6 +124,9 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
         lineNumbersMinChars: cfg.get('lineNumbersMinChars'),
         scrollbarVertical: cfg.get('scrollbar.vertical'),
         viewMode: vscode.workspace.getConfiguration('chalk', document.uri).get('viewMode'),
+        snippetHints: vscode.workspace.getConfiguration('chalk', document.uri).get('snippetHints')
+          ? 'on'
+          : 'off',
       };
     };
 
@@ -358,6 +361,7 @@ export class ChalkEditorProvider implements vscode.CustomTextEditorProvider {
       }
       if (
         e.affectsConfiguration('chalk.viewMode', document.uri) ||
+        e.affectsConfiguration('chalk.snippetHints', document.uri) ||
         e.affectsConfiguration('editor', {
           uri: document.uri,
           languageId: this.profile.settingsLanguageId,

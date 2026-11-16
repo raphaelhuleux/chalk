@@ -46,22 +46,27 @@ final class ChromeMatrixHost {
     /// pinned width.
     private let incomingOutlinePanelWidthRaw: Any?
     private static let outlinePanelWidthKey = Preferences.outlinePanelWidthKey
-    /// And for the slot's width while it shows the PDF.
+    /// And for the PDF panel's width.
     private let incomingPDFPanelWidthRaw: Any?
     private static let pdfPanelWidthKey = Preferences.pdfPanelWidthKey
-    /// And for the split's seam, so every split cell starts from the default halves.
-    private let incomingSplitFractionRaw: Any?
-    private static let splitFractionKey = Preferences.splitFractionKey
 
     /// One folder with one file, so every Library-open cell has a first area
     /// header to measure: `libraryListStartsAtTheChromeFloor` is evidence only
     /// against a measured header, and a detached root's Library is empty.
     private let libraryFolder: URL
 
-    /// Seed two draft tabs in every cell, not only the split ones. The transition suite needs it:
-    /// a split toggled off must land on a fresh single cell with the same strip, and toggling a
-    /// split on must not open tabs (a new active draft would drop the PDF a cell asked for).
-    var seedsTwoTabs = false
+    /// Seed the three draft tabs of a three-group cell in every cell, not only the grouped ones.
+    /// The transition suite needs it: groups joined must land on a fresh single cell with the same
+    /// strip, and making groups must not open tabs (a new active draft would drop the PDF a cell
+    /// asked for).
+    var seedsGroupTabs = false
+
+    /// Live surfaces when this host was built: other suites' windows count too.
+    private let incomingLiveSurfaces = WebEditorSurface.liveCountForTesting
+    /// More than one root's tabs: past it a root escaped `retireRoot`, or a caller's loop has no
+    /// `autoreleasepool` per root and the test method's pool still holds them. A suite builds
+    /// hundreds of roots, and leaked web views take the whole Mac down, so this stops the run.
+    private static let maximumLiveSurfaces = 8
 
     init() {
         libraryFolder = FileManager.default.temporaryDirectory
@@ -74,8 +79,6 @@ final class ChromeMatrixHost {
         UserDefaults.standard.removeObject(forKey: Self.outlinePanelWidthKey)
         incomingPDFPanelWidthRaw = UserDefaults.standard.object(forKey: Self.pdfPanelWidthKey)
         UserDefaults.standard.removeObject(forKey: Self.pdfPanelWidthKey)
-        incomingSplitFractionRaw = UserDefaults.standard.object(forKey: Self.splitFractionKey)
-        UserDefaults.standard.removeObject(forKey: Self.splitFractionKey)
         window = NSWindow.hostedForTesting(frame: CGRect(x: 0, y: 0, width: 1200, height: 800))
         window.isHidden = false
     }
@@ -98,14 +101,15 @@ final class ChromeMatrixHost {
         } else {
             UserDefaults.standard.removeObject(forKey: Self.pdfPanelWidthKey)
         }
-        if let raw = incomingSplitFractionRaw {
-            UserDefaults.standard.set(raw, forKey: Self.splitFractionKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: Self.splitFractionKey)
-        }
+        retireRoot()
         window.isHidden = true
         window.rootViewController = nil
         try? FileManager.default.removeItem(at: libraryFolder)
+    }
+
+    /// Close the outgoing root's tabs: dropping a root does not tear its web views down.
+    private func retireRoot() {
+        (window.rootViewController as? RootSplitViewController)?.editor.closeAllTabsForAudit()
     }
 
     /// Windowed and fullscreen differ in size here; the size is not enough
@@ -122,6 +126,10 @@ final class ChromeMatrixHost {
     /// callers choose `settle` (transitions) or `settleToFixedPoint`
     /// (matrix cells) before reading geometry.
     func makeRoot(for state: UIState) -> RootSplitViewController {
+        retireRoot()
+        let live = WebEditorSurface.liveCountForTesting - incomingLiveSurfaces
+        precondition(live <= Self.maximumLiveSurfaces, "\(live) web surfaces outlived their roots")
+
         // Reset the persisted mode BEFORE the controller exists, so every
         // state starts from the same place regardless of what ran before it.
         //
@@ -161,13 +169,13 @@ final class ChromeMatrixHost {
         root.setMacFullscreenForTesting(state.window == .fullscreen)
         window.layoutIfNeeded()
         root.view.layoutIfNeeded()
-        // The split before the trailing slot: the PDF belongs to a tab, so it
-        // is requested on the focused tab once both tabs exist. Two draft
-        // tabs, so two real web views share the column.
-        if seedsTwoTabs || state.split == .split {
-            while root.editor.openTabCount < 2 { root.editor.newFile() }
+        // The groups before the trailing slot: the PDF belongs to a tab, so it
+        // is requested on the focused tab once every tab exists. Three draft
+        // tabs, so three real web views share the column.
+        if seedsGroupTabs || state.groups == .multiple {
+            while root.editor.openTabCount < UIState.GroupsState.multipleCount { root.editor.newFile() }
         }
-        root.setSplitForTesting(state.split)
+        root.setGroupsForTesting(state.groups)
         window.layoutIfNeeded()
         root.view.layoutIfNeeded()
         // The outline axis, before zen: zen closes the panel the way it

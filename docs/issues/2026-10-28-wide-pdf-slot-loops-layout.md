@@ -27,5 +27,10 @@ The outline can hit it too: the Library at 560 pt in a 680 pt window leaves a co
 ## Fix
 
 - The strip's trailing pin sits just below `windowSizeStayPut`: a hole the chips cannot fit beside overlaps them and can no longer resize the window (`HeaderBarView`).
-- The slot shows its preferred width fitted to the column, short of the chips' narrowest strip (`EditorContainerViewController.fitSlotWidth`, limit from `HeaderBarView.stripMinimumExtent`), but never below the content's minimum (220 pt outline, 320 pt PDF). The preference is kept, so a wider window gets the full width back. Below that minimum (a tiny window with a wide Library) the slot still overhangs, and the first fix keeps that harmless.
+- The slot shows its preferred width fitted to the column, short of the chips' narrowest strip (`EditorContainerViewController.fitSlotWidth`, limit from `HeaderBarView.stripReadableExtent`), but never below the content's minimum (220 pt outline, 320 pt PDF). The preference is kept, so a wider window gets the full width back. Below that minimum (a tiny window with a wide Library) the slot still overhangs, and the first fix keeps that harmless.
 - Regression: `PDFPanelSlotTests.testAPDFWiderThanTheColumnFitsItAndTheWindowKeepsItsSize` crashes the test host with the same exception on the old code.
+
+## Follow-up, 2026-10-29
+
+The first limit left the chips only their fixed tail, so a fitted PDF (686 pt in an 843 pt window) hid every tab name and left "+" alone in the band.
+The limit is now `HeaderTabStrip.readableWidth`, the tail plus 160 pt of names. Regression: `PDFPanelSlotTests.testAFittedPDFLeavesTheTabNamesReadable`.

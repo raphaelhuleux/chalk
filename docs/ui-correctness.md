@@ -21,7 +21,7 @@ introduced it.
 
 | Command | Covers | Time |
 | --- | --- | --- |
-| `xcodebuild test -project mac/Chalk.xcodeproj -scheme Chalk -destination 'platform=macOS' -only-testing:ChalkTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 96 cells | seconds after build |
+| `xcodebuild test -project mac/Chalk.xcodeproj -scheme Chalk -destination 'platform=macOS' -only-testing:ChalkTests/ChromeInvariantMatrixTests -derivedDataPath mac/build/dd CODE_SIGNING_ALLOWED=NO` | all 128 cells | seconds after build |
 | `node scripts/generate-ui-invariants.mjs --check` | the docs match the catalogue | instant |
 | `./scripts/check.sh` | both of the above, plus everything else | minutes |
 
@@ -145,6 +145,28 @@ height; flooring two of them left the third disagreeing, and the editor's restin
 line stayed measured against a height that no longer existed.
 That arithmetic is now the one pure `BandLayout.resolve`, applied by `RootSplitViewController.applyBandLayout()`.
 
+**Never derive the slot's limit from the group seams.** The seams depend on the content width, which depends on the slot; a limit read from them feeds back into itself, the 10-28 loop again ([docs/issues/2026-10-28-wide-pdf-slot-loops-layout.md](issues/2026-10-28-wide-pdf-slot-loops-layout.md)). `HeaderBarView.stripReadableExtent` reads the first row only.
+
+**Never constrain a tab row to a pane.** The rows sit in the band, which spans the window; a constraint into the editor's panes ties the band's layout to the pane host's frame layout. `setGroupColumns(seams:)` sets constants from the live pane frames, and only when a seam moved.
+
+## Tab row
+
+`ChromeInvariantMatrixTests` checks the row's frame inside the chrome; the row's own drawing is `TabRowGeometryTests` (cells of tab count, shown tab, unsaved, a hovered background tab, overflow), `NewTabGlyphSizeTests` and `WindowModeRoundTripTests` (a real `toggleFullScreen` round trip). `scripts/check.sh` runs them as the `tab-row` step. Each trap below shipped a defect the frame checks passed ([docs/issues/2026-11-16-tab-row-regressions.md](issues/2026-11-16-tab-row-regressions.md)).
+
+**Test in the app's window.** A plain titled window has the short titlebar, where the traffic lights sit 10pt higher than in the app's. Every check of the names against the lights passed there or failed for the wrong reason. `NSWindow.hostedForTesting` now calls `EditorWindowController.makeChromeWindow`; never build a test window by hand.
+
+**The matrix's full screen is a flag.** `setMacFullscreenForTesting` keeps the window and its titlebar; what AppKit does on a real exit (it restored the toolbar's hidden state and the titlebar came back short) only a real `toggleFullScreen` shows.
+
+**Assert visual sizes in a band.** The "+" test only capped its ink, so it protected "too small". A size rule needs a floor (at least a capital, at least the close ×) as well as a ceiling.
+
+**Spacing tokens move together.** The close slot was widened without the gap and the × ended up nearer the next name than its own. `TabCloseSpacing` (ChalkKit) is the arithmetic, checked against the shipped tokens and the measured glyph; change `tabGap`, `tabInnerGap` and `tabSlotWidth` together.
+
+**Hover and overflow are states too.** A background tab's × exists only on hover and hangs outside its item; the chevron exists only on overflow. Neither shows in a resting row, so the cells drive both (`setHoverForTesting`, a 420pt row of six tabs).
+
+**No ambiguous layout.** An unconstrained chevron let Auto Layout give it the whole row and the names' clip came out 0pt wide: tabs gone with no error. `testTheRowLayoutIsNeverAmbiguous` walks every view in every cell.
+
+**Look at it.** `TEST_RUNNER_CHALK_TAB_GALLERY=1` writes the cells as the window server composites them (the names' fade is a layer mask, which `cacheDisplay` skips) and prints the folder.
+
 ## What this does NOT cover
 
 Be honest about the edges; a system trusted past its limits is worse than none.
@@ -165,14 +187,14 @@ Be honest about the edges; a system trusted past its limits is worse than none.
   `docs/specs/2026-08-19-ui-correctness-system-design.md`.
 - **The system titlebar.** `reserveTop` is what `BandLayout.resolve` decided
   from the measured titlebar; nothing asserts the titlebar's own drawn height
-  against it, so a titlebar that AppKit grows under a future toolbar style
-  would move the band without a rule noticing.
+  against it. `namesShareTheLightsLine` does catch the case that matters to the
+  eye: a titlebar whose lights no longer sit on the names' line.
 
 ## File map
 
 | File | Role |
 | --- | --- |
-| `mac/ChalkKit/Sources/ChalkKit/UIState.swift` | the 96-cell matrix and its ids |
+| `mac/ChalkKit/Sources/ChalkKit/UIState.swift` | the 128-cell matrix and its ids |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeLayout.swift` | the geometry, as a value |
 | `mac/ChalkKit/Sources/ChalkKit/ChromeInvariants.swift` | the rules |
 | `mac/ChalkTests/ChromeInvariantMatrixTests.swift` | drives the matrix, asserts the rules |

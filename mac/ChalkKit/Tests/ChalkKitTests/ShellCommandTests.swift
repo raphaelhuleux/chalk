@@ -3,20 +3,17 @@ import XCTest
 
 /// `ShellCommand` mirrors `SHELL_COMMANDS` in web/src/native-host.ts, and there is
 /// no cross-language fixture to check it against, so this pins the Swift half:
-/// the exact four raw values the page can post, and nothing else.
+/// the exact raw values the page can post, and nothing else.
 final class ShellCommandTests: XCTestCase {
     /// The raw values as the page spells them, in the same order as the TS list.
-    private let wireNames = ["save", "toggle-outline", "toggle-outline-panel", "quick-open"]
+    private let wireNames = ["save", "toggle-outline", "toggle-outline-panel", "quick-open", "next-tab", "previous-tab",
+                             "accept-ai-marks", "reject-ai-marks"]
 
     func testEveryWireNameDecodes() throws {
         for name in wireNames {
             XCTAssertNotNil(ShellCommand(rawValue: name), "no ShellCommand for \(name)")
         }
         XCTAssertEqual(ShellCommand.allCases.map(\.rawValue), wireNames)
-    }
-
-    func testCaseCountIsFour() {
-        XCTAssertEqual(ShellCommand.allCases.count, 4)
     }
 
     func testUnknownNameDoesNotDecode() {

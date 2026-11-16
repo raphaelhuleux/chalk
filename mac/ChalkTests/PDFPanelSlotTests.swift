@@ -2,9 +2,9 @@ import XCTest
 import ChalkKit
 @testable import Chalk
 
-/// The PDF panel shares the outline's trailing slot: ⌥⌘P and ⌘K each toggle
-/// their own content, switching it in place when the slot already shows the
-/// other one, and only the outline content keeps the surface pushing outlines.
+/// The PDF and the outline share the trailing slot: ⌥⌘P and ⌘K each toggle
+/// their own panel and leave the other up, PDF on the leading side, and only
+/// the outline keeps the surface pushing outlines.
 @MainActor
 final class PDFPanelSlotTests: XCTestCase {
     private var previousMode: EditingMode!
@@ -55,24 +55,85 @@ final class PDFPanelSlotTests: XCTestCase {
         XCTAssertEqual(root.trailingPanelStateForTesting, .hidden)
     }
 
-    func testEachToggleSwitchesTheOtherContentInPlace() {
+    func testEachToggleLeavesTheOtherPanelUp() {
         let root = makeRoot()
         root.cmdToggleOutlinePanel()
         XCTAssertEqual(root.trailingPanelStateForTesting, .shown)
         root.cmdTogglePDFPanel()
-        XCTAssertEqual(root.trailingPanelStateForTesting, .pdf, "⌥⌘P over the outline swaps, it does not close")
+        XCTAssertEqual(root.trailingPanelStateForTesting, .both)
         outlastAdmitWindow()
         root.cmdToggleOutlinePanel()
-        XCTAssertEqual(root.trailingPanelStateForTesting, .shown, "⌘K over the PDF swaps back")
+        XCTAssertEqual(root.trailingPanelStateForTesting, .pdf, "⌘K takes only the outline down")
+        outlastAdmitWindow()
+        root.cmdToggleOutlinePanel()
+        XCTAssertEqual(root.trailingPanelStateForTesting, .both, "⌘K over the PDF keeps the PDF")
+        root.cmdTogglePDFPanel()
+        XCTAssertEqual(root.trailingPanelStateForTesting, .shown, "⌥⌘P takes only the PDF down")
     }
 
-    func testTheSlotTakesEachContentsOwnWidth() {
+    func testBothPanelsTileThePDFThenTheOutlineToTheWindowEdge() throws {
         let root = makeRoot()
-        root.cmdToggleOutlinePanel()
-        let outlineWidth = root.editorForTesting.outlinePanelWidthForTesting
+        let editor = root.editorForTesting
         root.cmdTogglePDFPanel()
-        XCTAssertEqual(root.editorForTesting.outlinePanelWidthForTesting, Preferences.pdfPanelWidth)
-        XCTAssertNotEqual(root.editorForTesting.outlinePanelWidthForTesting, outlineWidth)
+        XCTAssertTrue(editor.isInnerResizeGripHiddenForTesting, "one panel has no inner border")
+        root.cmdToggleOutlinePanel()
+        root.view.layoutSubtreeIfNeeded()
+        let slot = try XCTUnwrap(editor.outlinePanelFrame)
+        let pdf = editor.panelFrameForTesting(.pdf), outline = editor.panelFrameForTesting(.outline)
+        XCTAssertEqual(pdf.minX, slot.minX, accuracy: 0.5)
+        XCTAssertEqual(pdf.maxX, outline.minX, accuracy: 0.5)
+        XCTAssertEqual(outline.maxX, editor.view.bounds.width, accuracy: 0.5)
+        XCTAssertEqual(pdf.width, Preferences.pdfPanelWidth, accuracy: 0.5)
+        XCTAssertEqual(outline.width, Preferences.outlinePanelWidth, accuracy: 0.5)
+        XCTAssertFalse(editor.pdfPanel.view.isHidden)
+        XCTAssertFalse(editor.outlinePanel.view.isHidden)
+        XCTAssertFalse(editor.isInnerResizeGripHiddenForTesting)
+    }
+
+    /// A panel taken down leaves the other one at its full frame.
+    func testClosingOnePanelGivesTheSlotBackToTheOther() throws {
+        let root = makeRoot()
+        let editor = root.editorForTesting
+        root.cmdTogglePDFPanel()
+        root.cmdToggleOutlinePanel()
+        outlastAdmitWindow()
+        root.cmdToggleOutlinePanel()
+        root.view.layoutSubtreeIfNeeded()
+        var slot = try XCTUnwrap(editor.outlinePanelFrame)
+        XCTAssertEqual(slot.width, Preferences.pdfPanelWidth, accuracy: 0.5)
+        XCTAssertEqual(editor.panelFrameForTesting(.pdf).minX, slot.minX, accuracy: 0.5)
+        XCTAssertEqual(editor.panelFrameForTesting(.pdf).maxX, slot.maxX, accuracy: 0.5)
+        XCTAssertTrue(editor.outlinePanel.view.isHidden)
+
+        outlastAdmitWindow()
+        root.cmdToggleOutlinePanel()
+        root.cmdTogglePDFPanel()
+        root.view.layoutSubtreeIfNeeded()
+        slot = try XCTUnwrap(editor.outlinePanelFrame)
+        XCTAssertEqual(slot.width, Preferences.outlinePanelWidth, accuracy: 0.5)
+        XCTAssertEqual(editor.panelFrameForTesting(.outline).minX, slot.minX, accuracy: 0.5)
+        XCTAssertEqual(editor.panelFrameForTesting(.outline).maxX, slot.maxX, accuracy: 0.5)
+        XCTAssertTrue(editor.pdfPanel.view.isHidden)
+    }
+
+    /// One ⌘K beside a PDF must not throw the text under the slot: the PDF gives way down to its
+    /// minimum first, and keeps its preferred width for a wider window.
+    func testThePDFGivesWayToKeepTheEditorPushed() throws {
+        let root = makeRoot(width: 1100)
+        let window = try XCTUnwrap(root.view.window)
+        let editor = root.editorForTesting
+        root.cmdTogglePDFPanel()
+        root.cmdToggleOutlinePanel()
+        root.view.layoutSubtreeIfNeeded()
+        XCTAssertFalse(editor.outlinePanelIsOverlay)
+        XCTAssertEqual(editor.outlinePanelWidthForTesting,
+                       editor.view.bounds.width - ChalkMetrics.outlinePanelPushMinimumEditorWidth, accuracy: 0.5)
+        XCTAssertEqual(editor.panelFrameForTesting(.outline).width, Preferences.outlinePanelWidth, accuracy: 0.5)
+        XCTAssertLessThan(editor.panelFrameForTesting(.pdf).width, Preferences.pdfPanelWidth)
+
+        window.setFrame(CGRect(x: 0, y: 0, width: 1800, height: 820), display: false)
+        root.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(editor.panelFrameForTesting(.pdf).width, Preferences.pdfPanelWidth, accuracy: 0.5)
     }
 
     func testZenRefusesThePDFAndClosesIt() {
@@ -102,15 +163,15 @@ final class PDFPanelSlotTests: XCTestCase {
         editor.open(url: a)
         XCTAssertEqual(root.trailingPanelStateForTesting, .pdf, "a kept its PDF")
 
-        // With the window's outline on, a tab without a PDF shows the outline.
+        // With the window's outline on, every tab shows it, beside its own PDF if it has one.
         editor.open(url: b)
         root.cmdToggleOutlinePanel()
         XCTAssertEqual(root.trailingPanelStateForTesting, .shown)
         editor.open(url: a)
-        XCTAssertEqual(root.trailingPanelStateForTesting, .pdf)
+        XCTAssertEqual(root.trailingPanelStateForTesting, .both)
         outlastAdmitWindow()
         root.cmdTogglePDFPanel()
-        XCTAssertEqual(root.trailingPanelStateForTesting, .shown, "taking the PDF down uncovers the outline")
+        XCTAssertEqual(root.trailingPanelStateForTesting, .shown, "taking the PDF down leaves the outline")
     }
 
     /// A PDF width remembered from a wider window fits this column past the band's chips, and the
@@ -138,6 +199,52 @@ final class PDFPanelSlotTests: XCTestCase {
         window.setFrame(CGRect(x: 0, y: 0, width: 1800, height: 820), display: false)
         root.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(editor.outlinePanelWidthForTesting, 983, accuracy: 0.5)
+    }
+
+    /// The same wide slot over three tab groups: the groups share what the slot leaves, the window
+    /// keeps its size, and every row stays inside the band (the 10-28 loop came back through the
+    /// rows once there were several).
+    func testAWidePDFOverThreeGroupsKeepsTheWindowAndTheRows() throws {
+        Preferences.pdfPanelWidth = 983
+        let root = makeRoot(width: 1100)
+        let window = try XCTUnwrap(root.view.window)
+        root.setSidebarVisible(true)
+        let editor = root.editorForTesting
+        while editor.tabCountForTesting < 3 { editor.newFile() }
+        root.setGroupsForTesting(.multiple)
+        root.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(editor.groupCount, 3)
+
+        root.cmdTogglePDFPanel()
+        outlastAdmitWindow()
+        root.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(window.frame.width, 1100, "the band grew the window")
+        let panel = try XCTUnwrap(editor.outlinePanelFrame)
+        XCTAssertEqual(panel.maxX, editor.view.bounds.width, accuracy: 0.5)
+        let panes = editor.paneFramesForTesting
+        XCTAssertEqual(panes.count, 3)
+        XCTAssertEqual(panes.last?.maxX ?? 0, editor.contentViewFrameForTesting.width, accuracy: 0.5,
+                       "the groups tile the content")
+        let bar = try XCTUnwrap(root.headerBarForTesting as? HeaderBarView)
+        for strip in root.tabStripsForTesting where strip.superview != nil {
+            let frame = bar.convert(strip.frame, from: strip.superview)
+            XCTAssertGreaterThanOrEqual(frame.minX, bar.bounds.minX - 0.5)
+            XCTAssertLessThanOrEqual(frame.maxX, bar.bounds.maxX + 0.5)
+        }
+    }
+
+    /// A wide PDF fitted to the column still leaves the strip room for a tab name, not only "+".
+    func testAFittedPDFLeavesTheTabNamesReadable() throws {
+        Preferences.pdfPanelWidth = 686
+        let root = makeRoot(width: 843)
+        root.cmdTogglePDFPanel()
+        outlastAdmitWindow()
+        root.view.layoutSubtreeIfNeeded()
+        let bar = try XCTUnwrap(root.headerBarForTesting as? HeaderBarView)
+        let editor = root.editorForTesting
+        let panel = try XCTUnwrap(editor.outlinePanelFrame)
+        let slotStart = bar.convert(panel, from: editor.view).minX
+        XCTAssertGreaterThanOrEqual(slotStart, bar.tabStrip.frame.minX + HeaderTabStrip.readableWidth)
     }
 
     func testAPDFSlotDoesNotRestoreAsTheOutline() {

@@ -146,6 +146,59 @@
   cursor: pointer;
 }
 
+/* AI marks (provenance.ts). Translucency on the layer, as for the selection:
+   rectangles overlap on a row a rendered construct splits, and per-rectangle
+   alpha would paint the overlap darker. Behind the text, so the selection and
+   callout washes still show through. */
+.cm-aiMarkLayer {
+  z-index: -1;
+  opacity: var(--chalk-ai-opacity, 0.13);
+}
+
+.cm-aiMark {
+  background: var(--chalk-ai-tint, #4a7fd0);
+}
+
+.cm-aiDeletionLayer {
+  pointer-events: none;
+}
+
+.cm-aiDeletion {
+  width: 2px;
+  margin-left: -1px;
+  background: var(--vscode-editorCursor-foreground, #d24a3e);
+  opacity: 0.75;
+}
+
+.cm-aiReview {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 420px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.cm-aiReview-label {
+  opacity: 0.6;
+}
+
+.cm-aiReview-text {
+  flex: 1;
+  overflow: hidden;
+  white-space: pre-wrap;
+  max-height: 8em;
+}
+
+.cm-aiReview button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--chalk-ai-tint, #4a7fd0);
+  font: inherit;
+  cursor: pointer;
+}
+
 /* `clone` keeps rounded ends on each row of a wrapped highlight. */
 .cm-live-highlight {
   background: var(--chalk-highlight-bg, rgba(255, 214, 0, 0.32));

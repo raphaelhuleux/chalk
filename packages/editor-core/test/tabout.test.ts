@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { EditorView } from '@codemirror/view';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { EditorState, EditorSelection } from '@codemirror/state';
 import { scanForExit, taboutCommand } from '../src/editor/tabout';
+import { mdView, texView } from './helpers/views';
 
 beforeAll(() => {
   if (typeof Range.prototype.getClientRects !== 'function') {
@@ -193,6 +194,79 @@ describe('taboutCommand — spec worked examples', () => {
       const cmd = taboutCommand(() => true, 'tex');
       cmd(view);
       expect(view.state.selection.main.head).toBe(expected);
+      view.destroy();
+    });
+  }
+});
+
+describe('taboutCommand — at a line start Tab indents', () => {
+  it('falls through with only whitespace before the caret', () => {
+    for (const [doc, cur] of [['\\dot{k}=x\\\\', 0], ['    \\dot{k}=x', 4]] as const) {
+      const view = makeView(doc, cur);
+      expect(taboutCommand(() => true, 'tex')(view)).toBe(false);
+      expect(view.state.selection.main.head).toBe(cur);
+      view.destroy();
+    }
+  });
+
+  it('still exits once the caret is past the line start', () => {
+    const view = makeView('    \\dot{k}=x', 9);
+    expect(taboutCommand(() => true, 'tex')(view)).toBe(true);
+    expect(view.state.selection.main.head).toBe(11);
+    view.destroy();
+  });
+});
+
+describe('Tab and Shift-Tab through the mounted keymap', () => {
+  const key = (view: EditorView, shiftKey = false) =>
+    runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, shiftKey }), 'editor');
+
+  const align = (lead: string) =>
+    `$$\n\\begin{align*}\n${lead}\\dot{k}=\\frac{\\dot{K}}{K}\\\\\n    \\dot{k}=sf(k)\n\\end{align*}\n$$\n`;
+
+  for (const make of [mdView, texView]) {
+    const lang = make === mdView ? 'md' : 'tex';
+
+    it(`${lang}: Tab at the start of an align row indents it instead of jumping`, () => {
+      const doc = align('');
+      const lineStart = doc.indexOf('\\dot{k}=\\frac');
+      const view = make(doc, { cursor: lineStart });
+      key(view);
+      const row = view.state.doc.lineAt(view.state.selection.main.head);
+      expect(row.text.startsWith('\\dot{k}')).toBe(false);
+      expect(row.text.trimStart().startsWith('\\dot{k}=\\frac')).toBe(true);
+      expect(view.state.selection.main.head).toBe(row.from + row.text.length - row.text.trimStart().length);
+      view.destroy();
+    });
+
+    it(`${lang}: Shift-Tab walks back each tabout, newest first`, () => {
+      const doc = align('');
+      const start = doc.indexOf('{K}') + 1; // inside the denominator
+      const view = make(doc, { cursor: start });
+      key(view);
+      const first = view.state.selection.main.head;
+      key(view);
+      const second = view.state.selection.main.head;
+      expect(first).toBeGreaterThan(start);
+      expect(second).toBeGreaterThan(first);
+      key(view, true);
+      expect(view.state.selection.main.head).toBe(first);
+      key(view, true);
+      expect(view.state.selection.main.head).toBe(start);
+      expect(view.state.doc.toString()).toBe(doc);
+      view.destroy();
+    });
+
+    it(`${lang}: an edit after the tabout ends the walk back`, () => {
+      const doc = align('');
+      const start = doc.indexOf('{K}') + 1;
+      const view = make(doc, { cursor: start });
+      key(view);
+      const landed = view.state.selection.main.head;
+      view.dispatch({ changes: { from: landed, insert: 'x' }, selection: { anchor: landed + 1 } });
+      view.dispatch({ changes: { from: landed, to: landed + 1 }, selection: { anchor: landed } });
+      key(view, true);
+      expect(view.state.selection.main.head).not.toBe(start);
       view.destroy();
     });
   }

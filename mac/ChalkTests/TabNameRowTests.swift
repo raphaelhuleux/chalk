@@ -6,9 +6,8 @@ import ChalkKit
 /// an accent underline under the active one, a slot only where something rests
 /// in it, and a gap between names that stays the window's to drag.
 ///
-/// The AppKit twin (ChalkAppKitGlue) draws the same anatomy from the same
-/// ChalkKit tokens (`TabStripMetrics`, `TabStripPolicy`), so the numbers are
-/// one definition; these tests pin what the numbers are supposed to produce.
+/// The rules come from `TabStripPolicy` and the numbers from `ChalkMetrics`;
+/// these tests pin what the numbers are supposed to produce.
 @MainActor
 final class TabNameRowTests: XCTestCase {
     private var window: NSWindow!
@@ -43,10 +42,9 @@ final class TabNameRowTests: XCTestCase {
 
     // MARK: - The row is typography
 
-    /// The artboard's rhythm: 28pt of air between one name and the next, made
-    /// of each item's own 8pt padding plus the 12pt the row puts between them.
-    /// Half of that is the window's drag surface on Mac, which is why the
-    /// padding is not simply 14 on each side.
+    /// The row's rhythm: the air between one name and the next is each item's
+    /// own padding plus the gap the row puts between them. Half of that is the
+    /// window's drag surface on Mac, which is why it is not all padding.
     func testNamesAreSeparatedByTheArtboardsGap() {
         let a = tab("alpha.md", active: true)
         let b = tab("beta.md")
@@ -59,7 +57,7 @@ final class TabNameRowTests: XCTestCase {
         XCTAssertEqual(labelC.minX - labelB.maxX,
                        ChalkMetrics.tabLabelPadding * 2 + ChalkMetrics.tabGap,
                        accuracy: 1.0,
-                       "two background names are one 28pt gap apart")
+                       "two background names are one row gap apart")
 
         let itemB = try! XCTUnwrap(strip.tabFrameForTesting(b.id))
         XCTAssertEqual(itemB.minX, labelB.minX - ChalkMetrics.tabLabelPadding, accuracy: 1.0)

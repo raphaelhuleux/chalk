@@ -23,7 +23,7 @@ final class HSnipsCatalogTests: XCTestCase {
 
     func testScansAllBundledSnippets() throws {
         // N = `grep -c '^snippet' latex.hsnips`; update when defaults change.
-        XCTAssertEqual(try bundledSnippets().count, 264)
+        XCTAssertEqual(try bundledSnippets().count, 271)
     }
 
     func testSuperscriptSnippet() throws {

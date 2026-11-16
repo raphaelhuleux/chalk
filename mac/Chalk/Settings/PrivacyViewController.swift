@@ -42,8 +42,9 @@ final class PrivacyViewController: NSViewController {
                      + "Chalk never deletes these. It can only count the ones in "
                      + "its own folder, because it does not index your disk."
             case .folder:
-                return "Everything above lives here. Nothing else in Chalk writes "
-                     + "outside the files you open."
+                return "Everything above lives here, along with a copy of any "
+                     + "document that has AI marks, so the marks can be restored. "
+                     + "Nothing else in Chalk writes outside the files you open."
             case .logs:
                 return "Chalk writes no log files. It logs to the system log like "
                      + "any app, and file names and paths are redacted there. The "

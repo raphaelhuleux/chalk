@@ -59,7 +59,13 @@ final class BandLayoutTests: XCTestCase {
         XCTAssertEqual(
             resolve(fullscreen: true, safeAreaTop: 0, dividerX: 300).chipLeadingInset,
             300 + 14 - 78)
-        // No tiled Library: the chips return to their own gutter.
-        XCTAssertEqual(resolve(fullscreen: true, safeAreaTop: 0).chipLeadingInset, 0)
+        // No tiled Library, windowed: the chips return to their own gutter past the lights.
+        XCTAssertEqual(resolve(fullscreen: false, safeAreaTop: 52).chipLeadingInset, 0)
+    }
+
+    /// Full screen hides the traffic lights: with no Library the names start the divider gap
+    /// from the window's edge, not past lights that are not there.
+    func testFullScreenWithoutTheLibraryStartsAtTheWindowEdge() {
+        XCTAssertEqual(resolve(fullscreen: true, safeAreaTop: 0).chipLeadingInset, 14 - 78)
     }
 }

@@ -65,13 +65,29 @@ public struct ChromeLayout: Equatable, Sendable {
     /// The trailing-edge cut-out of `bandPaint`, behind the outline panel.
     /// Nil when nothing is cut out there.
     public var bandPaintTrailingHole: CGRect?
-    /// The editor panes inside `editorContent`, leading first: one rect
-    /// without a split, two with one. Empty when nothing was measured.
+    /// The editor panes inside `editorContent`, one per tab group, leading
+    /// first. Empty when nothing was measured.
     public var editorPanes: [CGRect]
-    /// The split's drag handle, nil without a split.
-    public var splitDivider: CGRect?
-    /// The metrics table's floor for one pane of a split (spec).
-    public var splitMinimumPane: CGFloat
+    /// The drag handles between neighbouring groups, leading first.
+    public var groupDividers: [CGRect]
+    /// The metrics table's floor for one tab group (spec).
+    public var groupMinimumWidth: CGFloat
+    /// Each group's tab row in the band, leading first (the first is
+    /// `tabStrip`). Empty while the band is hidden.
+    public var groupStrips: [CGRect]
+    /// The window's traffic lights (close to zoom, their union), nil where the system hides
+    /// them.
+    public var trafficLights: CGRect?
+    /// Each group row's name line: the y of the middle of a capital in its first label (the
+    /// type's optical centre, not its box's), leading row first. Empty while the band is hidden
+    /// or no row shows a name.
+    public var nameLines: [CGFloat]
+    /// The first row's first label's leading edge, nil when it shows no name or its names are
+    /// scrolled (the first one is then not where the row starts).
+    public var firstNameMinX: CGFloat?
+    /// The spec distance from the zoom button to the first name's ink: the lights' gap plus the
+    /// first item's own padding.
+    public var trafficLightGap: CGFloat
 
     public init(state: UIState, root: CGRect, band: CGRect, bandPaint: CGRect,
                 bandPaintHole: CGRect?, libraryPanel: CGRect?, tabStrip: CGRect,
@@ -92,8 +108,13 @@ public struct ChromeLayout: Equatable, Sendable {
                 outlinePanelPushMinimum: CGFloat = 0,
                 bandPaintTrailingHole: CGRect? = nil,
                 editorPanes: [CGRect] = [],
-                splitDivider: CGRect? = nil,
-                splitMinimumPane: CGFloat = 0) {
+                groupDividers: [CGRect] = [],
+                groupMinimumWidth: CGFloat = 0,
+                groupStrips: [CGRect] = [],
+                trafficLights: CGRect? = nil,
+                nameLines: [CGFloat] = [],
+                firstNameMinX: CGFloat? = nil,
+                trafficLightGap: CGFloat = 0) {
         self.state = state
         self.root = root
         self.band = band
@@ -119,8 +140,13 @@ public struct ChromeLayout: Equatable, Sendable {
         self.outlinePanelPushMinimum = outlinePanelPushMinimum
         self.bandPaintTrailingHole = bandPaintTrailingHole
         self.editorPanes = editorPanes
-        self.splitDivider = splitDivider
-        self.splitMinimumPane = splitMinimumPane
+        self.groupDividers = groupDividers
+        self.groupMinimumWidth = groupMinimumWidth
+        self.groupStrips = groupStrips
+        self.trafficLights = trafficLights
+        self.nameLines = nameLines
+        self.firstNameMinX = firstNameMinX
+        self.trafficLightGap = trafficLightGap
     }
 
     /// Whether opaque chrome actually covers any part of `rect`.

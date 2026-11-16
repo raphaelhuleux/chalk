@@ -7,13 +7,15 @@ Naming one of these is enough to describe a chrome bug precisely.
 
 ## Where each rule is actually asserted
 
-`ChromeInvariantMatrixTests` walks all 96 cells of the state matrix (`ChalkTests`).
+`ChromeInvariantMatrixTests` walks all 128 cells of the state matrix (`ChalkTests`).
 In each cell it asserts every rule that both APPLIES there and is FALSIFIABLE there.
 A rule evaluated against absent geometry passes whatever the app did, so it is not counted as coverage and never reported as a pass.
 
-The matrix carries a trailing-slot axis: every cell exists with the slot closed, showing the outline, and showing the PDF. The PDF shares the outline's frame, so the four `outlinePanel*` rules are evidence in every open cell, whichever content fills it.
+The matrix carries a trailing-slot axis: every cell exists with the slot closed, showing the outline, showing the PDF, and showing both. One frame holds them, so the four `outlinePanel*` rules are evidence in every open cell, whichever content fills it.
 
-It also carries a split axis: every cell exists with one editor pane and with two. A split cell opens two draft tabs, so two real web views share the column. `editorPanesTileTheContent` is evidence in every cell; the two `split*` rules only where the split is open.
+It also carries a groups axis: every cell exists with one tab group and with three. A three-group cell opens three draft tabs and splits twice, so three real web views share the column and the band holds three rows (the first row's inset, an interior row and the last row's outline cut). `editorPanesTileTheContent` is evidence in every cell; the four group rules (`editorGroupsKeepTheirFloor`, `groupDividersSitOnTheSeams`, `groupStripsLieOverTheirColumns`, `groupRowsShareOneLine`) only where the band and the groups both show.
+
+The roots are hosted in the app's own window (`EditorWindowController.makeChromeWindow`), so the traffic lights are real. The two lights rules are evidence only windowed: the matrix's full screen is a flag on a window that keeps its lights, so it says nothing about them there.
 
 EVERY cell asserts something falsifiable, and the blind-cell guard in the matrix test PASSES.
 The utility pill stands in every state, so `pillRestsInTheCorner` is evidence everywhere rather than only where the pill happened to be showing.
@@ -21,17 +23,19 @@ The matrix host seeds one Library folder, so every Library-open cell has a first
 
 Coverage is still not uniform, and the differences are structural.
 The counts below are the ones the suite PRINTS (`ChromeInvariantMatrixTests falsifiable coverage`), read off a run rather than reasoned about.
-Windowed and full screen are the same chrome (one band, drawn in the content view under a transparent titlebar), so their rows coincide.
-Each row holds its one-pane cells; the same cells split assert the two `split*` rules on top, so add 2.
+Each row holds its one-group cells; the same cells with three groups assert the group rules on top: add 4 where the band shows, 2 in zen (no rows to measure).
 
-| Cells (one pane; as many again split) | Falsifiable rules, one pane / split | Why |
+| Cells (one group; as many again with three) | Falsifiable rules, one group / three | Why |
 | --- | --- | --- |
-| normal, Library open, slot open: outline or PDF (8) | 16 / 18 of 18 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the panes, the underline, window containment, and the four `outlinePanel*` rules |
-| normal, Library open, slot closed (4) | 12 / 14 of 18 | as above, minus the four `outlinePanel*` rules |
-| normal, Library closed, slot open: outline or PDF (8) | 12 / 14 of 18 | as the first row, minus the three Library rules and the name row |
-| normal, Library closed, slot closed (4) | 8 / 10 of 18 | the band and its paint, the resting line, the pill, the content column, the panes, the underline, window containment |
-| zen, slot closed (8) | 5 / 7 of 18 | resting reserve, pill, content column, panes, window containment: zen hides the band and closes the Library |
-| zen, slot open: outline or PDF (16) | 5 / 7 of 18 | zen forces the slot closed regardless of the request, so its four rules are never evidence here |
+| windowed, Library open, slot open: outline, PDF or both (6) | 17 / 21 of 22 | the band and its paint, the three Library rules, the name row, the resting line, the pill, the content column, the panes, the underline, window containment, the four `outlinePanel*` rules, and the names on the lights' line |
+| full screen, Library open, slot open (6) | 16 / 20 of 22 | as above, minus the lights |
+| windowed, Library open, slot closed (2) | 13 / 17 of 22 | as the first row, minus the four `outlinePanel*` rules |
+| full screen, Library open, slot closed (2) | 12 / 16 of 22 | as above, minus the lights |
+| windowed, Library closed, slot open (6) | 14 / 18 of 22 | as the first row, minus the three Library rules and the name row, plus the first name's gap from the lights |
+| full screen, Library closed, slot open (6) | 12 / 16 of 22 | as above, minus both lights rules |
+| windowed, Library closed, slot closed (2) | 10 / 14 of 22 | the band and its paint, the resting line, the pill, the content column, the panes, the underline, window containment, both lights rules |
+| full screen, Library closed, slot closed (2) | 8 / 12 of 22 | as above, minus the lights |
+| zen, any slot (32) | 5 / 7 of 22 | resting reserve, pill, content column, panes, window containment: zen hides the band, closes the Library and forces the slot closed |
 
 ## The rules
 
@@ -69,7 +73,7 @@ The editor's content column reaches the window's trailing edge and starts at the
 
 ### `libraryListStartsAtTheChromeFloor`
 
-The Library's first area header begins on the line the system titlebar ends on. The band is the titlebar, which spans the whole window, so the Library has nowhere to go but below it — the two columns start their content together on that line.
+Windowed, the Library's first area header begins on the line the system titlebar ends on: the band is the titlebar, which spans the whole window and holds the traffic lights above the Library, so the two columns start their content together on that line. In full screen there are no traffic lights, so the list rises into the band and starts at the top of its panel instead of leaving the lights' empty strip.
 
 ### `libraryPanelReachesTheWindowEdges`
 
@@ -97,14 +101,30 @@ The panel pushes the editor while the column can spare the width and overlays it
 
 ### `editorPanesTileTheContent`
 
-The editor panes cover the content column exactly: one pane fills it, a split's two panes meet at one seam with no gap or overlap and share its top and bottom. A pane that stops short shows bare background beside the text; panes that overlap hide one document's edge under the other.
+The editor panes cover the content column exactly: one pane per tab group, neighbours meeting at one seam with no gap or overlap, all sharing its top and bottom. A pane that stops short shows bare background beside the text; panes that overlap hide one document's edge under another.
 
-### `splitPanesKeepTheirFloor`
+### `editorGroupsKeepTheirFloor`
 
-Each pane of a split keeps the metrics table's minimum width, so a dragged divider can never squeeze one document into an unreadable sliver. A column too narrow for two minimum panes splits in equal halves instead.
+Each tab group keeps the metrics table's minimum width, so a dragged divider can never squeeze one document into an unreadable sliver. A column too narrow for every group's minimum shares itself evenly instead.
 
-### `splitDividerSitsOnTheSeam`
+### `groupDividersSitOnTheSeams`
 
-The split's drag handle straddles the seam between the panes and runs their full height. A handle left at a stale x catches drags where no edge is drawn, and the visible edge stops responding.
+Each drag handle straddles the seam between two neighbouring groups and runs their full height, one per seam. A handle left at a stale x catches drags where no edge is drawn, and the visible edge stops responding.
 
-_18 invariants._
+### `groupStripsLieOverTheirColumns`
+
+Each tab group's row of names sits over its own column: one row per group, in pane order, none starting before its group's leading seam nor reaching past the next group's. A row that strays reads as the neighbour's tabs, and a click on it acts on the wrong group.
+
+### `namesShareTheLightsLine`
+
+Windowed, the tab names sit on the traffic lights' centre line: the middle of a capital is level with the middle of the lights. The band is centred on the titlebar, so this breaks whenever the titlebar is not the tall one the band was built for (a full-screen exit once brought it back short and left the lights 7pt above the names).
+
+### `firstNameClearsTheLights`
+
+With no Library, the first name starts one fixed gap past the zoom button, read off the window's own lights. Closer and the name crowds the buttons; further and the row looks detached from the window's corner.
+
+### `groupRowsShareOneLine`
+
+Every tab group's row of names sits on one line across the band. A row a point off reads as a second, unrelated bar.
+
+_22 invariants._

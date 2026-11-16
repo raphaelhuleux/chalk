@@ -95,14 +95,16 @@ final class LibraryListStartTests: XCTestCase {
         }
     }
 
-    /// Full screen takes the titlebar away and the list follows the floor down;
-    /// coming back it returns to the same line.
+    /// Full screen hides the traffic lights, so the list rises into the band
+    /// to its own top padding; coming back it returns to the windowed floor.
     func testAFullScreenRoundTripReturnsTheListToTheFloor() throws {
         openLibrary()
         let windowed = try XCTUnwrap(listStart)
         root.applyTransitionForTesting(.window(.fullscreen))
         settle()
-        XCTAssertEqual(try XCTUnwrap(listStart), root.libraryTreeTop, accuracy: 1.5)
+        let fullScreen = try XCTUnwrap(listStart)
+        XCTAssertEqual(fullScreen, SidebarViewController.treeTopPadding, accuracy: 1.5)
+        XCTAssertLessThan(fullScreen, windowed, "the list must use the lights' strip in full screen")
         root.applyTransitionForTesting(.window(.windowed))
         settle()
         XCTAssertEqual(try XCTUnwrap(listStart), windowed, accuracy: 1.0)

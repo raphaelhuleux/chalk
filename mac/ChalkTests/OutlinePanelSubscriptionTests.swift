@@ -51,7 +51,7 @@ final class OutlinePanelSubscriptionTests: XCTestCase {
         container.setOutlinePanelVisible(true, animated: false)
         XCTAssertEqual(container.outlineSubscriptionForTesting(tabAt: 0), false)
         XCTAssertEqual(container.outlineSubscriptionForTesting(tabAt: 1), true)
-        container.activateTab(at: 0)
+        container.activateTabForTesting(at: 0)
         XCTAssertEqual(container.outlineSubscriptionForTesting(tabAt: 0), true)
         XCTAssertEqual(container.outlineSubscriptionForTesting(tabAt: 1), false)
     }
@@ -72,7 +72,7 @@ final class OutlinePanelSubscriptionTests: XCTestCase {
         container.open(url: tempFile("b.md"))
         container.setOutlinePanelVisible(true, animated: false)
         XCTAssertTrue(container.outlinePanel.headerDocumentNameForTesting.hasSuffix("b.md"))
-        container.activateTab(at: 0)
+        container.activateTabForTesting(at: 0)
         XCTAssertTrue(container.outlinePanel.headerDocumentNameForTesting.hasSuffix("a.md"))
     }
 }

@@ -48,6 +48,8 @@ import {
   markdownTypesetExtension,
   mdTypesetPlugin,
 } from './md-typeset';
+import { aiMarksExtension, aiMarksPaint, aiMarksPaintCompartment } from './provenance';
+import { snippetHintsExtension } from './snippet-hints';
 import { pointerGestureExtension } from './pointer-gesture';
 import { paragraphSelectExtension } from './paragraph-select';
 import { texVerticalArrowKeymap } from './tex-vertical-motion';
@@ -85,6 +87,14 @@ import { tablePlugin } from './table-field';
 import { texTablePlugin } from './tex-table-field';
 import { mdListNewlineKeymap } from './md-list-newline';
 import { mdListIndentKeymap } from './md-list-indent';
+import { mdFoldArrowKeymap, mdFoldExtension } from './md-fold';
+import { mdGuidesExtension } from './md-guides';
+import { mdZoomExtension } from './md-zoom';
+import {
+  mdHeadingIndentKeymap,
+  mdOutlinerKeymap,
+  mdOutlinerPriorityKeymap,
+} from './md-outliner-keys';
 import { assetResolverFacet, type AssetResolver } from './asset-resolver';
 import { workspaceAccessFacet, type WorkspaceAccess } from './workspace-files';
 import { memoizedAssetResolver } from '../utils/asset-cache';
@@ -193,6 +203,10 @@ function buildExtensions(
     // Seeded from the host config so a re-init keeps the mode.
     editingModeCompartment.of(editingModeExtension(editorConfig.editingMode)),
     markdownTypesetCompartment.of(markdownTypesetExtension(editorConfig.markdownStyle)),
+    // Outside previewCompartment: marks show in all three view modes.
+    aiMarksExtension(),
+    aiMarksPaintCompartment.of(aiMarksPaint(editorConfig.aiMarks)),
+    snippetHintsExtension(editorConfig.snippetHints),
   ];
 
   if (language === 'tex') {
@@ -309,6 +323,14 @@ function buildExtensions(
     syntaxHighlighting(codeHighlightStyle),
     viewModeExtension(mdSets, editorConfig.viewMode),
     mdFormatKeymap,
+    // Outliner (folds, subtree moves, item keys): docs/specs/2026-11-07-markdown-outliner.md.
+    // Folds are user state, outside previewCompartment, so all view modes keep them.
+    mdFoldExtension(),
+    mdGuidesExtension(),
+    mdZoomExtension(),
+    mdOutlinerKeymap(),
+    // Before the tight-bullet Enter (both Prec.highest): Enter on a folded head.
+    mdOutlinerPriorityKeymap(isInMathContextMd),
     mdListNewlineKeymap(isInMathContextMd),
     // Fence stops, as in the tex branch.
     mdCalloutFenceKeymap,
@@ -322,9 +344,14 @@ function buildExtensions(
       isInCode: isInCodeMd,
     }),
     mdCompletionExtension(),
+    // Prec.highest, so it beats the fence, math and table stops (they target
+    // `line ± 1` and would land inside a fold); after completion, so an open
+    // popup keeps Up/Down.
+    mdFoldArrowKeymap,
     taboutKeymap(isInMathContextMd, 'md'),
     // After Tabout (math keeps its Tab) and before indentWithTab.
     mdListIndentKeymap(isInMathContextMd),
+    mdHeadingIndentKeymap(isInMathContextMd),
     mathWrapInputHandler(isInMathContextMd),
     keymap.of([indentWithTab]),
     placeholder('Start typing…'),

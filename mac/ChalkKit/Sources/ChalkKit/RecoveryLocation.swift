@@ -26,4 +26,8 @@ extension RecoveryStore {
     /// what is here.
     public static let conflictCopiesDirectory: URL =
         chalkFolder.appendingPathComponent("ConflictCopies", isDirectory: true)
+
+    /// Where `ProvenanceStore` keeps AI marks, one file per marked document.
+    public static let aiMarksDirectory: URL =
+        chalkFolder.appendingPathComponent("AiMarks", isDirectory: true)
 }

@@ -23,7 +23,7 @@ It comes as a native Mac app and as a VS Code extension, built on one editor eng
 
 **Mac app**
 
-- Tabs, a folder sidebar, an outline panel with a word count, and a split view for two files side by side (Cmd+\\).
+- Tabs, a folder sidebar, an outline panel with a word count, and side-by-side tab groups: drag a tab onto an editor's edge, or press Cmd+\\.
 - Cmd+R compiles and shows the PDF beside the text.
 - The PDF and the source are linked (SyncTeX): Cmd-click a spot in the PDF to jump to its line in the source, and press Option+Cmd+J to find the caret's line in the PDF.
 - Multi-file projects: saving a chapter compiles the root file, found from `% !TEX root`, the `\input`/`\include` graph or the last build.

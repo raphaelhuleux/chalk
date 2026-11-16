@@ -1,8 +1,13 @@
 import Foundation
 
-/// Auto-hiding chrome: scroll down hides the tab row, scroll up reveals it,
-/// and near the document top it is always shown. The host feeds scroll
-/// offsets; hysteresis lives here so scroll jitter can't flap the chrome.
+/// Auto-hiding chrome: scroll down hides the tab row, a deliberate scroll back up reveals it,
+/// and near the document top it is always shown. The host feeds timed scroll offsets;
+/// hysteresis lives here so scroll jitter and reading drift can't flap the chrome.
+///
+/// Revealing weighs how far AND how fast the reader scrolls up: a quick flick
+/// (`flickDistance` within `flickWindow`) or a long climb (`revealDistance`) brings the
+/// tabs back; the slow upward drift of re-reading a line does neither. A pause of
+/// `pauseReset` ends a gesture, so separate small scrolls never add up.
 public struct ChromeAutoHidePolicy {
     public enum Chrome: Equatable {
         case shown
@@ -11,52 +16,79 @@ public struct ChromeAutoHidePolicy {
 
     /// Cumulative same-direction travel (pt) before the chrome hides.
     public let hideThreshold: Double
-    /// Cumulative upward travel (pt) before it comes back; smaller, so
-    /// revealing feels eager.
-    public let showThreshold: Double
+    /// Upward travel (pt) inside `flickWindow` that reveals: a quick reach for the tabs.
+    public let flickDistance: Double
+    /// Seconds over which `flickDistance` is measured.
+    public let flickWindow: Double
+    /// Upward travel (pt) in one gesture that reveals at any speed.
+    public let revealDistance: Double
+    /// A gap between samples longer than this (s) starts a new gesture.
+    public let pauseReset: Double
     /// Within this many points of the top, the chrome is always shown.
     public let topRevealDistance: Double
 
     public private(set) var chrome: Chrome = .shown
 
     /// Previous sample, nil until the first observation seeds the baseline.
-    private var lastOffset: Double?
-    /// Signed same-direction travel; a direction flip restarts it.
+    private var last: (offset: Double, time: Double)?
+    /// Signed same-direction travel in this gesture; a direction flip or a pause restarts it.
     private var run: Double = 0
+    /// The run's recent moves, for the travel inside `flickWindow`.
+    private var recent: [(time: Double, delta: Double)] = []
 
     public init(
         hideThreshold: Double = 24,
-        showThreshold: Double = 12,
+        flickDistance: Double = 100,
+        flickWindow: Double = 0.25,
+        revealDistance: Double = 300,
+        pauseReset: Double = 0.4,
         topRevealDistance: Double = 8
     ) {
         self.hideThreshold = hideThreshold
-        self.showThreshold = showThreshold
+        self.flickDistance = flickDistance
+        self.flickWindow = flickWindow
+        self.revealDistance = revealDistance
+        self.pauseReset = pauseReset
         self.topRevealDistance = topRevealDistance
     }
 
-    /// Feed the editor's current scroll offset; returns the resulting state.
+    /// Feed the editor's scroll offset at `time` (seconds, any monotonic clock); returns the
+    /// resulting state. `canHide` is false for a move the reader didn't scroll (a jump to a
+    /// line, a reflow): it may reveal the chrome, never hide it, because nothing would then
+    /// bring the tabs back until the next upward scroll.
     @discardableResult
-    public mutating func observe(offset: Double) -> Chrome {
-        defer { lastOffset = offset }
-        guard let last = lastOffset else { return chrome }
+    public mutating func observe(offset: Double, at time: Double, canHide: Bool = true) -> Chrome {
+        defer { last = (offset, time) }
+        guard let last else { return chrome }
         if offset <= topRevealDistance {
-            run = 0
+            restart()
             chrome = .shown
             return chrome
         }
-        let delta = offset - last
+        let delta = offset - last.offset
         guard delta != 0 else { return chrome }
-        if run == 0 || (delta > 0) != (run > 0) {
-            run = delta
-        } else {
-            run += delta
+        guard canHide || delta < 0 else {
+            restart()
+            return chrome
         }
+        if run == 0 || (delta > 0) != (run > 0) || time - last.time > pauseReset {
+            restart()
+        }
+        run += delta
+        recent.append((time, delta))
+        recent.removeAll { time - $0.time > flickWindow }
         if run >= hideThreshold {
             chrome = .hidden
-        } else if run <= -showThreshold {
-            chrome = .shown
+        } else if run < 0 {
+            let quick = -recent.reduce(0) { $0 + $1.delta }
+            if quick >= flickDistance || -run >= revealDistance { chrome = .shown }
         }
         return chrome
+    }
+
+    private mutating func restart() {
+        run = 0
+        recent.removeAll()
     }
 }
 

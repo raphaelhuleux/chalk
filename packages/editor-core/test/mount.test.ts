@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mockPort } from './helpers/views';
+import { getAiMarks } from '../src/editor/provenance';
 import { EditorView } from '@codemirror/view';
 import { mountEditor } from '../src/index';
 import type { HostToEditorMessage } from '../src/index';
@@ -44,6 +45,48 @@ describe('mountEditor host seam', () => {
     mock.push({ type: 'update', text: 'second' });
     const content = root.querySelector('.cm-content');
     expect(content?.textContent ?? '').toContain('second');
+  });
+
+  it('marks an update only when the host says it came from outside', () => {
+    const mock = mockPort();
+    const editor = mountEditor({ root, port: mock.port });
+    mock.push({ type: 'init', text: 'one\n\ntwo\n\nthree', language: 'md' });
+    const view = EditorView.findFromDOM(root);
+    if (!view) throw new Error('no EditorView mounted');
+    mock.push({ type: 'update', text: 'one\n\nTWO\n\nthree' });
+    expect(getAiMarks(view.state)).toEqual([]);
+    mock.push({ type: 'update', text: 'one\n\nTWO\n\nthree more', origin: 'external' });
+    expect(getAiMarks(view.state).map((m) => view.state.sliceDoc(m.from, m.to))).toEqual([' more']);
+    editor.acceptAiMarks();
+    expect(getAiMarks(view.state)).toEqual([]);
+  });
+
+  it('installs stored marks with the text they index', () => {
+    const mock = mockPort();
+    mountEditor({ root, port: mock.port });
+    const aiMarks = [{ from: 0, to: 3, deleted: '' }];
+    mock.push({ type: 'init', text: 'one two', language: 'md', aiMarks });
+    const view = EditorView.findFromDOM(root);
+    if (!view) throw new Error('no EditorView mounted');
+    expect(getAiMarks(view.state)).toEqual(aiMarks);
+    mock.push({ type: 'update', text: 'other file', aiMarks: [] });
+    expect(getAiMarks(view.state)).toEqual([]);
+    mock.push({ type: 'update', text: 'other file', aiMarks });
+    expect(getAiMarks(view.state)).toEqual(aiMarks);
+  });
+
+  it('keeps tracking marks while they are hidden', () => {
+    const mock = mockPort();
+    mountEditor({ root, port: mock.port });
+    mock.push({ type: 'init', text: 'one', language: 'md' });
+    const view = EditorView.findFromDOM(root);
+    if (!view) throw new Error('no EditorView mounted');
+    mock.push({ type: 'update', text: 'one two', origin: 'external' });
+    mock.push({ type: 'editor-config', config: { aiMarks: 'hide' } });
+    expect(root.querySelector('.cm-aiMarkLayer')).toBeNull();
+    expect(getAiMarks(view.state)).toHaveLength(1);
+    mock.push({ type: 'editor-config', config: { aiMarks: 'show' } });
+    expect(root.querySelector('.cm-aiMarkLayer')).not.toBeNull();
   });
 
   // Remote updates must carry a scroll-snapshot effect: a big rewrite resets

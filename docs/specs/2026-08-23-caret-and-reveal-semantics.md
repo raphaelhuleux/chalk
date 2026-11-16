@@ -102,6 +102,17 @@ A fence stop landing on a fence line reveals it (selection-on-line), which resto
 HideTo absorption moves a hide between owners without changing the union of hidden source: O-2 predictions are stated on the merged union, so absorption is invisible to O-2 and only observable through O-3/O-4 and the widget's extent.
 Dispatching a caret INTO a concealed region programmatically (or by click, R-P2) is legitimate and immediately applies that region's reveal window; the vertical rules only constrain how arrow presses travel.
 
+### 7.1 User folds and zoom (Markdown)
+
+Folds and zoom are user state, not concealment, and sit outside every rule above that is stated on (document, selection): O-1 to O-5 and the matrix cells assume no fold and no zoom, and the matrix never creates one.
+O-5 holds with fold and zoom state as an extra input: the same (document, selection, conceal override, folds, zoom) reproduces the same hidden set.
+A fold is an atomic range (an amendment to O-4's "the table is the only atomic range"); Left/Right and a selection step over it whole.
+Up/Down crosses a fold in one press and never lands inside it; the fold guard claims the press ahead of the table crossing and every stop in the precedence above, and keeps the goal column (R-V2).
+A selection head that lands strictly inside a fold by any other means (search, outline jump, click on the placeholder) unfolds it.
+Zoom clamps keyboard and pointer motion (`select`, `select.pointer`) to the zoomed subtree; any other selection jump outside it ends the zoom.
+Folds and zoom apply in every view mode, so R-X1 and R-X2 do not cover them: they hide only what the user asked to hide.
+What folds, and every key that acts on it, is specified in `docs/specs/2026-11-07-markdown-outliner.md`.
+
 ## 8. Decisions pending (owner)
 
 Triple-click on a line: whether the selection includes the trailing newline; currently fails fixture `Tests/fixtures/mouse/23-triple-click-line.txt` identically on every engine and stays in KNOWN_FAILURES.

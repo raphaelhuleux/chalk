@@ -46,6 +46,11 @@ enum MainMenu {
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(.separator())
+        let acceptAi = edit.addItem(withTitle: "Accept AI Text", action: #selector(RootSplitViewController.cmdAcceptAiMarks(_:)), keyEquivalent: "\r")
+        acceptAi.keyEquivalentModifierMask = [.command, .shift]
+        let rejectAi = edit.addItem(withTitle: "Reject AI Text", action: #selector(RootSplitViewController.cmdRejectAiMarks(_:)), keyEquivalent: "\u{8}")
+        rejectAi.keyEquivalentModifierMask = [.command, .shift]
         main.addItem(submenu(edit, title: "Edit"))
 
         let view = NSMenu(title: "View")
@@ -55,6 +60,7 @@ enum MainMenu {
         view.addItem(.separator())
         view.addItem(submenu(editingModeMenu(), title: "Editing Mode"))
         view.addItem(submenu(viewModeMenu(), title: "View Mode"))
+        view.addItem(withTitle: "Show AI Marks", action: #selector(RootSplitViewController.cmdToggleAiMarks(_:)), keyEquivalent: "")
         view.addItem(.separator())
         view.addItem(withTitle: "Zoom In", action: #selector(RootSplitViewController.cmdZoomIn(_:)), keyEquivalent: "=")
         // ⌘+ (Shift held) is the other common zoom-in chord; it carries "+", which the "=" item never matches.
@@ -66,12 +72,19 @@ enum MainMenu {
         view.addItem(.separator())
         let nextTab = view.addItem(withTitle: "Next Tab", action: #selector(RootSplitViewController.cmdNextTab(_:)), keyEquivalent: "\t")
         nextTab.keyEquivalentModifierMask = [.control]
-        let previousTab = view.addItem(withTitle: "Previous Tab", action: #selector(RootSplitViewController.cmdPrevTab(_:)), keyEquivalent: "\t")
+        let previousTab = view.addItem(withTitle: "Previous Tab", action: #selector(RootSplitViewController.cmdPrevTab(_:)), keyEquivalent: "\u{19}")
         previousTab.keyEquivalentModifierMask = [.control, .shift]
         view.addItem(.separator())
-        view.addItem(withTitle: "Split Editor", action: #selector(RootSplitViewController.cmdToggleSplit(_:)), keyEquivalent: "\\")
-        let focusPane = view.addItem(withTitle: "Focus Other Pane", action: #selector(RootSplitViewController.cmdFocusOtherPane(_:)), keyEquivalent: "\\")
-        focusPane.keyEquivalentModifierMask = [.command, .option]
+        view.addItem(withTitle: "Split Editor Right", action: #selector(RootSplitViewController.cmdSplitRight(_:)), keyEquivalent: "\\")
+        let focusNext = view.addItem(withTitle: "Focus Next Group", action: #selector(RootSplitViewController.cmdFocusNextGroup(_:)), keyEquivalent: "\\")
+        focusNext.keyEquivalentModifierMask = [.command, .option]
+        // ⌘1…⌘3, as in VS Code; the tag is the group's number.
+        for (number, title) in [(1, "Focus First Group"), (2, "Focus Second Group"), (3, "Focus Third Group")] {
+            let item = view.addItem(withTitle: title, action: #selector(RootSplitViewController.cmdFocusGroup(_:)),
+                                    keyEquivalent: String(number))
+            item.tag = number
+        }
+        view.addItem(withTitle: "Join All Groups", action: #selector(RootSplitViewController.cmdJoinAllGroups(_:)), keyEquivalent: "")
         main.addItem(submenu(view, title: "View"))
 
         main.addItem(submenu(typesetMenu(), title: "Typeset"))

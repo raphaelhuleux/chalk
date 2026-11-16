@@ -60,7 +60,14 @@ final class TransitionStepTests: XCTestCase {
                        state(outline: .shown))
         XCTAssertEqual(state(outline: .shown).applying(.outline(false)),
                        state(outline: .hidden))
+        // Opening beside the PDF keeps the PDF.
+        XCTAssertEqual(state(outline: .pdf).applying(.outline(true)),
+                       state(outline: .both))
+        XCTAssertEqual(state(outline: .both).applying(.outline(true)),
+                       state(outline: .both))
         // Closing the slot closes it whatever it shows.
+        XCTAssertEqual(state(outline: .both).applying(.outline(false)),
+                       state(outline: .hidden))
         XCTAssertEqual(state(outline: .pdf).applying(.outline(false)),
                        state(outline: .hidden))
         XCTAssertEqual(state(outline: .pdf).applying(.zen(true)),

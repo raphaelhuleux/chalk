@@ -3,9 +3,9 @@ import XCTest
 
 final class UIStateTests: XCTestCase {
     func testMatrixIsTheFullCrossProduct() {
-        // 2 window modes x 2 sidebar x 3 trailing slot x 2 chrome modes x 2 splits x 2 appearances
-        XCTAssertEqual(UIState.matrix.count, 96)
-        XCTAssertEqual(Set(UIState.matrix.map(\.id)).count, 96, "ids must be unique")
+        // 2 window modes x 2 sidebar x 4 trailing slot x 2 chrome modes x 2 group layouts x 2 appearances
+        XCTAssertEqual(UIState.matrix.count, 128)
+        XCTAssertEqual(Set(UIState.matrix.map(\.id)).count, 128, "ids must be unique")
     }
 
     func testIdIsStableAndReadable() {
@@ -16,8 +16,8 @@ final class UIStateTests: XCTestCase {
                            outline: .shown, mode: .normal, appearance: .light)
         XCTAssertEqual(open.id, "fullscreen-nosidebar-outline-normal-single-light")
         let pdf = UIState(window: .windowed, sidebar: .hidden,
-                          outline: .pdf, mode: .normal, split: .split, appearance: .dark)
-        XCTAssertEqual(pdf.id, "windowed-nosidebar-pdf-normal-split-dark")
+                          outline: .pdf, mode: .normal, groups: .multiple, appearance: .dark)
+        XCTAssertEqual(pdf.id, "windowed-nosidebar-pdf-normal-groups-dark")
     }
 
     func testOutlineDefaultsToHidden() {
@@ -29,7 +29,7 @@ final class UIStateTests: XCTestCase {
     func testSplitDefaultsToSingle() {
         let state = UIState(window: .windowed, sidebar: .shown,
                             mode: .normal, appearance: .light)
-        XCTAssertEqual(state.split, .single)
+        XCTAssertEqual(state.groups, .single)
     }
 
     func testAppearanceIsTheLastIdComponent() {
@@ -41,11 +41,11 @@ final class UIStateTests: XCTestCase {
 
     func testZenKeepsTheSplit() {
         let split = UIState(window: .windowed, sidebar: .shown, outline: .shown,
-                            mode: .normal, split: .split, appearance: .light)
+                            mode: .normal, groups: .multiple, appearance: .light)
         let zen = split.applying(.zen(true))
-        XCTAssertEqual(zen.split, .split)
-        XCTAssertEqual(zen.applying(.zen(false)).split, .split)
-        XCTAssertEqual(split.applying(.split(false)).split, .single)
-        XCTAssertEqual(split.applying(.split(false)).outline, .shown)
+        XCTAssertEqual(zen.groups, .multiple)
+        XCTAssertEqual(zen.applying(.zen(false)).groups, .multiple)
+        XCTAssertEqual(split.applying(.groups(false)).groups, .single)
+        XCTAssertEqual(split.applying(.groups(false)).outline, .shown)
     }
 }

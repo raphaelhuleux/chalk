@@ -26,7 +26,8 @@ enum ChalkMetrics {
     /// Trailing edge of the macOS traffic-light cluster (AX-measured on the
     /// live window).
     static let trafficLightsTrailingEdge: CGFloat = 62
-    /// Gap between the traffic lights and the first name.
+    /// Gap between the traffic lights and the first tab item; its label starts
+    /// `tabLabelPadding` further on.
     static let trafficLightGap: CGFloat = 16
     /// Where the name row starts: past the lights, plus the gap. The same
     /// edge in full screen, where the lights are gone, so the row never jumps.
@@ -37,12 +38,14 @@ enum ChalkMetrics {
     static let tabStripHeight: CGFloat = 46
     /// Gap kept clear at the titlebar's trailing edge.
     static let headerPadding: CGFloat = 14
-    /// Between name items.
-    static let tabGap: CGFloat = 12
+    /// Between name items. Wide enough that a background tab's hover × (its slot hangs into
+    /// this gap) sits twice as far from the next name as from its own: `TabCloseSpacing`,
+    /// asserted in TabRowGeometryTests. Change it with the slot tokens below, never alone.
+    static let tabGap: CGFloat = 16
     /// Inside each item, both sides.
     static let tabLabelPadding: CGFloat = 8
     /// Label → trailing slot.
-    static let tabInnerGap: CGFloat = 8
+    static let tabInnerGap: CGFloat = 5
     /// Label truncation cap.
     static let tabMaxWidth: CGFloat = 290
     /// The active name's accent underline…
@@ -53,12 +56,15 @@ enum ChalkMetrics {
     static let tabSlotWidth: CGFloat = 14
     /// The trailing "+" button's box…
     static let newTabButtonSize = CGSize(width: 28, height: 34)
-    /// …and the ink inside it (NewTabGlyphSizeTests measures the ink).
-    static let newTabGlyphSize: CGFloat = 10
+    /// …and the glyph inside it, regular weight: at least as much ink as the close × so it
+    /// still reads as a control alone in an empty row (NewTabGlyphSizeTests measures the ink).
+    static let newTabGlyphSize: CGFloat = 13
+    /// The overflow chevron's box width, while it shows.
+    static let overflowButtonWidth: CGFloat = 20
     /// The overflow chevron's symbol point size.
     static let overflowGlyphSize: CGFloat = 10
     /// The close ×'s symbol point size, inside the trailing slot.
-    static let closeGlyphSize: CGFloat = 7.5
+    static let closeGlyphSize: CGFloat = 9.5
     /// Mono name size (spec value).
     static let tabFontSize: CGFloat = 12
     /// Divider → first item edge; with the item's 8pt padding the first label
@@ -106,14 +112,17 @@ enum ChalkMetrics {
     /// The outline panel pushes the editor while the column keeps at least
     /// this much text width, and overlays it below that.
     static let outlinePanelPushMinimumEditorWidth: CGFloat = 480
-    /// Each pane of a split editor keeps at least this width while the column can spare two.
-    static let splitMinimumPaneWidth: CGFloat = 320
+    /// Each tab group keeps at least this width while the column can spare it; no new group is
+    /// made where it cannot.
+    static let groupMinimumWidth: CGFloat = 320
 
     // Motion (docs/motion.md, Tokens).
     /// Tab hover and dot-swap fades (spec caps at 120ms).
     static let motionTab: TimeInterval = 0.10
     /// Tab close, cover fades, the tab-switch cross-fade and the underline slide.
     static let motionFast: TimeInterval = 0.15
+    /// A tab drag's drop indicator moving between zones (VS Code's 70ms).
+    static let motionDropTarget: TimeInterval = 0.07
     /// Zen chrome fade, sheets.
     static let motionStandard: TimeInterval = 0.20
     /// The one sidebar clock: the Library column, the editor content

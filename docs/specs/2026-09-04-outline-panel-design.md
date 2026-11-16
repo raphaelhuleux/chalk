@@ -113,6 +113,8 @@ Revised 2026-09-05 to the "document header" artboard the owner picked (design ca
 - Rows are `s(32)` tall, no kind glyph, in `OutlineTreeRowCell`: the title steps in `s(15)` per nesting level from a `s(14)` start, one hairline tree guide per ancestor level, ink that quietens with depth (level 1 semibold `chalkChromeFg`, level 2 `chalkChromeFgSecondary`, deeper `chalkTextSecondary`).
 - Nesting comes from `OutlinePalettePolicy.indentLevels(for:)`; the current section from `preselectedIndex(items:cursorLine:)`, tinted with `chalkAccentSelection` at the palette's row radius. The table scrolls to it only when it leaves the visible rows.
 - Tap calls `revealLine` and returns focus to the editor. The panel stays open.
+- Folding (2026-11-11): a row with nested items gets the Library's chevron in a 14pt column before every title, and the tree guides hang from the parent's chevron. A chevron click folds or unfolds without jumping; ⌥-click applies the same state to the whole branch; the list's context menu has Collapse All and Expand All. Folds are keyed by `OutlineFolding.keys` (kind, level, title, repeat count, no line), so typing above a fold keeps it, and live per document for the session. A caret inside a fold selects the folded heading.
+- Rows wash with `chalkRowHoverBackground` on hover; the selected row's title takes full `chalkChromeFg` whatever its depth; a titled callout, figure or slide leads with its badge in `chalkChromeFgTertiary`.
 - Empty outline shows a muted "No headings" label under the rule.
 - Arrow keys are left to the focus system, as in the sidebar tree.
 - `setSnapshot` diffs by item identity so an unchanged outline with a moved caret only updates the selection.

@@ -28,6 +28,9 @@ final class HostProtocolTests: XCTestCase {
         ))
         try roundTripHostToEditor(.update(text: "new text", epoch: nil))
         try roundTripHostToEditor(.update(text: "new text", epoch: 7))
+        try roundTripHostToEditor(.update(text: "new text", epoch: 7, origin: .external))
+        try roundTripHostToEditor(.update(text: "new text", epoch: 7,
+                                          aiMarks: [AiMark(from: 0, to: 3, deleted: "old")]))
         try roundTripHostToEditor(.themeColors(ThemeColors(keyword: "#ea6a5f", tagName: "#abc", specialVariable: "#def")))
         try roundTripHostToEditor(.headingColors(HeadingColors(h1: "#111", h3: "#333", h6: "#666")))
         try roundTripHostToEditor(.editorConfig(.object(["lineNumbers": .bool(false)])))
